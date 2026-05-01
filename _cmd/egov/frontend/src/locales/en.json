@@ -1,0 +1,27 @@
+{
+  "drop": "Drop video here",
+  "vr": {
+    "selectViewpoint": "Select Viewpoint",
+    "xOffset": "X Offset",
+    "yOffset": "Y Offset",
+    "zOffset": "Z Offset",
+    "resetToZero": "Reset to 0",
+    "clickToClose": "Click to close",
+    "changeViewpoint": "Change Viewpoint"
+  },
+  "menu": {
+    "openFile": "Open File"
+  },
+  "mode": {
+    "normal": "Normal",
+    "free": "Free"
+  },
+  "controls": {
+    "thumbnailOn": "Thumbnail preview: On",
+    "thumbnailOff": "Thumbnail preview: Off",
+    "snapshot": "Snapshot",
+    "resetCamera": "Reset Camera",
+    "fitWindow": "Fit window to video size",
+    "resetView": "Reset View"
+  }
+}

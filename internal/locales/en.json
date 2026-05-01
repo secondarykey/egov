@@ -1,0 +1,69 @@
+{
+  "drop": "Drop video here",
+  "vr": {
+    "selectViewpoint": "Select Viewpoint",
+    "xOffset": "X Offset",
+    "yOffset": "Y Offset",
+    "zOffset": "Z Offset",
+    "resetToZero": "Reset to 0",
+    "clickToClose": "Click to close",
+    "changeViewpoint": "Change Viewpoint",
+    "side": {
+      "left": "Left",
+      "right": "Right",
+      "top": "Top",
+      "bottom": "Bottom"
+    }
+  },
+  "menu": {
+    "openFile": "Open File",
+    "settings": "Settings"
+  },
+  "mode": {
+    "normal": "Normal",
+    "free": "Free"
+  },
+  "controls": {
+    "alwaysOnTopOn": "Always on top: On",
+    "alwaysOnTopOff": "Always on top: Off",
+    "thumbnailOn": "Thumbnail preview: On",
+    "thumbnailOff": "Thumbnail preview: Off",
+    "snapshot": "Snapshot",
+    "resetCamera": "Reset Camera",
+    "fitWindow": "Fit window to video size",
+    "resetView": "Reset View"
+  },
+  "settings": {
+    "title": "Settings",
+    "save": "Save",
+    "cancel": "Cancel",
+    "tab": {
+      "playback": "Playback",
+      "vr": "VR",
+      "controls": "Controls",
+      "app": "Application"
+    },
+    "playback": {
+      "language": "Language",
+      "defaultMode": "Default Mode",
+      "activeColor": "Active Color"
+    },
+    "vr": {
+      "fov": "Field of View",
+      "dragSensitivity": "Drag Sensitivity",
+      "scrollSpeed": "Scroll Speed",
+      "defaultStart": "Default Viewpoint"
+    },
+    "controls": {
+      "clickTimeout": "Click Timeout",
+      "doubleClickSeek": "Double-click Seek",
+      "tripleClickSeek": "Triple-click Seek",
+      "uiHideDelay": "UI Hide Delay",
+      "uiHideOnLeave": "UI Hide on Leave"
+    },
+    "app": {
+      "singleInstance": "Single Instance",
+      "restartRequired": "* Takes effect after restart"
+    }
+  }
+}

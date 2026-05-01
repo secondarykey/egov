@@ -1,0 +1,69 @@
+{
+  "drop": "動画をドロップ",
+  "vr": {
+    "selectViewpoint": "視点を選択",
+    "xOffset": "X オフセット",
+    "yOffset": "Y オフセット",
+    "zOffset": "Z オフセット",
+    "resetToZero": "0にリセット",
+    "clickToClose": "クリックで閉じる",
+    "changeViewpoint": "視点変更",
+    "side": {
+      "left": "左",
+      "right": "右",
+      "top": "上",
+      "bottom": "下"
+    }
+  },
+  "menu": {
+    "openFile": "ファイルを開く",
+    "settings": "設定"
+  },
+  "mode": {
+    "normal": "通常",
+    "free": "フリー"
+  },
+  "controls": {
+    "alwaysOnTopOn": "最前面表示: オン",
+    "alwaysOnTopOff": "最前面表示: オフ",
+    "thumbnailOn": "サムネイルプレビュー: オン",
+    "thumbnailOff": "サムネイルプレビュー: オフ",
+    "snapshot": "スナップショット",
+    "resetCamera": "カメラをリセット",
+    "fitWindow": "ウィンドウを動画サイズに合わせる",
+    "resetView": "表示をリセット"
+  },
+  "settings": {
+    "title": "設定",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "tab": {
+      "playback": "再生",
+      "vr": "VR",
+      "controls": "操作",
+      "app": "アプリ"
+    },
+    "playback": {
+      "language": "言語",
+      "defaultMode": "デフォルトモード",
+      "activeColor": "アクティブ色"
+    },
+    "vr": {
+      "fov": "視野角 (FOV)",
+      "dragSensitivity": "ドラッグ感度",
+      "scrollSpeed": "スクロール速度",
+      "defaultStart": "デフォルト視点"
+    },
+    "controls": {
+      "clickTimeout": "クリックタイムアウト",
+      "doubleClickSeek": "ダブルクリックシーク",
+      "tripleClickSeek": "トリプルクリックシーク",
+      "uiHideDelay": "UI非表示遅延",
+      "uiHideOnLeave": "離脱時UI非表示遅延"
+    },
+    "app": {
+      "singleInstance": "シングルインスタンス",
+      "restartRequired": "* 再起動後に有効になります"
+    }
+  }
+}
