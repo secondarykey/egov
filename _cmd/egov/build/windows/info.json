@@ -1,15 +1,15 @@
 {
 	"fixed": {
-		"file_version": "0.0.0"
+		"file_version": "0.0.1"
 	},
 	"info": {
 		"0000": {
-			"ProductVersion": "0.0.0",
-			"CompanyName": "My Company",
-			"FileDescription": "A program that does X",
-			"LegalCopyright": "(c) 2025, My Company",
-			"ProductName": "My Product",
-			"Comments": "Some Product Comments"
+			"ProductVersion": "0.0.1",
+			"CompanyName": "secondarykey",
+			"FileDescription": "Media Player",
+			"LegalCopyright": "(c)2026, secondarykey",
+			"ProductName": "egov",
+			"Comments": "Media Player"
 		}
 	}
 }
