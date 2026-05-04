@@ -1,13 +1,13 @@
 [Desktop Entry]
 Version=1.0
 Name=My Product
-Comment=A egov application
+Comment=A program that does X
 # The Exec line includes %u to pass the URL to the application
-Exec=/usr/local/bin/egov.exe %u
+Exec=/usr/local/bin/ %u
 Terminal=false
 Type=Application
-Icon=egov.exe
+Icon=
 Categories=Utility;
-StartupWMClass=egov.exe
+StartupWMClass=
 
  
