@@ -893,7 +893,7 @@ export default function Player() {
                 UpdateAlwaysOnTop(next)
               }}
             >
-              <PushPinIcon fontSize="small" />
+              <PushPinIcon fontSize="small" sx={{ transition: 'transform 0.2s', transform: alwaysOnTop ? 'none' : 'rotate(45deg)' }} />
             </IconButton>
           </Tooltip>
           <IconButton sx={{ color: 'white', width: 28, height: 28 }} onClick={() => Window.Minimise()}>
