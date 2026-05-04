@@ -6,7 +6,7 @@ import {
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import Draggable from 'react-draggable'
-import { GetSettings, UpdateActiveColor, UpdateAppSettings, UpdateControlSettings, UpdateDefaultMode, UpdateVRSettings } from '../bindings/egov/api'
+import { GetSettings, GetVersion, UpdateActiveColor, UpdateAppSettings, UpdateControlSettings, UpdateDefaultMode, UpdateVRSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
 
 function DraggablePaper(props) {
@@ -19,7 +19,11 @@ function DraggablePaper(props) {
 }
 
 function TabPanel({ value, index, children }) {
-  return value === index ? <Box sx={{ pt: 2.5 }}>{children}</Box> : null
+  return (
+    <Box sx={{ pt: 2.5, display: value === index ? 'block' : 'none' }}>
+      {children}
+    </Box>
+  )
 }
 
 function Row({ label, children }) {
@@ -49,6 +53,9 @@ function SliderRow({ label, value, onChange, min, max, step, format }) {
 export default function SettingsDialog({ open, onClose, availableLangs, onLanguageChange, activeColor: activeColorProp, onActiveColorChange }) {
   const { t } = useTranslation()
   const [tab, setTab] = useState(0)
+  const [version, setVersion] = useState('')
+
+  useEffect(() => { GetVersion().then(setVersion) }, [])
   const [playback, setPlayback] = useState({ defaultMode: 'fit', language: 'en', activeColor: '#4fc3f7' })
   const [savedOffsets, setSavedOffsets] = useState(null)
   const [vr, setVr] = useState({ fov: 75, dragSensitivity: 0.004, scrollSpeed: 0.05, defaultStart: 'left' })
@@ -98,16 +105,20 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
     <Dialog
       open={open}
       onClose={onClose}
-      maxWidth="sm"
-      fullWidth
+      maxWidth={false}
       PaperComponent={DraggablePaper}
-      PaperProps={{ sx: { minHeight: 460 } }}
+      sx={{ '& .MuiDialog-paper': { width: 640, maxHeight: 'none' } }}
     >
       <DialogTitle
         id="settings-dialog-title"
         sx={{ pb: 1, cursor: 'move', pr: 6, userSelect: 'none' }}
       >
         {t('settings.title')}
+        {version && (
+          <Box component="span" sx={{ ml: 1, fontSize: '0.75rem', color: 'text.disabled', fontFamily: 'monospace', verticalAlign: 'middle' }}>
+            v{version}
+          </Box>
+        )}
         <IconButton
           onClick={onClose}
           size="small"
@@ -116,7 +127,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
           <CloseIcon fontSize="small" />
         </IconButton>
       </DialogTitle>
-      <DialogContent sx={{ pt: 0 }}>
+      <DialogContent sx={{ pt: 0, flex: 1, overflow: 'auto' }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider', mb: 0 }}>
           <Tab label={t('settings.tab.playback')} />
           <Tab label={t('settings.tab.vr')} />
@@ -124,6 +135,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
           <Tab label={t('settings.tab.app')} />
         </Tabs>
 
+        <Box sx={{ minHeight: 320 }}>
         {/* Playback */}
         <TabPanel value={tab} index={0}>
           <Row label={t('settings.playback.language')}>
@@ -239,6 +251,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             {t('settings.app.restartRequired')}
           </Typography>
         </TabPanel>
+        </Box>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose}>{t('settings.cancel')}</Button>

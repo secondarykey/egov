@@ -29,6 +29,9 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+//go:embed version
+var appVersion string
+
 func init() {
 	// Register a custom event whose associated data type is string.
 	// This is not required, but the binding generator will pick up registered events
@@ -140,11 +143,16 @@ func main() {
 		http.ServeFile(w, r, path)
 	}))
 
+	version := strings.TrimSpace(appVersion)
+	if isDev {
+		version += "+DEV"
+	}
+
 	app := application.New(application.Options{
 		Name:        "egov",
 		Description: "A demo of using raw HTML & CSS",
 		Services: []application.Service{
-			application.NewService(egov.NewApi(initialFile, fileServerPort, secret, settings)),
+			application.NewService(egov.NewApi(initialFile, fileServerPort, secret, settings, version)),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

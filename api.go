@@ -10,10 +10,16 @@ type API struct {
 	fileServerPort int
 	secret         string
 	settings       *Settings
+	version        string
 }
 
-func NewApi(initialFile string, fileServerPort int, secret string, settings *Settings) *API {
-	return &API{initialFile: initialFile, fileServerPort: fileServerPort, secret: secret, settings: settings}
+func NewApi(initialFile string, fileServerPort int, secret string, settings *Settings, version string) *API {
+	return &API{initialFile: initialFile, fileServerPort: fileServerPort, secret: secret, settings: settings, version: version}
+}
+
+// GetVersion returns the application version.
+func (a *API) GetVersion() string {
+	return a.version
 }
 
 // GetServerURL returns the base URL of the local file server.
