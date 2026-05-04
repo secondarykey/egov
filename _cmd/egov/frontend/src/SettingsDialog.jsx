@@ -19,7 +19,11 @@ function DraggablePaper(props) {
 }
 
 function TabPanel({ value, index, children }) {
-  return value === index ? <Box sx={{ pt: 2.5 }}>{children}</Box> : null
+  return (
+    <Box sx={{ pt: 2.5, display: value === index ? 'block' : 'none' }}>
+      {children}
+    </Box>
+  )
 }
 
 function Row({ label, children }) {
@@ -100,7 +104,8 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
       onClose={onClose}
       maxWidth={false}
       PaperComponent={DraggablePaper}
-      PaperProps={{ sx: { width: 540, height: 520, maxHeight: 'none', display: 'flex', flexDirection: 'column' } }}
+      PaperProps={{ sx: { width: 540 } }}
+      sx={{ '& .MuiDialog-paper': { maxHeight: 'none' } }}
     >
       <DialogTitle
         id="settings-dialog-title"
@@ -123,6 +128,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
           <Tab label={t('settings.tab.app')} />
         </Tabs>
 
+        <Box sx={{ minHeight: 320 }}>
         {/* Playback */}
         <TabPanel value={tab} index={0}>
           <Row label={t('settings.playback.language')}>
@@ -238,6 +244,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             {t('settings.app.restartRequired')}
           </Typography>
         </TabPanel>
+        </Box>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose}>{t('settings.cancel')}</Button>
