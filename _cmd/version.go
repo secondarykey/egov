@@ -13,10 +13,10 @@ import (
 const (
 	versionFile = "./_cmd/egov/version"
 	configYml   = "./_cmd/egov/build/config.yml"
-	configRg    = `version:\s*"([0-9]+\.[0-9]+\.[0-9]+)"`
+	configRg    = `^\s*version:\s*"([0-9]+\.[0-9]+\.[0-9]+)"`
 	configFmt   = `  version: "%v"`
 	packJsn     = "./_cmd/egov/frontend/package.json"
-	packRg      = `"version":\s*"([0-9]+\.[0-9]+\.[0-9]+)"`
+	packRg      = `^\s*"version":\s*"([0-9]+\.[0-9]+\.[0-9]+)"`
 	packFmt     = `  "version": "%v",`
 )
 
