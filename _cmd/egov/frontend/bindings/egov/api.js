@@ -37,6 +37,14 @@ export function GetSettings() {
 }
 
 /**
+ * GetVersion returns the application version.
+ * @returns {$CancellablePromise<string>}
+ */
+export function GetVersion() {
+    return $Call.ByID(2270260888);
+}
+
+/**
  * UpdateActiveColor saves the UI active color to disk.
  * @param {string} color
  * @returns {$CancellablePromise<void>}

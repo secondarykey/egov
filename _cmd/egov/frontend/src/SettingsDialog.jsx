@@ -6,7 +6,7 @@ import {
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import Draggable from 'react-draggable'
-import { GetSettings, UpdateActiveColor, UpdateAppSettings, UpdateControlSettings, UpdateDefaultMode, UpdateVRSettings } from '../bindings/egov/api'
+import { GetSettings, GetVersion, UpdateActiveColor, UpdateAppSettings, UpdateControlSettings, UpdateDefaultMode, UpdateVRSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
 
 function DraggablePaper(props) {
@@ -53,6 +53,9 @@ function SliderRow({ label, value, onChange, min, max, step, format }) {
 export default function SettingsDialog({ open, onClose, availableLangs, onLanguageChange, activeColor: activeColorProp, onActiveColorChange }) {
   const { t } = useTranslation()
   const [tab, setTab] = useState(0)
+  const [version, setVersion] = useState('')
+
+  useEffect(() => { GetVersion().then(setVersion) }, [])
   const [playback, setPlayback] = useState({ defaultMode: 'fit', language: 'en', activeColor: '#4fc3f7' })
   const [savedOffsets, setSavedOffsets] = useState(null)
   const [vr, setVr] = useState({ fov: 75, dragSensitivity: 0.004, scrollSpeed: 0.05, defaultStart: 'left' })
@@ -110,7 +113,14 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
         id="settings-dialog-title"
         sx={{ pb: 1, cursor: 'move', pr: 6, userSelect: 'none' }}
       >
-        {t('settings.title')}
+        <Stack direction="row" alignItems="baseline" spacing={1}>
+          <span>{t('settings.title')}</span>
+          {version && (
+            <Typography variant="caption" sx={{ color: 'text.disabled', fontFamily: 'monospace' }}>
+              v{version}
+            </Typography>
+          )}
+        </Stack>
         <IconButton
           onClick={onClose}
           size="small"
