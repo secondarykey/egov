@@ -104,7 +104,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
       onClose={onClose}
       maxWidth={false}
       PaperComponent={DraggablePaper}
-      PaperProps={{ sx: { width: 540 } }}
+      PaperProps={{ sx: { width: 640 } }}
       sx={{ '& .MuiDialog-paper': { maxHeight: 'none' } }}
     >
       <DialogTitle
