@@ -1,0 +1,130 @@
+name: Multi-OS Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+env:
+
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+
+  build:
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    if: |
+      contains(github.ref, 'refs/tags/v') &&
+      !contains(github.ref, '-') &&
+      !contains(github.ref, '+')
+    runs-on: ${{ matrix.os }}
+
+    steps:
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            webkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Get Go Env
+        shell: bash
+        run: |
+          echo "GOOS=$(go env GOOS)" >> $GITHUB_ENV
+          echo "GOARCH=$(go env GOARCH)" >> $GITHUB_ENV
+          echo "APP_NAME=egov" >> $GITHUB_ENV
+          echo "VERSION=$(cat _cmd/egov/version | xargs)" >> $GITHUB_ENV
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Display version
+        run: |
+          go version
+          go env GOOS GOARCH
+          node -v
+          npm -v
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+
+      - name: Wails doctor
+        run: |
+          wails3 version
+          wails3 doctor
+
+      - name: Build or Package
+        working-directory: ./_cmd/egov
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            wails3 package
+          else
+            wails3 build
+          fi
+
+      - name: Archive Build Results
+        shell: bash
+        run: |
+          export GOOS=$(go env GOOS)
+          export GOARCH=$(go env GOARCH)
+          export ZIP_NAME="egov-${VERSION}_${GOOS}_${GOARCH}.zip"
+          cd ./_cmd/egov/bin
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a ../../../${ZIP_NAME} ./*
+          else
+            zip -r ../../../${ZIP_NAME} ./*
+          fi
+          echo "ZIP_PATH=${ZIP_NAME}" >> $GITHUB_ENV
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}-asset
+          path: ${{ env.ZIP_PATH }}
+
+  release:
+
+    needs: build
+
+    if: |
+      success() &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      !contains(github.ref, '-') &&
+      !contains(github.ref, '+')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./all-zips
+        merge-multiple: true
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        name: Release ${{ github.ref_name }}
+        files: ./all-zips/*.zip
+        generate_release_notes: true
+        draft: true
+        prerelease: false
