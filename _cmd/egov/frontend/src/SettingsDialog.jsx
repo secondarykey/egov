@@ -113,14 +113,12 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
         id="settings-dialog-title"
         sx={{ pb: 1, cursor: 'move', pr: 6, userSelect: 'none' }}
       >
-        <Stack direction="row" alignItems="flex-end" spacing={1}>
-          <span>{t('settings.title')}</span>
-          {version && (
-            <Typography variant="body2" sx={{ color: 'text.disabled', fontFamily: 'monospace' }}>
-              v{version}
-            </Typography>
-          )}
-        </Stack>
+        {t('settings.title')}
+        {version && (
+          <Box component="span" sx={{ ml: 1, fontSize: '0.75rem', color: 'text.disabled', fontFamily: 'monospace', verticalAlign: 'middle' }}>
+            v{version}
+          </Box>
+        )}
         <IconButton
           onClick={onClose}
           size="small"
