@@ -116,7 +116,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
         <Stack direction="row" alignItems="baseline" spacing={1}>
           <span>{t('settings.title')}</span>
           {version && (
-            <Typography variant="caption" sx={{ color: 'text.disabled', fontFamily: 'monospace' }}>
+            <Typography variant="body2" sx={{ color: 'text.disabled', fontFamily: 'monospace' }}>
               v{version}
             </Typography>
           )}
