@@ -13,7 +13,9 @@ jobs:
 
   versionup:
 
-    if: github.event.pull_request.merged == true
+    if: |
+      github.event.pull_request.merged == true &&
+      !startsWith(github.event.pull_request.title, 'chore: version')
 
     runs-on: ubuntu-latest
     permissions:
@@ -67,16 +69,30 @@ jobs:
           cd _cmd/egov
           wails3 update build-assets -config build/config.yml -dir build
 
-      - name: Commit and Tag
+      - name: Commit and Pull Request
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
+          BRANCH="chore/version-${{env.NEW_VERSION}}"
+
+          git checkout -b $BRANCH
           git add .
           git commit -m "chore: version ${{env.NEW_VERSION}}"
-          git push
+          git push origin $BRANCH
 
+          gh pr create \
+            --title "chore: version ${{env.NEW_VERSION}}" \
+            --body "Auto version bump to ${{env.NEW_VERSION}}" \
+            --base main \
+            --head $BRANCH
+
+          gh pr merge $BRANCH --merge --delete-branch
+        env:
+          GH_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+
+      - name: Tag
+        run: |
           NEW_TAG="v${{env.NEW_VERSION}}"
-
           git tag $NEW_TAG
           git push origin $NEW_TAG
