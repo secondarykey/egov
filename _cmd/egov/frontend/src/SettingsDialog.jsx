@@ -100,7 +100,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
       onClose={onClose}
       maxWidth={false}
       PaperComponent={DraggablePaper}
-      PaperProps={{ sx: { width: 540, height: 520, maxHeight: 'none' } }}
+      PaperProps={{ sx: { width: 540, height: 520, maxHeight: 'none', display: 'flex', flexDirection: 'column' } }}
     >
       <DialogTitle
         id="settings-dialog-title"
@@ -115,7 +115,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
           <CloseIcon fontSize="small" />
         </IconButton>
       </DialogTitle>
-      <DialogContent sx={{ pt: 0 }}>
+      <DialogContent sx={{ pt: 0, flex: 1, overflow: 'auto' }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider', mb: 0 }}>
           <Tab label={t('settings.tab.playback')} />
           <Tab label={t('settings.tab.vr')} />
