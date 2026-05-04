@@ -143,15 +143,16 @@ func main() {
 		http.ServeFile(w, r, path)
 	}))
 
+	version := strings.TrimSpace(appVersion)
+	if isDev {
+		version += "+DEV"
+	}
+
 	app := application.New(application.Options{
 		Name:        "egov",
 		Description: "A demo of using raw HTML & CSS",
 		Services: []application.Service{
-			version := strings.TrimSpace(appVersion)
-		if isDev {
-			version += "+DEV"
-		}
-		application.NewService(egov.NewApi(initialFile, fileServerPort, secret, settings, version)),
+			application.NewService(egov.NewApi(initialFile, fileServerPort, secret, settings, version)),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
