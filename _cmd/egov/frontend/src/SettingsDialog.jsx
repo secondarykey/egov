@@ -98,10 +98,9 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
     <Dialog
       open={open}
       onClose={onClose}
-      maxWidth="sm"
-      fullWidth
+      maxWidth={false}
       PaperComponent={DraggablePaper}
-      PaperProps={{ sx: { minHeight: 460 } }}
+      PaperProps={{ sx: { width: 540, height: 520, maxHeight: 'none' } }}
     >
       <DialogTitle
         id="settings-dialog-title"
