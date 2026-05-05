@@ -1026,7 +1026,7 @@ export default function Player() {
                   sx={{
                     position: 'absolute', zIndex: 3, cursor: 'ew-resize',
                     left: `${(point / duration) * 100}%`,
-                    top: 0, height: 'calc(100% + 24px)', width: 16,
+                    top: 0, height: 'calc(100% + 20px)', width: 16,
                     transform: 'translateX(-50%)',
                     display: 'flex', flexDirection: 'column', alignItems: 'center',
                   }}
