@@ -29,6 +29,8 @@
     "thumbnailOn": "サムネイルプレビュー: オン",
     "thumbnailOff": "サムネイルプレビュー: オフ",
     "snapshot": "スナップショット",
+    "fullscreen": "全画面表示",
+    "exitFullscreen": "全画面解除",
     "resetCamera": "カメラをリセット",
     "fitWindow": "ウィンドウを動画サイズに合わせる",
     "resetView": "表示をリセット"

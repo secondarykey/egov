@@ -26,6 +26,8 @@ import RestartAltIcon     from '@mui/icons-material/RestartAlt'
 import VideoFileIcon      from '@mui/icons-material/VideoFile'
 import MonitorIcon        from '@mui/icons-material/Monitor'
 import CameraAltIcon      from '@mui/icons-material/CameraAlt'
+import FullscreenIcon     from '@mui/icons-material/Fullscreen'
+import FullscreenExitIcon from '@mui/icons-material/FullscreenExit'
 import FastForwardIcon    from '@mui/icons-material/FastForward'
 import FastRewindIcon     from '@mui/icons-material/FastRewind'
 import PushPinIcon        from '@mui/icons-material/PushPin'
@@ -98,6 +100,7 @@ export default function Player() {
   const [settingsOpen,   setSettingsOpen]   = useState(false)
   const [activeColor,    setActiveColor]    = useState('#4fc3f7')
   const [alwaysOnTop,    setAlwaysOnTop]    = useState(false)
+  const [fullscreen,     setFullscreen]     = useState(false)
 
   // Three.js セットアップ
   useEffect(() => {
@@ -530,6 +533,15 @@ export default function Player() {
     a.href = url
     a.download = `egov_${Date.now()}.png`
     a.click()
+  }
+
+  const handleFullscreenToggle = () => {
+    if (fullscreen) {
+      Window.UnFullscreen()
+    } else {
+      Window.Fullscreen()
+    }
+    setFullscreen(f => !f)
   }
 
   const handleMuteToggle = () => {
@@ -1010,6 +1022,14 @@ export default function Player() {
               <RestartAltIcon fontSize="small" />
             </IconButton>
           </Tooltip>
+          <Tooltip title={fullscreen ? t('controls.exitFullscreen') : t('controls.fullscreen')} placement="top">
+            <IconButton onClick={handleFullscreenToggle} sx={{ color: 'white', width: 28, height: 28 }}>
+              {fullscreen
+                ? <FullscreenExitIcon fontSize="small" />
+                : <FullscreenIcon    fontSize="small" />
+              }
+            </IconButton>
+          </Tooltip>
         </Stack>
       </Box>
       {/* 右サイドパネル（スナップショット） */}
@@ -1033,6 +1053,7 @@ export default function Player() {
           </IconButton>
         </Tooltip>
       </Box>
+
 
       <SettingsDialog
         open={settingsOpen}

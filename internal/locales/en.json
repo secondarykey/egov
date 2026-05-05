@@ -29,6 +29,8 @@
     "thumbnailOn": "Thumbnail preview: On",
     "thumbnailOff": "Thumbnail preview: Off",
     "snapshot": "Snapshot",
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit Fullscreen",
     "resetCamera": "Reset Camera",
     "fitWindow": "Fit window to video size",
     "resetView": "Reset View"
