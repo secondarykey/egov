@@ -33,8 +33,6 @@
     "loopOff": "Loop: Off",
     "rangeLoopOn": "Range Loop: On",
     "rangeLoopOff": "Range Loop: Off",
-    "setRangeStart": "Set range start (A)",
-    "setRangeEnd": "Set range end (B)",
     "clearRange": "Clear range",
     "fullscreen": "Fullscreen",
     "exitFullscreen": "Exit Fullscreen",

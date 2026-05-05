@@ -549,20 +549,37 @@ export default function Player() {
   }
 
   const handleRangeLoopToggle = () => {
-    setRangeLoop(r => !r)
-  }
-
-  const handleSetRangeStart = () => {
-    setRangeStart(videoRef.current?.currentTime ?? 0)
-  }
-
-  const handleSetRangeEnd = () => {
-    setRangeEnd(videoRef.current?.currentTime ?? 0)
+    const next = !rangeLoop
+    setRangeLoop(next)
+    if (next && rangeStart === null && duration > 0) {
+      setRangeStart(0)
+      setRangeEnd(duration)
+    }
   }
 
   const handleClearRange = () => {
     setRangeStart(null)
     setRangeEnd(null)
+  }
+
+  const handleMarkerPointerDown = (type, e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const bar = seekBarRef.current
+    if (!bar || !duration) return
+    const onMove = (me) => {
+      const rect  = bar.getBoundingClientRect()
+      const ratio = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width))
+      const time  = ratio * duration
+      if (type === 'start') setRangeStart(time)
+      else                  setRangeEnd(time)
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup',   onUp)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup',   onUp)
   }
 
   useEffect(() => {
@@ -986,18 +1003,42 @@ export default function Player() {
               }} />
             )}
             {rangeLoop && rangeStart !== null && duration > 0 && (
-              <Box sx={{
-                position: 'absolute', pointerEvents: 'none', zIndex: 2,
-                left: `${(rangeStart / duration) * 100}%`,
-                top: 0, bottom: 0, width: 2, bgcolor: activeColor,
-              }} />
+              <Box
+                sx={{
+                  position: 'absolute', zIndex: 3, cursor: 'ew-resize',
+                  left: `${(rangeStart / duration) * 100}%`,
+                  top: 0, bottom: 0, width: 16,
+                  transform: 'translateX(-50%)',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                }}
+                onPointerDown={(e) => handleMarkerPointerDown('start', e)}
+              >
+                <Box sx={{
+                  bgcolor: activeColor, color: '#000', fontWeight: 'bold',
+                  fontSize: '0.6rem', px: 0.5, lineHeight: 1.6,
+                  borderRadius: '2px 2px 0 0', userSelect: 'none',
+                }}>A</Box>
+                <Box sx={{ flex: 1, width: 2, bgcolor: activeColor }} />
+              </Box>
             )}
             {rangeLoop && rangeEnd !== null && duration > 0 && (
-              <Box sx={{
-                position: 'absolute', pointerEvents: 'none', zIndex: 2,
-                left: `${(rangeEnd / duration) * 100}%`,
-                top: 0, bottom: 0, width: 2, bgcolor: activeColor, opacity: 0.7,
-              }} />
+              <Box
+                sx={{
+                  position: 'absolute', zIndex: 3, cursor: 'ew-resize',
+                  left: `${(rangeEnd / duration) * 100}%`,
+                  top: 0, bottom: 0, width: 16,
+                  transform: 'translateX(-50%)',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                }}
+                onPointerDown={(e) => handleMarkerPointerDown('end', e)}
+              >
+                <Box sx={{
+                  bgcolor: activeColor, color: '#000', fontWeight: 'bold',
+                  fontSize: '0.6rem', px: 0.5, lineHeight: 1.6,
+                  borderRadius: '2px 2px 0 0', userSelect: 'none', opacity: 0.8,
+                }}>B</Box>
+                <Box sx={{ flex: 1, width: 2, bgcolor: activeColor, opacity: 0.8 }} />
+              </Box>
             )}
             {thumbInfo?.dataUrl && (
               <Box sx={{
@@ -1059,25 +1100,15 @@ export default function Player() {
         </Stack>
         {rangeLoop && (
           <Stack direction="row" alignItems="center" sx={{ mt: 0.5 }}>
-            <Tooltip title={t('controls.setRangeStart')} placement="top">
-              <Button size="small" onClick={handleSetRangeStart} sx={{
-                color: activeColor, minWidth: 0, px: 1, py: 0.25,
-                fontSize: '0.75rem', fontFamily: 'monospace', textTransform: 'none',
-              }}>
-                A: {rangeStart !== null ? fmt(rangeStart) : '--:--'}
-              </Button>
-            </Tooltip>
+            <Typography variant="caption" sx={{ color: activeColor, fontFamily: 'monospace', px: 1 }}>
+              A: {rangeStart !== null ? fmt(rangeStart) : '--:--'}
+            </Typography>
             <Box sx={{ flex: 1 }} />
-            <Tooltip title={t('controls.setRangeEnd')} placement="top">
-              <Button size="small" onClick={handleSetRangeEnd} sx={{
-                color: activeColor, minWidth: 0, px: 1, py: 0.25,
-                fontSize: '0.75rem', fontFamily: 'monospace', textTransform: 'none',
-              }}>
-                B: {rangeEnd !== null ? fmt(rangeEnd) : '--:--'}
-              </Button>
-            </Tooltip>
+            <Typography variant="caption" sx={{ color: activeColor, fontFamily: 'monospace', px: 1, opacity: 0.8 }}>
+              B: {rangeEnd !== null ? fmt(rangeEnd) : '--:--'}
+            </Typography>
             <Tooltip title={t('controls.clearRange')} placement="top">
-              <IconButton onClick={handleClearRange} sx={{ color: 'rgba(255,255,255,0.4)', width: 22, height: 22, ml: 0.5 }}>
+              <IconButton onClick={handleClearRange} sx={{ color: 'rgba(255,255,255,0.4)', width: 22, height: 22 }}>
                 <CloseIcon sx={{ fontSize: 14 }} />
               </IconButton>
             </Tooltip>
