@@ -424,7 +424,7 @@ export default function Player() {
   }
 
   const handleMouseMove = (e) => {
-    const inZone = e.clientY <= 80 || e.clientY >= window.innerHeight - 160
+    const inZone = e.clientY <= 80 || e.clientY >= window.innerHeight - 160 || e.clientX >= window.innerWidth - 80
     if (inZone) {
       clearTimeout(hideTimer.current)
       setShowUI(true)
@@ -1023,11 +1023,6 @@ export default function Player() {
               <PreviewIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title={t('controls.snapshot')} placement="top">
-            <IconButton onClick={handleSnapshot} sx={{ color: 'white', width: 28, height: 28 }}>
-              <CameraAltIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
           <Tooltip
             title={mode === 'vr' ? t('controls.resetCamera') : mode === 'fit' ? t('controls.fitWindow') : t('controls.resetView')}
             placement="top"
@@ -1038,6 +1033,28 @@ export default function Player() {
           </Tooltip>
         </Stack>
       </Box>
+      {/* 右サイドパネル（スナップショット） */}
+      <Box
+        sx={{
+          ...barStyle,
+          position: 'absolute', right: 0, top: '50%',
+          transform: 'translateY(-50%)',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          py: 1.5, px: 0.5,
+          borderRadius: '8px 0 0 8px',
+          zIndex: 10,
+          opacity: showUI ? 1 : 0,
+          pointerEvents: showUI ? 'auto' : 'none',
+        }}
+      >
+        <Tooltip title={t('controls.snapshot')} placement="left">
+          <IconButton onClick={handleSnapshot} sx={{ color: 'white', width: 56, height: 56 }}>
+            <CameraAltIcon sx={{ fontSize: 40 }} />
+          </IconButton>
+        </Tooltip>
+      </Box>
+
       <SettingsDialog
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
