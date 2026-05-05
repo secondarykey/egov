@@ -575,19 +575,29 @@ export default function Player() {
     const bar = seekBarRef.current
     if (!bar || !duration) return
     const onMove = (me) => {
-      const rect     = bar.getBoundingClientRect()
-      const ratio    = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width))
-      const newTime  = ratio * duration
+      const rect    = bar.getBoundingClientRect()
+      const ratio   = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width))
+      const newTime = ratio * duration
       setPoint(newTime)
       if (otherPoint !== null) {
         const rangeStart = Math.min(newTime, otherPoint)
         const video = videoRef.current
         if (video && video.currentTime < rangeStart) video.currentTime = rangeStart
       }
+      if (thumbEnabledRef.current) {
+        const localX = me.clientX - rect.left
+        setThumbInfo(prev => ({ localX, time: newTime, dataUrl: prev?.dataUrl ?? null, w: prev?.w ?? 160, h: prev?.h ?? 90 }))
+        clearTimeout(thumbSeekTimer.current)
+        thumbSeekTimer.current = setTimeout(() => {
+          if (thumbVideoRef.current) thumbVideoRef.current.currentTime = newTime
+        }, 80)
+      }
     }
     const onUp = () => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup',   onUp)
+      clearTimeout(thumbSeekTimer.current)
+      setThumbInfo(null)
     }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup',   onUp)
