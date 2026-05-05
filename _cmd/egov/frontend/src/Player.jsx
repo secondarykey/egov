@@ -32,6 +32,7 @@ import FullscreenExitIcon from '@mui/icons-material/FullscreenExit'
 import FastForwardIcon    from '@mui/icons-material/FastForward'
 import FastRewindIcon     from '@mui/icons-material/FastRewind'
 import RepeatIcon         from '@mui/icons-material/Repeat'
+import LinearScaleIcon   from '@mui/icons-material/LinearScale'
 import PushPinIcon        from '@mui/icons-material/PushPin'
 import SettingsIcon       from '@mui/icons-material/Settings'
 import { Events, Window } from '@wailsio/runtime'
@@ -104,6 +105,9 @@ export default function Player() {
   const [alwaysOnTop,    setAlwaysOnTop]    = useState(false)
   const [fullscreen,     setFullscreen]     = useState(false)
   const [loop,           setLoop]           = useState(true)
+  const [rangeLoop,      setRangeLoop]      = useState(false)
+  const [rangeStart,     setRangeStart]     = useState(null)
+  const [rangeEnd,       setRangeEnd]       = useState(null)
 
   // Three.js セットアップ
   useEffect(() => {
@@ -544,6 +548,32 @@ export default function Player() {
     if (videoRef.current) videoRef.current.loop = next
   }
 
+  const handleRangeLoopToggle = () => {
+    setRangeLoop(r => !r)
+  }
+
+  const handleSetRangeStart = () => {
+    setRangeStart(videoRef.current?.currentTime ?? 0)
+  }
+
+  const handleSetRangeEnd = () => {
+    setRangeEnd(videoRef.current?.currentTime ?? 0)
+  }
+
+  const handleClearRange = () => {
+    setRangeStart(null)
+    setRangeEnd(null)
+  }
+
+  useEffect(() => {
+    if (!rangeLoop || rangeStart === null || rangeEnd === null) return
+    const start = Math.min(rangeStart, rangeEnd)
+    const end   = Math.max(rangeStart, rangeEnd)
+    if (currentTime >= end) {
+      if (videoRef.current) videoRef.current.currentTime = start
+    }
+  }, [currentTime, rangeLoop, rangeStart, rangeEnd])
+
   const handleFullscreenToggle = () => {
     if (fullscreen) {
       Window.UnFullscreen()
@@ -946,6 +976,29 @@ export default function Player() {
             onMouseMove={handleSeekBarMouseMove}
             onMouseLeave={handleSeekBarMouseLeave}
           >
+            {rangeLoop && rangeStart !== null && rangeEnd !== null && duration > 0 && (
+              <Box sx={{
+                position: 'absolute', pointerEvents: 'none', zIndex: 1,
+                left: `${(Math.min(rangeStart, rangeEnd) / duration) * 100}%`,
+                width: `${(Math.abs(rangeEnd - rangeStart) / duration) * 100}%`,
+                top: '50%', transform: 'translateY(-50%)',
+                height: 14, bgcolor: `${activeColor}50`, borderRadius: 0.5,
+              }} />
+            )}
+            {rangeLoop && rangeStart !== null && duration > 0 && (
+              <Box sx={{
+                position: 'absolute', pointerEvents: 'none', zIndex: 2,
+                left: `${(rangeStart / duration) * 100}%`,
+                top: 0, bottom: 0, width: 2, bgcolor: activeColor,
+              }} />
+            )}
+            {rangeLoop && rangeEnd !== null && duration > 0 && (
+              <Box sx={{
+                position: 'absolute', pointerEvents: 'none', zIndex: 2,
+                left: `${(rangeEnd / duration) * 100}%`,
+                top: 0, bottom: 0, width: 2, bgcolor: activeColor, opacity: 0.7,
+              }} />
+            )}
             {thumbInfo?.dataUrl && (
               <Box sx={{
                 position: 'absolute',
@@ -998,7 +1051,38 @@ export default function Player() {
               <RepeatIcon fontSize="small" />
             </IconButton>
           </Tooltip>
+          <Tooltip title={rangeLoop ? t('controls.rangeLoopOn') : t('controls.rangeLoopOff')} placement="top">
+            <IconButton onClick={handleRangeLoopToggle} sx={{ color: rangeLoop ? activeColor : 'rgba(255,255,255,0.3)', width: 28, height: 28 }}>
+              <LinearScaleIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         </Stack>
+        {rangeLoop && (
+          <Stack direction="row" alignItems="center" sx={{ mt: 0.5 }}>
+            <Tooltip title={t('controls.setRangeStart')} placement="top">
+              <Button size="small" onClick={handleSetRangeStart} sx={{
+                color: activeColor, minWidth: 0, px: 1, py: 0.25,
+                fontSize: '0.75rem', fontFamily: 'monospace', textTransform: 'none',
+              }}>
+                A: {rangeStart !== null ? fmt(rangeStart) : '--:--'}
+              </Button>
+            </Tooltip>
+            <Box sx={{ flex: 1 }} />
+            <Tooltip title={t('controls.setRangeEnd')} placement="top">
+              <Button size="small" onClick={handleSetRangeEnd} sx={{
+                color: activeColor, minWidth: 0, px: 1, py: 0.25,
+                fontSize: '0.75rem', fontFamily: 'monospace', textTransform: 'none',
+              }}>
+                B: {rangeEnd !== null ? fmt(rangeEnd) : '--:--'}
+              </Button>
+            </Tooltip>
+            <Tooltip title={t('controls.clearRange')} placement="top">
+              <IconButton onClick={handleClearRange} sx={{ color: 'rgba(255,255,255,0.4)', width: 22, height: 22, ml: 0.5 }}>
+                <CloseIcon sx={{ fontSize: 14 }} />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        )}
         <Stack direction="row" sx={{ alignItems: 'anchor-center', mt: 1 }} spacing={1}>
           <IconButton onClick={handlePlayPause} sx={{ color: 'white', width: 28, height: 28 }}>
             {paused ? <PlayArrowIcon /> : <PauseIcon />}
