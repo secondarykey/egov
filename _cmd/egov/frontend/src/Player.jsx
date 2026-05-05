@@ -23,6 +23,7 @@ import VrpanoIcon         from '@mui/icons-material/Vrpano'
 import OndemandVideoIcon  from '@mui/icons-material/OndemandVideo'
 import OpenWithIcon       from '@mui/icons-material/OpenWith'
 import RestartAltIcon     from '@mui/icons-material/RestartAlt'
+import FitScreenIcon      from '@mui/icons-material/FitScreen'
 import VideoFileIcon      from '@mui/icons-material/VideoFile'
 import MonitorIcon        from '@mui/icons-material/Monitor'
 import CameraAltIcon      from '@mui/icons-material/CameraAlt'
@@ -1014,14 +1015,6 @@ export default function Player() {
           }}>
             {fileName}
           </Typography>
-          <Tooltip
-            title={mode === 'vr' ? t('controls.resetCamera') : mode === 'fit' ? t('controls.fitWindow') : t('controls.resetView')}
-            placement="top"
-          >
-            <IconButton onClick={handleReset} sx={{ color: 'white', width: 28, height: 28 }}>
-              <RestartAltIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
           <Tooltip title={fullscreen ? t('controls.exitFullscreen') : t('controls.fullscreen')} placement="top">
             <IconButton onClick={handleFullscreenToggle} sx={{ color: 'white', width: 28, height: 28 }}>
               {fullscreen
@@ -1050,6 +1043,14 @@ export default function Player() {
         <Tooltip title={t('controls.snapshot')} placement="left">
           <IconButton onClick={handleSnapshot} sx={{ color: 'white', width: 56, height: 56 }}>
             <CameraAltIcon sx={{ fontSize: 40 }} />
+          </IconButton>
+        </Tooltip>
+        <Tooltip
+          title={mode === 'vr' ? t('controls.resetCamera') : mode === 'fit' ? t('controls.fitWindow') : t('controls.resetView')}
+          placement="left"
+        >
+          <IconButton onClick={handleReset} sx={{ color: 'white', width: 56, height: 56 }}>
+            <FitScreenIcon sx={{ fontSize: 40 }} />
           </IconButton>
         </Tooltip>
       </Box>
