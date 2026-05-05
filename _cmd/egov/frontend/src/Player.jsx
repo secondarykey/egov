@@ -1013,12 +1013,12 @@ export default function Player() {
                 }}
                 onPointerDown={(e) => handleMarkerPointerDown('start', e)}
               >
+                <Box sx={{ flex: 1, width: 2, bgcolor: activeColor }} />
                 <Box sx={{
                   bgcolor: activeColor, color: '#000', fontWeight: 'bold',
                   fontSize: '0.6rem', px: 0.5, lineHeight: 1.6,
-                  borderRadius: '2px 2px 0 0', userSelect: 'none',
+                  borderRadius: '0 0 2px 2px', userSelect: 'none',
                 }}>A</Box>
-                <Box sx={{ flex: 1, width: 2, bgcolor: activeColor }} />
               </Box>
             )}
             {rangeLoop && rangeEnd !== null && duration > 0 && (
@@ -1032,12 +1032,12 @@ export default function Player() {
                 }}
                 onPointerDown={(e) => handleMarkerPointerDown('end', e)}
               >
+                <Box sx={{ flex: 1, width: 2, bgcolor: activeColor, opacity: 0.8 }} />
                 <Box sx={{
                   bgcolor: activeColor, color: '#000', fontWeight: 'bold',
                   fontSize: '0.6rem', px: 0.5, lineHeight: 1.6,
-                  borderRadius: '2px 2px 0 0', userSelect: 'none', opacity: 0.8,
+                  borderRadius: '0 0 2px 2px', userSelect: 'none', opacity: 0.8,
                 }}>B</Box>
-                <Box sx={{ flex: 1, width: 2, bgcolor: activeColor, opacity: 0.8 }} />
               </Box>
             )}
             {thumbInfo?.dataUrl && (
