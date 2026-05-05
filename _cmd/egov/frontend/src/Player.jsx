@@ -991,7 +991,7 @@ export default function Player() {
           <Typography sx={{ fontFamily: 'monospace', whiteSpace: 'nowrap', minWidth: 90, fontSize: '0.95rem' }}>
             {fmt(currentTime)} / {fmt(duration)}
           </Typography>
-          <IconButton onClick={handleMuteToggle} sx={{ color: muted ? 'rgba(255,255,255,0.3)' : 'white', width: 28, height: 28, ml: 4 }}>
+          <IconButton onClick={handleMuteToggle} sx={{ color: muted ? 'rgba(255,255,255,0.3)' : 'white', width: 28, height: 28, ml: '16px !important' }}>
             {muted ? <VolumeOffIcon /> : <VolumeUpIcon />}
           </IconButton>
           <Slider
@@ -1002,7 +1002,7 @@ export default function Player() {
             valueLabelDisplay="auto"
             valueLabelFormat={v => `${Math.round(v * 100)}%`}
             sx={{
-              color: muted ? 'rgba(255,255,255,0.3)' : 'white', width: 160, py: '10px', mr: 4,
+              color: muted ? 'rgba(255,255,255,0.3)' : 'white', width: 160, py: '10px', mr: '16px !important',
               '& .MuiSlider-track': { height: 9, border: 'none' },
               '& .MuiSlider-rail':  { height: 9 },
               '& .MuiSlider-thumb': { width: 16, height: 16 },
