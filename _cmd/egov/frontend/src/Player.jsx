@@ -1007,7 +1007,7 @@ export default function Player() {
                 sx={{
                   position: 'absolute', zIndex: 3, cursor: 'ew-resize',
                   left: `${(rangeStart / duration) * 100}%`,
-                  top: 0, height: 'calc(100% + 16px)', width: 16,
+                  top: 0, height: 'calc(100% + 32px)', width: 16,
                   transform: 'translateX(-50%)',
                   display: 'flex', flexDirection: 'column', alignItems: 'center',
                 }}
@@ -1018,7 +1018,7 @@ export default function Player() {
                   bgcolor: activeColor, color: '#000', fontWeight: 'bold',
                   fontSize: '0.6rem', px: 0.5, lineHeight: 1.6,
                   borderRadius: '0 0 3px 3px', userSelect: 'none',
-                }}>A</Box>
+                }}>[</Box>
               </Box>
             )}
             {rangeLoop && rangeEnd !== null && duration > 0 && (
@@ -1026,7 +1026,7 @@ export default function Player() {
                 sx={{
                   position: 'absolute', zIndex: 3, cursor: 'ew-resize',
                   left: `${(rangeEnd / duration) * 100}%`,
-                  top: 0, height: 'calc(100% + 16px)', width: 16,
+                  top: 0, height: 'calc(100% + 32px)', width: 16,
                   transform: 'translateX(-50%)',
                   display: 'flex', flexDirection: 'column', alignItems: 'center',
                 }}
@@ -1037,7 +1037,7 @@ export default function Player() {
                   bgcolor: activeColor, color: '#000', fontWeight: 'bold',
                   fontSize: '0.6rem', px: 0.5, lineHeight: 1.6,
                   borderRadius: '0 0 3px 3px', userSelect: 'none', opacity: 0.8,
-                }}>B</Box>
+                }}>]</Box>
               </Box>
             )}
             {thumbInfo?.dataUrl && (
@@ -1101,11 +1101,11 @@ export default function Player() {
         {rangeLoop && (
           <Stack direction="row" alignItems="center" sx={{ mt: 0.5 }}>
             <Typography variant="caption" sx={{ color: activeColor, fontFamily: 'monospace', px: 1 }}>
-              A: {rangeStart !== null ? fmt(rangeStart) : '--:--'}
+              [ {rangeStart !== null ? fmt(rangeStart) : '--:--'}
             </Typography>
             <Box sx={{ flex: 1 }} />
             <Typography variant="caption" sx={{ color: activeColor, fontFamily: 'monospace', px: 1, opacity: 0.8 }}>
-              B: {rangeEnd !== null ? fmt(rangeEnd) : '--:--'}
+              {rangeEnd !== null ? fmt(rangeEnd) : '--:--'} ]
             </Typography>
             <Tooltip title={t('controls.clearRange')} placement="top">
               <IconButton onClick={handleClearRange} sx={{ color: 'rgba(255,255,255,0.4)', width: 22, height: 22 }}>
