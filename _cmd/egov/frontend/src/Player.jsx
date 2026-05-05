@@ -1003,9 +1003,10 @@ export default function Player() {
             {rangeLoop && duration > 0 && [
               { point: rangePoint1, setPoint: setRangePoint1 },
               { point: rangePoint2, setPoint: setRangePoint2 },
-            ].map(({ point, setPoint }, i) => point === null ? null : (() => {
-              const other   = i === 0 ? rangePoint2 : rangePoint1
-              const isLeft  = other === null || point <= other
+            ].map(({ point, setPoint }, i) => {
+              if (point === null) return null
+              const other  = i === 0 ? rangePoint2 : rangePoint1
+              const isLeft = other === null || point <= other
               return (
                 <Box
                   key={i}
@@ -1036,7 +1037,7 @@ export default function Player() {
                   </Box>
                 </Box>
               )
-            })()}
+            })}
             {thumbInfo?.dataUrl && (
               <Box sx={{
                 position: 'absolute',
