@@ -360,6 +360,12 @@ export default function Player() {
     return () => thumbVideo.removeEventListener('seeked', onSeeked)
   }, [])
 
+  const resetRangeLoop = () => {
+    setRangeLoop(false)
+    setRangePoint1(null)
+    setRangePoint2(null)
+  }
+
   const loadFile = (file) => {
     if (!file || !file.type.startsWith('video/')) return
     const video = videoRef.current
@@ -369,6 +375,7 @@ export default function Player() {
     video.play()
     setPaused(false)
     setFileName(file.name)
+    resetRangeLoop()
   }
 
   const loadFilePath = (fileUrl) => {
@@ -380,6 +387,7 @@ export default function Player() {
     setPaused(false)
     const filePath = new URL(fileUrl).searchParams.get('path') ?? ''
     setFileName(filePath.split(/[\\/]/).pop())
+    resetRangeLoop()
   }
 
   useEffect(() => {
