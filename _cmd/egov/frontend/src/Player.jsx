@@ -555,11 +555,10 @@ export default function Player() {
       setRangePoint1(0)
       setRangePoint2(duration)
     }
-  }
-
-  const handleClearRange = () => {
-    setRangePoint1(null)
-    setRangePoint2(null)
+    if (!next) {
+      setRangePoint1(null)
+      setRangePoint2(null)
+    }
   }
 
   const handleMarkerPointerDown = (setPoint, otherPoint, e) => {
@@ -1107,15 +1106,7 @@ export default function Player() {
             </IconButton>
           </Tooltip>
         </Stack>
-        {rangeLoop && (
-          <Stack direction="row" justifyContent="flex-end" sx={{ mt: 0.25 }}>
-            <Tooltip title={t('controls.clearRange')} placement="top">
-              <IconButton onClick={handleClearRange} sx={{ color: 'rgba(255,255,255,0.4)', width: 22, height: 22 }}>
-                <CloseIcon sx={{ fontSize: 14 }} />
-              </IconButton>
-            </Tooltip>
-          </Stack>
-        )}
+        {rangeLoop && <Box sx={{ mt: 0.25, height: 22 }} />}
         <Stack direction="row" sx={{ alignItems: 'anchor-center', mt: 1 }} spacing={1}>
           <IconButton onClick={handlePlayPause} sx={{ color: 'white', width: 28, height: 28 }}>
             {paused ? <PlayArrowIcon /> : <PauseIcon />}
