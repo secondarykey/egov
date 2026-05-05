@@ -562,15 +562,21 @@ export default function Player() {
     setRangePoint2(null)
   }
 
-  const handleMarkerPointerDown = (setPoint, e) => {
+  const handleMarkerPointerDown = (setPoint, otherPoint, e) => {
     e.preventDefault()
     e.stopPropagation()
     const bar = seekBarRef.current
     if (!bar || !duration) return
     const onMove = (me) => {
-      const rect  = bar.getBoundingClientRect()
-      const ratio = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width))
-      setPoint(ratio * duration)
+      const rect     = bar.getBoundingClientRect()
+      const ratio    = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width))
+      const newTime  = ratio * duration
+      setPoint(newTime)
+      if (otherPoint !== null) {
+        const rangeStart = Math.min(newTime, otherPoint)
+        const video = videoRef.current
+        if (video && video.currentTime < rangeStart) video.currentTime = rangeStart
+      }
     }
     const onUp = () => {
       window.removeEventListener('pointermove', onMove)
@@ -1017,7 +1023,7 @@ export default function Player() {
                     transform: 'translateX(-50%)',
                     display: 'flex', flexDirection: 'column', alignItems: 'center',
                   }}
-                  onPointerDown={(e) => handleMarkerPointerDown(setPoint, e)}
+                  onPointerDown={(e) => handleMarkerPointerDown(setPoint, other, e)}
                 >
                   <Box sx={{ flex: 1, width: 2, bgcolor: activeColor }} />
                   <Box sx={{ position: 'relative', width: 12, height: 12, flexShrink: 0 }}>
@@ -1066,13 +1072,7 @@ export default function Player() {
             min={0} max={duration || 0} step={0.1}
             value={currentTime}
             onMouseDown={() => { seekDragging.current = true }}
-            onChange={(_, v) => {
-              if (rangeLoop && rangePoint1 !== null && rangePoint2 !== null) {
-                const start = Math.min(rangePoint1, rangePoint2)
-                if (v < start) { setCurrentTime(start); return }
-              }
-              setCurrentTime(v)
-            }}
+            onChange={(_, v) => setCurrentTime(v)}
             onChangeCommitted={(_, v) => {
               let target = v
               if (rangeLoop && rangePoint1 !== null && rangePoint2 !== null) {
