@@ -1007,7 +1007,7 @@ export default function Player() {
                 sx={{
                   position: 'absolute', zIndex: 3, cursor: 'ew-resize',
                   left: `${(rangeStart / duration) * 100}%`,
-                  top: 0, bottom: 0, width: 16,
+                  top: 0, height: 'calc(100% + 16px)', width: 16,
                   transform: 'translateX(-50%)',
                   display: 'flex', flexDirection: 'column', alignItems: 'center',
                 }}
@@ -1017,7 +1017,7 @@ export default function Player() {
                 <Box sx={{
                   bgcolor: activeColor, color: '#000', fontWeight: 'bold',
                   fontSize: '0.6rem', px: 0.5, lineHeight: 1.6,
-                  borderRadius: '0 0 2px 2px', userSelect: 'none',
+                  borderRadius: '0 0 3px 3px', userSelect: 'none',
                 }}>A</Box>
               </Box>
             )}
@@ -1026,7 +1026,7 @@ export default function Player() {
                 sx={{
                   position: 'absolute', zIndex: 3, cursor: 'ew-resize',
                   left: `${(rangeEnd / duration) * 100}%`,
-                  top: 0, bottom: 0, width: 16,
+                  top: 0, height: 'calc(100% + 16px)', width: 16,
                   transform: 'translateX(-50%)',
                   display: 'flex', flexDirection: 'column', alignItems: 'center',
                 }}
@@ -1036,7 +1036,7 @@ export default function Player() {
                 <Box sx={{
                   bgcolor: activeColor, color: '#000', fontWeight: 'bold',
                   fontSize: '0.6rem', px: 0.5, lineHeight: 1.6,
-                  borderRadius: '0 0 2px 2px', userSelect: 'none', opacity: 0.8,
+                  borderRadius: '0 0 3px 3px', userSelect: 'none', opacity: 0.8,
                 }}>B</Box>
               </Box>
             )}
