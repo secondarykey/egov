@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import {
-  Box, Button, IconButton, Menu, MenuItem, Slider, Stack,
+  Box, Button, Collapse, IconButton, Menu, MenuItem, Slider, Stack,
   ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material'
 import ArrowUpwardIcon    from '@mui/icons-material/ArrowUpward'
@@ -1114,7 +1114,9 @@ export default function Player() {
             </IconButton>
           </Tooltip>
         </Stack>
-        {rangeLoop && <Box sx={{ mt: 0.25, height: 22 }} />}
+        <Collapse in={rangeLoop}>
+          <Box sx={{ mt: 0.25, height: 16 }} />
+        </Collapse>
         <Stack direction="row" sx={{ alignItems: 'anchor-center', mt: 1 }} spacing={1}>
           <IconButton onClick={handlePlayPause} sx={{ color: 'white', width: 28, height: 28 }}>
             {paused ? <PlayArrowIcon /> : <PauseIcon />}
