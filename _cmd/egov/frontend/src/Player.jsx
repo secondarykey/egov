@@ -25,7 +25,6 @@ import OpenWithIcon       from '@mui/icons-material/OpenWith'
 import RestartAltIcon     from '@mui/icons-material/RestartAlt'
 import VideoFileIcon      from '@mui/icons-material/VideoFile'
 import MonitorIcon        from '@mui/icons-material/Monitor'
-import PreviewIcon        from '@mui/icons-material/Preview'
 import CameraAltIcon      from '@mui/icons-material/CameraAlt'
 import FastForwardIcon    from '@mui/icons-material/FastForward'
 import FastRewindIcon     from '@mui/icons-material/FastRewind'
@@ -1003,26 +1002,6 @@ export default function Player() {
           }}>
             {fileName}
           </Typography>
-          <Tooltip title={thumbEnabled ? t('controls.thumbnailOn') : t('controls.thumbnailOff')} placement="top">
-            <IconButton
-              sx={{ color: thumbEnabled ? activeColor : 'rgba(255,255,255,0.3)', width: 28, height: 28 }}
-              onClick={() => {
-                const next = !thumbEnabled
-                setThumbEnabled(next)
-                thumbEnabledRef.current = next
-                if (!next) {
-                  clearTimeout(thumbSeekTimer.current)
-                  setThumbInfo(null)
-                  if (thumbVideoRef.current) thumbVideoRef.current.src = ''
-                } else if (videoRef.current?.src) {
-                  if (thumbVideoRef.current) thumbVideoRef.current.src = videoRef.current.src
-                }
-                UpdatePlaybackSettings(volume, muted, next, language)
-              }}
-            >
-              <PreviewIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
           <Tooltip
             title={mode === 'vr' ? t('controls.resetCamera') : mode === 'fit' ? t('controls.fitWindow') : t('controls.resetView')}
             placement="top"
@@ -1062,6 +1041,19 @@ export default function Player() {
         onLanguageChange={handleLanguageChange}
         activeColor={activeColor}
         onActiveColorChange={handleActiveColorChange}
+        thumbEnabled={thumbEnabled}
+        onThumbEnabledChange={(next) => {
+          setThumbEnabled(next)
+          thumbEnabledRef.current = next
+          if (!next) {
+            clearTimeout(thumbSeekTimer.current)
+            setThumbInfo(null)
+            if (thumbVideoRef.current) thumbVideoRef.current.src = ''
+          } else if (videoRef.current?.src) {
+            if (thumbVideoRef.current) thumbVideoRef.current.src = videoRef.current.src
+          }
+          UpdatePlaybackSettings(volume, muted, next, language)
+        }}
       />
     </div>
   )
