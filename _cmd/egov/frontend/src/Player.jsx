@@ -31,6 +31,7 @@ import FullscreenIcon     from '@mui/icons-material/Fullscreen'
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit'
 import FastForwardIcon    from '@mui/icons-material/FastForward'
 import FastRewindIcon     from '@mui/icons-material/FastRewind'
+import RepeatIcon         from '@mui/icons-material/Repeat'
 import PushPinIcon        from '@mui/icons-material/PushPin'
 import SettingsIcon       from '@mui/icons-material/Settings'
 import { Events, Window } from '@wailsio/runtime'
@@ -102,6 +103,7 @@ export default function Player() {
   const [activeColor,    setActiveColor]    = useState('#4fc3f7')
   const [alwaysOnTop,    setAlwaysOnTop]    = useState(false)
   const [fullscreen,     setFullscreen]     = useState(false)
+  const [loop,           setLoop]           = useState(true)
 
   // Three.js セットアップ
   useEffect(() => {
@@ -126,7 +128,7 @@ export default function Player() {
     rendererRef.current = renderer
 
     const video = document.createElement('video')
-    video.loop        = true
+    video.loop        = loop
     video.muted       = false
     video.crossOrigin = 'anonymous'
     video.volume      = 0.5
@@ -536,6 +538,12 @@ export default function Player() {
     a.click()
   }
 
+  const handleLoopToggle = () => {
+    const next = !loop
+    setLoop(next)
+    if (videoRef.current) videoRef.current.loop = next
+  }
+
   const handleFullscreenToggle = () => {
     if (fullscreen) {
       Window.UnFullscreen()
@@ -931,36 +939,37 @@ export default function Player() {
         opacity: showUI ? 1 : 0,
         pointerEvents: showUI ? 'auto' : 'none',
       }}>
-        <Box
-          ref={seekBarRef}
-          sx={{ position: 'relative' }}
-          onMouseMove={handleSeekBarMouseMove}
-          onMouseLeave={handleSeekBarMouseLeave}
-        >
-          {thumbInfo?.dataUrl && (
-            <Box sx={{
-              position: 'absolute',
-              bottom: 'calc(100% + 6px)',
-              left: `clamp(${thumbInfo.w / 2}px, ${thumbInfo.localX}px, calc(100% - ${thumbInfo.w / 2}px))`,
-              transform: 'translateX(-50%)',
-              pointerEvents: 'none',
-              bgcolor: 'rgba(0,0,0,0.85)',
-              borderRadius: 1,
-              overflow: 'hidden',
-              border: '1px solid rgba(255,255,255,0.15)',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-            }}>
-              <Box component="img" src={thumbInfo.dataUrl}
-                sx={{ width: thumbInfo.w, height: thumbInfo.h, display: 'block' }} />
-              <Typography variant="caption" sx={{
-                display: 'block', textAlign: 'center',
-                color: 'rgba(255,255,255,0.9)', py: 0.25, fontFamily: 'monospace',
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <Box
+            ref={seekBarRef}
+            sx={{ position: 'relative', flex: 1 }}
+            onMouseMove={handleSeekBarMouseMove}
+            onMouseLeave={handleSeekBarMouseLeave}
+          >
+            {thumbInfo?.dataUrl && (
+              <Box sx={{
+                position: 'absolute',
+                bottom: 'calc(100% + 6px)',
+                left: `clamp(${thumbInfo.w / 2}px, ${thumbInfo.localX}px, calc(100% - ${thumbInfo.w / 2}px))`,
+                transform: 'translateX(-50%)',
+                pointerEvents: 'none',
+                bgcolor: 'rgba(0,0,0,0.85)',
+                borderRadius: 1,
+                overflow: 'hidden',
+                border: '1px solid rgba(255,255,255,0.15)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
               }}>
-                {fmt(thumbInfo.time)}
-              </Typography>
-            </Box>
-          )}
-          <Slider
+                <Box component="img" src={thumbInfo.dataUrl}
+                  sx={{ width: thumbInfo.w, height: thumbInfo.h, display: 'block' }} />
+                <Typography variant="caption" sx={{
+                  display: 'block', textAlign: 'center',
+                  color: 'rgba(255,255,255,0.9)', py: 0.25, fontFamily: 'monospace',
+                }}>
+                  {fmt(thumbInfo.time)}
+                </Typography>
+              </Box>
+            )}
+            <Slider
             size="small"
             min={0} max={duration || 0} step={0.1}
             value={currentTime}
@@ -983,7 +992,13 @@ export default function Player() {
               },
             }}
           />
-        </Box>
+          </Box>
+          <Tooltip title={loop ? t('controls.loopOn') : t('controls.loopOff')} placement="top">
+            <IconButton onClick={handleLoopToggle} sx={{ color: loop ? activeColor : 'rgba(255,255,255,0.3)', width: 28, height: 28 }}>
+              <RepeatIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
         <Stack direction="row" sx={{ alignItems: 'anchor-center', mt: 1 }} spacing={1}>
           <IconButton onClick={handlePlayPause} sx={{ color: 'white', width: 28, height: 28 }}>
             {paused ? <PlayArrowIcon /> : <PauseIcon />}

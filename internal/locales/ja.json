@@ -29,6 +29,8 @@
     "thumbnailOn": "サムネイルプレビュー: オン",
     "thumbnailOff": "サムネイルプレビュー: オフ",
     "snapshot": "スナップショット",
+    "loopOn": "リピート: オン",
+    "loopOff": "リピート: オフ",
     "fullscreen": "全画面表示",
     "exitFullscreen": "全画面解除",
     "resetCamera": "カメラをリセット",

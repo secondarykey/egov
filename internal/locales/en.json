@@ -29,6 +29,8 @@
     "thumbnailOn": "Thumbnail preview: On",
     "thumbnailOff": "Thumbnail preview: Off",
     "snapshot": "Snapshot",
+    "loopOn": "Loop: On",
+    "loopOff": "Loop: Off",
     "fullscreen": "Fullscreen",
     "exitFullscreen": "Exit Fullscreen",
     "resetCamera": "Reset Camera",
