@@ -29,6 +29,12 @@
     "thumbnailOn": "サムネイルプレビュー: オン",
     "thumbnailOff": "サムネイルプレビュー: オフ",
     "snapshot": "スナップショット",
+    "loopOn": "リピート: オン",
+    "loopOff": "リピート: オフ",
+    "rangeLoopOn": "範囲ループ: オン",
+    "rangeLoopOff": "範囲ループ: オフ",
+    "fullscreen": "全画面表示",
+    "exitFullscreen": "全画面解除",
     "resetCamera": "カメラをリセット",
     "fitWindow": "ウィンドウを動画サイズに合わせる",
     "resetView": "表示をリセット"
@@ -46,7 +52,8 @@
     "playback": {
       "language": "言語",
       "defaultMode": "デフォルトモード",
-      "activeColor": "アクティブ色"
+      "activeColor": "アクティブ色",
+      "thumbnailEnabled": "シークサムネイルプレビュー"
     },
     "vr": {
       "fov": "視野角 (FOV)",

@@ -50,13 +50,13 @@ function SliderRow({ label, value, onChange, min, max, step, format }) {
   )
 }
 
-export default function SettingsDialog({ open, onClose, availableLangs, onLanguageChange, activeColor: activeColorProp, onActiveColorChange }) {
+export default function SettingsDialog({ open, onClose, availableLangs, onLanguageChange, activeColor: activeColorProp, onActiveColorChange, thumbEnabled: thumbEnabledProp, onThumbEnabledChange }) {
   const { t } = useTranslation()
   const [tab, setTab] = useState(0)
   const [version, setVersion] = useState('')
 
   useEffect(() => { GetVersion().then(setVersion) }, [])
-  const [playback, setPlayback] = useState({ defaultMode: 'fit', language: 'en', activeColor: '#4fc3f7' })
+  const [playback, setPlayback] = useState({ defaultMode: 'fit', language: 'en', activeColor: '#4fc3f7', thumbnailEnabled: true })
   const [savedOffsets, setSavedOffsets] = useState(null)
   const [vr, setVr] = useState({ fov: 75, dragSensitivity: 0.004, scrollSpeed: 0.05, defaultStart: 'left' })
   const [controls, setControls] = useState({
@@ -69,7 +69,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
   useEffect(() => {
     if (!open) return
     GetSettings().then(s => {
-      setPlayback({ defaultMode: s.playback.defaultMode, language: s.playback.language, activeColor: s.playback.activeColor || '#4fc3f7' })
+      setPlayback({ defaultMode: s.playback.defaultMode, language: s.playback.language, activeColor: s.playback.activeColor || '#4fc3f7', thumbnailEnabled: thumbEnabledProp ?? s.playback.thumbnailEnabled ?? true })
       setOrigLanguage(s.playback.language)
       setVr({
         fov: s.vr.fov,
@@ -95,6 +95,9 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
       onLanguageChange?.(playback.language)
     }
     onActiveColorChange?.(playback.activeColor)
+    if (playback.thumbnailEnabled !== thumbEnabledProp) {
+      onThumbEnabledChange?.(playback.thumbnailEnabled)
+    }
     onClose()
   }
 
@@ -174,6 +177,17 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
               </Typography>
               <Box sx={{ width: 24, height: 24, borderRadius: '50%', bgcolor: playback.activeColor, flexShrink: 0 }} />
             </Stack>
+          </Row>
+          <Row label={t('settings.playback.thumbnailEnabled')}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={playback.thumbnailEnabled}
+                  onChange={e => setPlayback(p => ({ ...p, thumbnailEnabled: e.target.checked }))}
+                />
+              }
+              label=""
+            />
           </Row>
         </TabPanel>
 

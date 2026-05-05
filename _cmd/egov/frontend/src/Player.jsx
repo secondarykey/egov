@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import {
-  Box, Button, IconButton, Menu, MenuItem, Slider, Stack,
+  Box, Button, Collapse, IconButton, Menu, MenuItem, Slider, Stack,
   ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material'
 import ArrowUpwardIcon    from '@mui/icons-material/ArrowUpward'
@@ -23,12 +23,16 @@ import VrpanoIcon         from '@mui/icons-material/Vrpano'
 import OndemandVideoIcon  from '@mui/icons-material/OndemandVideo'
 import OpenWithIcon       from '@mui/icons-material/OpenWith'
 import RestartAltIcon     from '@mui/icons-material/RestartAlt'
+import FitScreenIcon      from '@mui/icons-material/FitScreen'
 import VideoFileIcon      from '@mui/icons-material/VideoFile'
 import MonitorIcon        from '@mui/icons-material/Monitor'
-import PreviewIcon        from '@mui/icons-material/Preview'
 import CameraAltIcon      from '@mui/icons-material/CameraAlt'
+import FullscreenIcon     from '@mui/icons-material/Fullscreen'
+import FullscreenExitIcon from '@mui/icons-material/FullscreenExit'
 import FastForwardIcon    from '@mui/icons-material/FastForward'
 import FastRewindIcon     from '@mui/icons-material/FastRewind'
+import RepeatIcon         from '@mui/icons-material/Repeat'
+import LinearScaleIcon   from '@mui/icons-material/LinearScale'
 import PushPinIcon        from '@mui/icons-material/PushPin'
 import SettingsIcon       from '@mui/icons-material/Settings'
 import { Events, Window } from '@wailsio/runtime'
@@ -99,6 +103,11 @@ export default function Player() {
   const [settingsOpen,   setSettingsOpen]   = useState(false)
   const [activeColor,    setActiveColor]    = useState('#4fc3f7')
   const [alwaysOnTop,    setAlwaysOnTop]    = useState(false)
+  const [fullscreen,     setFullscreen]     = useState(false)
+  const [loop,           setLoop]           = useState(true)
+  const [rangeLoop,      setRangeLoop]      = useState(false)
+  const [rangePoint1,    setRangePoint1]    = useState(null)
+  const [rangePoint2,    setRangePoint2]    = useState(null)
 
   // Three.js セットアップ
   useEffect(() => {
@@ -123,7 +132,7 @@ export default function Player() {
     rendererRef.current = renderer
 
     const video = document.createElement('video')
-    video.loop        = true
+    video.loop        = loop
     video.muted       = false
     video.crossOrigin = 'anonymous'
     video.volume      = 0.5
@@ -351,6 +360,12 @@ export default function Player() {
     return () => thumbVideo.removeEventListener('seeked', onSeeked)
   }, [])
 
+  const resetRangeLoop = () => {
+    setRangeLoop(false)
+    setRangePoint1(null)
+    setRangePoint2(null)
+  }
+
   const loadFile = (file) => {
     if (!file || !file.type.startsWith('video/')) return
     const video = videoRef.current
@@ -360,6 +375,7 @@ export default function Player() {
     video.play()
     setPaused(false)
     setFileName(file.name)
+    resetRangeLoop()
   }
 
   const loadFilePath = (fileUrl) => {
@@ -371,6 +387,7 @@ export default function Player() {
     setPaused(false)
     const filePath = new URL(fileUrl).searchParams.get('path') ?? ''
     setFileName(filePath.split(/[\\/]/).pop())
+    resetRangeLoop()
   }
 
   useEffect(() => {
@@ -424,7 +441,7 @@ export default function Player() {
   }
 
   const handleMouseMove = (e) => {
-    const inZone = e.clientY <= 80 || e.clientY >= window.innerHeight - 160
+    const inZone = e.clientY <= 80 || e.clientY >= window.innerHeight - 160 || e.clientX >= window.innerWidth - 80
     if (inZone) {
       clearTimeout(hideTimer.current)
       setShowUI(true)
@@ -531,6 +548,77 @@ export default function Player() {
     a.href = url
     a.download = `egov_${Date.now()}.png`
     a.click()
+  }
+
+  const handleLoopToggle = () => {
+    const next = !loop
+    setLoop(next)
+    if (videoRef.current) videoRef.current.loop = next
+  }
+
+  const handleRangeLoopToggle = () => {
+    const next = !rangeLoop
+    setRangeLoop(next)
+    if (next && rangePoint1 === null && duration > 0) {
+      setRangePoint1(0)
+      setRangePoint2(duration)
+    }
+    if (!next) {
+      setRangePoint1(null)
+      setRangePoint2(null)
+    }
+  }
+
+  const handleMarkerPointerDown = (setPoint, otherPoint, e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const bar = seekBarRef.current
+    if (!bar || !duration) return
+    const onMove = (me) => {
+      const rect    = bar.getBoundingClientRect()
+      const ratio   = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width))
+      const newTime = ratio * duration
+      setPoint(newTime)
+      if (otherPoint !== null) {
+        const rangeStart = Math.min(newTime, otherPoint)
+        const video = videoRef.current
+        if (video && video.currentTime < rangeStart) video.currentTime = rangeStart
+      }
+      if (thumbEnabledRef.current) {
+        const localX = me.clientX - rect.left
+        setThumbInfo(prev => ({ localX, time: newTime, dataUrl: prev?.dataUrl ?? null, w: prev?.w ?? 160, h: prev?.h ?? 90 }))
+        clearTimeout(thumbSeekTimer.current)
+        thumbSeekTimer.current = setTimeout(() => {
+          if (thumbVideoRef.current) thumbVideoRef.current.currentTime = newTime
+        }, 80)
+      }
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup',   onUp)
+      clearTimeout(thumbSeekTimer.current)
+      setThumbInfo(null)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup',   onUp)
+  }
+
+  useEffect(() => {
+    if (!rangeLoop || rangePoint1 === null || rangePoint2 === null) return
+    const start = Math.min(rangePoint1, rangePoint2)
+    const end   = Math.max(rangePoint1, rangePoint2)
+    if (currentTime >= end) {
+      if (videoRef.current) videoRef.current.currentTime = start
+    }
+  }, [currentTime, rangeLoop, rangePoint1, rangePoint2])
+
+  const handleFullscreenToggle = () => {
+    if (fullscreen) {
+      Window.UnFullscreen()
+    } else {
+      Window.Fullscreen()
+    }
+    setFullscreen(f => !f)
   }
 
   const handleMuteToggle = () => {
@@ -919,43 +1007,96 @@ export default function Player() {
         opacity: showUI ? 1 : 0,
         pointerEvents: showUI ? 'auto' : 'none',
       }}>
-        <Box
-          ref={seekBarRef}
-          sx={{ position: 'relative' }}
-          onMouseMove={handleSeekBarMouseMove}
-          onMouseLeave={handleSeekBarMouseLeave}
-        >
-          {thumbInfo?.dataUrl && (
-            <Box sx={{
-              position: 'absolute',
-              bottom: 'calc(100% + 6px)',
-              left: `clamp(${thumbInfo.w / 2}px, ${thumbInfo.localX}px, calc(100% - ${thumbInfo.w / 2}px))`,
-              transform: 'translateX(-50%)',
-              pointerEvents: 'none',
-              bgcolor: 'rgba(0,0,0,0.85)',
-              borderRadius: 1,
-              overflow: 'hidden',
-              border: '1px solid rgba(255,255,255,0.15)',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-            }}>
-              <Box component="img" src={thumbInfo.dataUrl}
-                sx={{ width: thumbInfo.w, height: thumbInfo.h, display: 'block' }} />
-              <Typography variant="caption" sx={{
-                display: 'block', textAlign: 'center',
-                color: 'rgba(255,255,255,0.9)', py: 0.25, fontFamily: 'monospace',
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <Box
+            ref={seekBarRef}
+            sx={{ position: 'relative', flex: 1 }}
+            onMouseMove={handleSeekBarMouseMove}
+            onMouseLeave={handleSeekBarMouseLeave}
+          >
+            {rangeLoop && rangePoint1 !== null && rangePoint2 !== null && duration > 0 && (
+              <Box sx={{
+                position: 'absolute', pointerEvents: 'none', zIndex: 1,
+                left: `${(Math.min(rangePoint1, rangePoint2) / duration) * 100}%`,
+                width: `${(Math.abs(rangePoint2 - rangePoint1) / duration) * 100}%`,
+                top: '50%', transform: 'translateY(-50%)',
+                height: 14, bgcolor: `${activeColor}50`, borderRadius: 0.5,
+              }} />
+            )}
+            {rangeLoop && duration > 0 && [
+              { point: rangePoint1, setPoint: setRangePoint1 },
+              { point: rangePoint2, setPoint: setRangePoint2 },
+            ].map(({ point, setPoint }, i) => {
+              if (point === null) return null
+              const other  = i === 0 ? rangePoint2 : rangePoint1
+              const isLeft = other === null || point <= other
+              return (
+                <Box
+                  key={i}
+                  sx={{
+                    position: 'absolute', zIndex: 3, cursor: 'ew-resize',
+                    left: `${(point / duration) * 100}%`,
+                    top: 0, height: 'calc(100% + 20px)', width: 16,
+                    transform: 'translateX(-50%)',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  }}
+                  onPointerDown={(e) => handleMarkerPointerDown(setPoint, other, e)}
+                >
+                  <Box sx={{ flex: 1, width: 2, bgcolor: activeColor }} />
+                  <Box sx={{ position: 'relative', width: 16, height: 16, flexShrink: 0 }}>
+                    <Box sx={{
+                      width: '100%', height: '100%',
+                      bgcolor: activeColor,
+                      clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
+                    }} />
+                    <Typography sx={{
+                      position: 'absolute', bottom: 0, pointerEvents: 'none',
+                      ...(isLeft ? { right: '100%', pr: '4px' } : { left: '100%', pl: '4px' }),
+                      fontSize: '0.65rem', color: activeColor, fontFamily: 'monospace',
+                      whiteSpace: 'nowrap', userSelect: 'none', lineHeight: 1,
+                    }}>
+                      {fmt(point)}
+                    </Typography>
+                  </Box>
+                </Box>
+              )
+            })}
+            {thumbInfo?.dataUrl && (
+              <Box sx={{
+                position: 'absolute',
+                bottom: 'calc(100% + 6px)',
+                left: `clamp(${thumbInfo.w / 2}px, ${thumbInfo.localX}px, calc(100% - ${thumbInfo.w / 2}px))`,
+                transform: 'translateX(-50%)',
+                pointerEvents: 'none',
+                bgcolor: 'rgba(0,0,0,0.85)',
+                borderRadius: 1,
+                overflow: 'hidden',
+                border: '1px solid rgba(255,255,255,0.15)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
               }}>
-                {fmt(thumbInfo.time)}
-              </Typography>
-            </Box>
-          )}
-          <Slider
+                <Box component="img" src={thumbInfo.dataUrl}
+                  sx={{ width: thumbInfo.w, height: thumbInfo.h, display: 'block' }} />
+                <Typography variant="caption" sx={{
+                  display: 'block', textAlign: 'center',
+                  color: 'rgba(255,255,255,0.9)', py: 0.25, fontFamily: 'monospace',
+                }}>
+                  {fmt(thumbInfo.time)}
+                </Typography>
+              </Box>
+            )}
+            <Slider
             size="small"
             min={0} max={duration || 0} step={0.1}
             value={currentTime}
             onMouseDown={() => { seekDragging.current = true }}
             onChange={(_, v) => setCurrentTime(v)}
             onChangeCommitted={(_, v) => {
-              videoRef.current.currentTime = v
+              let target = v
+              if (rangeLoop && rangePoint1 !== null && rangePoint2 !== null) {
+                const start = Math.min(rangePoint1, rangePoint2)
+                if (v < start) target = start
+              }
+              videoRef.current.currentTime = target
               seekDragging.current = false
             }}
             sx={{
@@ -971,7 +1112,21 @@ export default function Player() {
               },
             }}
           />
-        </Box>
+          </Box>
+          <Tooltip title={loop ? t('controls.loopOn') : t('controls.loopOff')} placement="top">
+            <IconButton onClick={handleLoopToggle} sx={{ color: loop ? activeColor : 'rgba(255,255,255,0.3)', width: 28, height: 28 }}>
+              <RepeatIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={rangeLoop ? t('controls.rangeLoopOn') : t('controls.rangeLoopOff')} placement="top">
+            <IconButton onClick={handleRangeLoopToggle} sx={{ color: rangeLoop ? activeColor : 'rgba(255,255,255,0.3)', width: 28, height: 28 }}>
+              <LinearScaleIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+        <Collapse in={rangeLoop}>
+          <Box sx={{ mt: 0.25, height: 16 }} />
+        </Collapse>
         <Stack direction="row" sx={{ alignItems: 'anchor-center', mt: 1 }} spacing={1}>
           <IconButton onClick={handlePlayPause} sx={{ color: 'white', width: 28, height: 28 }}>
             {paused ? <PlayArrowIcon /> : <PauseIcon />}
@@ -979,7 +1134,7 @@ export default function Player() {
           <Typography sx={{ fontFamily: 'monospace', whiteSpace: 'nowrap', minWidth: 90, fontSize: '0.95rem' }}>
             {fmt(currentTime)} / {fmt(duration)}
           </Typography>
-          <IconButton onClick={handleMuteToggle} sx={{ color: muted ? 'rgba(255,255,255,0.3)' : 'white', width: 28, height: 28 }}>
+          <IconButton onClick={handleMuteToggle} sx={{ color: muted ? 'rgba(255,255,255,0.3)' : 'white', width: 28, height: 28, ml: '20px !important' }}>
             {muted ? <VolumeOffIcon /> : <VolumeUpIcon />}
           </IconButton>
           <Slider
@@ -990,7 +1145,7 @@ export default function Player() {
             valueLabelDisplay="auto"
             valueLabelFormat={v => `${Math.round(v * 100)}%`}
             sx={{
-              color: muted ? 'rgba(255,255,255,0.3)' : 'white', width: 160, py: '10px',
+              color: muted ? 'rgba(255,255,255,0.3)' : 'white', width: 160, py: '10px', mr: '20px !important',
               '& .MuiSlider-track': { height: 9, border: 'none' },
               '& .MuiSlider-rail':  { height: 9 },
               '& .MuiSlider-thumb': { width: 16, height: 16 },
@@ -1003,41 +1158,47 @@ export default function Player() {
           }}>
             {fileName}
           </Typography>
-          <Tooltip title={thumbEnabled ? t('controls.thumbnailOn') : t('controls.thumbnailOff')} placement="top">
-            <IconButton
-              sx={{ color: thumbEnabled ? activeColor : 'rgba(255,255,255,0.3)', width: 28, height: 28 }}
-              onClick={() => {
-                const next = !thumbEnabled
-                setThumbEnabled(next)
-                thumbEnabledRef.current = next
-                if (!next) {
-                  clearTimeout(thumbSeekTimer.current)
-                  setThumbInfo(null)
-                  if (thumbVideoRef.current) thumbVideoRef.current.src = ''
-                } else if (videoRef.current?.src) {
-                  if (thumbVideoRef.current) thumbVideoRef.current.src = videoRef.current.src
-                }
-                UpdatePlaybackSettings(volume, muted, next, language)
-              }}
-            >
-              <PreviewIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title={t('controls.snapshot')} placement="top">
-            <IconButton onClick={handleSnapshot} sx={{ color: 'white', width: 28, height: 28 }}>
-              <CameraAltIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip
-            title={mode === 'vr' ? t('controls.resetCamera') : mode === 'fit' ? t('controls.fitWindow') : t('controls.resetView')}
-            placement="top"
-          >
-            <IconButton onClick={handleReset} sx={{ color: 'white', width: 28, height: 28 }}>
-              <RestartAltIcon fontSize="small" />
+          <Tooltip title={fullscreen ? t('controls.exitFullscreen') : t('controls.fullscreen')} placement="top">
+            <IconButton onClick={handleFullscreenToggle} sx={{ color: 'white', width: 28, height: 28 }}>
+              {fullscreen
+                ? <FullscreenExitIcon fontSize="small" />
+                : <FullscreenIcon    fontSize="small" />
+              }
             </IconButton>
           </Tooltip>
         </Stack>
       </Box>
+      {/* 右サイドパネル（スナップショット） */}
+      <Box
+        sx={{
+          ...barStyle,
+          position: 'absolute', right: 0, top: '50%',
+          transform: 'translateY(-50%)',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          py: 1.5, px: 0.5,
+          borderRadius: '8px 0 0 8px',
+          zIndex: 10,
+          opacity: showUI ? 1 : 0,
+          pointerEvents: showUI ? 'auto' : 'none',
+        }}
+      >
+        <Tooltip title={t('controls.snapshot')} placement="left">
+          <IconButton onClick={handleSnapshot} sx={{ color: 'white', width: 56, height: 56 }}>
+            <CameraAltIcon sx={{ fontSize: 40 }} />
+          </IconButton>
+        </Tooltip>
+        <Tooltip
+          title={mode === 'vr' ? t('controls.resetCamera') : mode === 'fit' ? t('controls.fitWindow') : t('controls.resetView')}
+          placement="left"
+        >
+          <IconButton onClick={handleReset} sx={{ color: 'white', width: 56, height: 56 }}>
+            <FitScreenIcon sx={{ fontSize: 40 }} />
+          </IconButton>
+        </Tooltip>
+      </Box>
+
+
       <SettingsDialog
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -1045,6 +1206,19 @@ export default function Player() {
         onLanguageChange={handleLanguageChange}
         activeColor={activeColor}
         onActiveColorChange={handleActiveColorChange}
+        thumbEnabled={thumbEnabled}
+        onThumbEnabledChange={(next) => {
+          setThumbEnabled(next)
+          thumbEnabledRef.current = next
+          if (!next) {
+            clearTimeout(thumbSeekTimer.current)
+            setThumbInfo(null)
+            if (thumbVideoRef.current) thumbVideoRef.current.src = ''
+          } else if (videoRef.current?.src) {
+            if (thumbVideoRef.current) thumbVideoRef.current.src = videoRef.current.src
+          }
+          UpdatePlaybackSettings(volume, muted, next, language)
+        }}
       />
     </div>
   )

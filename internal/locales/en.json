@@ -29,6 +29,12 @@
     "thumbnailOn": "Thumbnail preview: On",
     "thumbnailOff": "Thumbnail preview: Off",
     "snapshot": "Snapshot",
+    "loopOn": "Loop: On",
+    "loopOff": "Loop: Off",
+    "rangeLoopOn": "Range Loop: On",
+    "rangeLoopOff": "Range Loop: Off",
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit Fullscreen",
     "resetCamera": "Reset Camera",
     "fitWindow": "Fit window to video size",
     "resetView": "Reset View"
@@ -46,7 +52,8 @@
     "playback": {
       "language": "Language",
       "defaultMode": "Default Mode",
-      "activeColor": "Active Color"
+      "activeColor": "Active Color",
+      "thumbnailEnabled": "Seek Thumbnail Preview"
     },
     "vr": {
       "fov": "Field of View",
