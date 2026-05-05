@@ -106,8 +106,8 @@ export default function Player() {
   const [fullscreen,     setFullscreen]     = useState(false)
   const [loop,           setLoop]           = useState(true)
   const [rangeLoop,      setRangeLoop]      = useState(false)
-  const [rangeStart,     setRangeStart]     = useState(null)
-  const [rangeEnd,       setRangeEnd]       = useState(null)
+  const [rangePoint1,    setRangePoint1]    = useState(null)
+  const [rangePoint2,    setRangePoint2]    = useState(null)
 
   // Three.js セットアップ
   useEffect(() => {
@@ -551,18 +551,18 @@ export default function Player() {
   const handleRangeLoopToggle = () => {
     const next = !rangeLoop
     setRangeLoop(next)
-    if (next && rangeStart === null && duration > 0) {
-      setRangeStart(0)
-      setRangeEnd(duration)
+    if (next && rangePoint1 === null && duration > 0) {
+      setRangePoint1(0)
+      setRangePoint2(duration)
     }
   }
 
   const handleClearRange = () => {
-    setRangeStart(null)
-    setRangeEnd(null)
+    setRangePoint1(null)
+    setRangePoint2(null)
   }
 
-  const handleMarkerPointerDown = (type, e) => {
+  const handleMarkerPointerDown = (setPoint, e) => {
     e.preventDefault()
     e.stopPropagation()
     const bar = seekBarRef.current
@@ -570,9 +570,7 @@ export default function Player() {
     const onMove = (me) => {
       const rect  = bar.getBoundingClientRect()
       const ratio = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width))
-      const time  = ratio * duration
-      if (type === 'start') setRangeStart(time)
-      else                  setRangeEnd(time)
+      setPoint(ratio * duration)
     }
     const onUp = () => {
       window.removeEventListener('pointermove', onMove)
@@ -583,13 +581,13 @@ export default function Player() {
   }
 
   useEffect(() => {
-    if (!rangeLoop || rangeStart === null || rangeEnd === null) return
-    const start = Math.min(rangeStart, rangeEnd)
-    const end   = Math.max(rangeStart, rangeEnd)
+    if (!rangeLoop || rangePoint1 === null || rangePoint2 === null) return
+    const start = Math.min(rangePoint1, rangePoint2)
+    const end   = Math.max(rangePoint1, rangePoint2)
     if (currentTime >= end) {
       if (videoRef.current) videoRef.current.currentTime = start
     }
-  }, [currentTime, rangeLoop, rangeStart, rangeEnd])
+  }, [currentTime, rangeLoop, rangePoint1, rangePoint2])
 
   const handleFullscreenToggle = () => {
     if (fullscreen) {
@@ -993,53 +991,52 @@ export default function Player() {
             onMouseMove={handleSeekBarMouseMove}
             onMouseLeave={handleSeekBarMouseLeave}
           >
-            {rangeLoop && rangeStart !== null && rangeEnd !== null && duration > 0 && (
+            {rangeLoop && rangePoint1 !== null && rangePoint2 !== null && duration > 0 && (
               <Box sx={{
                 position: 'absolute', pointerEvents: 'none', zIndex: 1,
-                left: `${(Math.min(rangeStart, rangeEnd) / duration) * 100}%`,
-                width: `${(Math.abs(rangeEnd - rangeStart) / duration) * 100}%`,
+                left: `${(Math.min(rangePoint1, rangePoint2) / duration) * 100}%`,
+                width: `${(Math.abs(rangePoint2 - rangePoint1) / duration) * 100}%`,
                 top: '50%', transform: 'translateY(-50%)',
                 height: 14, bgcolor: `${activeColor}50`, borderRadius: 0.5,
               }} />
             )}
-            {rangeLoop && rangeStart !== null && duration > 0 && (
-              <Box
-                sx={{
-                  position: 'absolute', zIndex: 3, cursor: 'ew-resize',
-                  left: `${(rangeStart / duration) * 100}%`,
-                  top: 0, height: 'calc(100% + 24px)', width: 16,
-                  transform: 'translateX(-50%)',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center',
-                }}
-                onPointerDown={(e) => handleMarkerPointerDown('start', e)}
-              >
-                <Box sx={{ flex: 1, width: 2, bgcolor: activeColor }} />
-                <Box sx={{
-                  width: 12, height: 12, flexShrink: 0,
-                  bgcolor: activeColor,
-                  clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
-                }} />
-              </Box>
-            )}
-            {rangeLoop && rangeEnd !== null && duration > 0 && (
-              <Box
-                sx={{
-                  position: 'absolute', zIndex: 3, cursor: 'ew-resize',
-                  left: `${(rangeEnd / duration) * 100}%`,
-                  top: 0, height: 'calc(100% + 24px)', width: 16,
-                  transform: 'translateX(-50%)',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center',
-                }}
-                onPointerDown={(e) => handleMarkerPointerDown('end', e)}
-              >
-                <Box sx={{ flex: 1, width: 2, bgcolor: activeColor, opacity: 0.8 }} />
-                <Box sx={{
-                  width: 12, height: 12, flexShrink: 0,
-                  bgcolor: activeColor, opacity: 0.8,
-                  clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
-                }} />
-              </Box>
-            )}
+            {rangeLoop && duration > 0 && [
+              { point: rangePoint1, setPoint: setRangePoint1 },
+              { point: rangePoint2, setPoint: setRangePoint2 },
+            ].map(({ point, setPoint }, i) => point === null ? null : (() => {
+              const other   = i === 0 ? rangePoint2 : rangePoint1
+              const isLeft  = other === null || point <= other
+              return (
+                <Box
+                  key={i}
+                  sx={{
+                    position: 'absolute', zIndex: 3, cursor: 'ew-resize',
+                    left: `${(point / duration) * 100}%`,
+                    top: 0, height: 'calc(100% + 24px)', width: 16,
+                    transform: 'translateX(-50%)',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  }}
+                  onPointerDown={(e) => handleMarkerPointerDown(setPoint, e)}
+                >
+                  <Box sx={{ flex: 1, width: 2, bgcolor: activeColor }} />
+                  <Box sx={{ position: 'relative', width: 12, height: 12, flexShrink: 0 }}>
+                    <Box sx={{
+                      width: '100%', height: '100%',
+                      bgcolor: activeColor,
+                      clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
+                    }} />
+                    <Typography sx={{
+                      position: 'absolute', bottom: 0, pointerEvents: 'none',
+                      ...(isLeft ? { left: '100%', pl: '4px' } : { right: '100%', pr: '4px' }),
+                      fontSize: '0.65rem', color: activeColor, fontFamily: 'monospace',
+                      whiteSpace: 'nowrap', userSelect: 'none', lineHeight: 1,
+                    }}>
+                      {fmt(point)}
+                    </Typography>
+                  </Box>
+                </Box>
+              )
+            })()}
             {thumbInfo?.dataUrl && (
               <Box sx={{
                 position: 'absolute',
@@ -1099,14 +1096,7 @@ export default function Player() {
           </Tooltip>
         </Stack>
         {rangeLoop && (
-          <Stack direction="row" alignItems="center" sx={{ mt: 0.5 }}>
-            <Typography variant="caption" sx={{ color: activeColor, fontFamily: 'monospace', px: 1 }}>
-              {rangeStart !== null ? fmt(rangeStart) : '--:--'}
-            </Typography>
-            <Box sx={{ flex: 1 }} />
-            <Typography variant="caption" sx={{ color: activeColor, fontFamily: 'monospace', px: 1, opacity: 0.8 }}>
-              {rangeEnd !== null ? fmt(rangeEnd) : '--:--'}
-            </Typography>
+          <Stack direction="row" justifyContent="flex-end" sx={{ mt: 0.25 }}>
             <Tooltip title={t('controls.clearRange')} placement="top">
               <IconButton onClick={handleClearRange} sx={{ color: 'rgba(255,255,255,0.4)', width: 22, height: 22 }}>
                 <CloseIcon sx={{ fontSize: 14 }} />
