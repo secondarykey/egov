@@ -1033,7 +1033,7 @@ export default function Player() {
                   onPointerDown={(e) => handleMarkerPointerDown(setPoint, other, e)}
                 >
                   <Box sx={{ flex: 1, width: 2, bgcolor: activeColor }} />
-                  <Box sx={{ position: 'relative', width: 12, height: 12, flexShrink: 0 }}>
+                  <Box sx={{ position: 'relative', width: 16, height: 16, flexShrink: 0 }}>
                     <Box sx={{
                       width: '100%', height: '100%',
                       bgcolor: activeColor,
