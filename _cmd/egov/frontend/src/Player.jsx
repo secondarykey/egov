@@ -1028,7 +1028,7 @@ export default function Player() {
                     }} />
                     <Typography sx={{
                       position: 'absolute', bottom: 0, pointerEvents: 'none',
-                      ...(isLeft ? { left: '100%', pl: '4px' } : { right: '100%', pr: '4px' }),
+                      ...(isLeft ? { right: '100%', pr: '4px' } : { left: '100%', pl: '4px' }),
                       fontSize: '0.65rem', color: activeColor, fontFamily: 'monospace',
                       whiteSpace: 'nowrap', userSelect: 'none', lineHeight: 1,
                     }}>
@@ -1068,7 +1068,12 @@ export default function Player() {
             onMouseDown={() => { seekDragging.current = true }}
             onChange={(_, v) => setCurrentTime(v)}
             onChangeCommitted={(_, v) => {
-              videoRef.current.currentTime = v
+              let target = v
+              if (rangeLoop && rangePoint1 !== null && rangePoint2 !== null) {
+                const start = Math.min(rangePoint1, rangePoint2)
+                if (v < start) target = start
+              }
+              videoRef.current.currentTime = target
               seekDragging.current = false
             }}
             sx={{
