@@ -1066,7 +1066,13 @@ export default function Player() {
             min={0} max={duration || 0} step={0.1}
             value={currentTime}
             onMouseDown={() => { seekDragging.current = true }}
-            onChange={(_, v) => setCurrentTime(v)}
+            onChange={(_, v) => {
+              if (rangeLoop && rangePoint1 !== null && rangePoint2 !== null) {
+                const start = Math.min(rangePoint1, rangePoint2)
+                if (v < start) { setCurrentTime(start); return }
+              }
+              setCurrentTime(v)
+            }}
             onChangeCommitted={(_, v) => {
               let target = v
               if (rangeLoop && rangePoint1 !== null && rangePoint2 !== null) {
