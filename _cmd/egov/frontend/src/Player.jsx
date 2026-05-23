@@ -35,6 +35,7 @@ import RepeatIcon         from '@mui/icons-material/Repeat'
 import LinearScaleIcon   from '@mui/icons-material/LinearScale'
 import PushPinIcon        from '@mui/icons-material/PushPin'
 import SettingsIcon       from '@mui/icons-material/Settings'
+import ErrorOutlineIcon  from '@mui/icons-material/ErrorOutline'
 import { Events, Window } from '@wailsio/runtime'
 import { GetInitialFile, GetServerURL, GetSettings, UpdateAlwaysOnTop, UpdatePlaybackSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
@@ -105,6 +106,7 @@ export default function Player() {
   const [alwaysOnTop,    setAlwaysOnTop]    = useState(false)
   const [fullscreen,     setFullscreen]     = useState(false)
   const [loop,           setLoop]           = useState(true)
+  const [videoError,     setVideoError]     = useState(null)
   const [rangeLoop,      setRangeLoop]      = useState(false)
   const [rangePoint1,    setRangePoint1]    = useState(null)
   const [rangePoint2,    setRangePoint2]    = useState(null)
@@ -201,6 +203,16 @@ export default function Player() {
     })
     video.addEventListener('timeupdate', () => {
       if (!seekDragging.current) setCurrentTime(video.currentTime)
+    })
+    video.addEventListener('error', () => {
+      const e = video.error
+      const messages = {
+        [MediaError.MEDIA_ERR_ABORTED]:  'MEDIA_ERR_ABORTED',
+        [MediaError.MEDIA_ERR_NETWORK]:  'MEDIA_ERR_NETWORK',
+        [MediaError.MEDIA_ERR_DECODE]:   'MEDIA_ERR_DECODE',
+        [MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED]: 'MEDIA_ERR_SRC_NOT_SUPPORTED',
+      }
+      setVideoError(messages[e?.code] || `UNKNOWN_ERROR (code: ${e?.code})`)
     })
 
     let animId
@@ -370,6 +382,7 @@ export default function Player() {
     if (!file || !file.type.startsWith('video/')) return
     const video = videoRef.current
     const url   = URL.createObjectURL(file)
+    setVideoError(null)
     video.src = url
     if (thumbEnabledRef.current && thumbVideoRef.current) thumbVideoRef.current.src = url
     video.play()
@@ -381,6 +394,7 @@ export default function Player() {
   const loadFilePath = (fileUrl) => {
     if (!fileUrl) return
     const video = videoRef.current
+    setVideoError(null)
     video.src = fileUrl
     if (thumbEnabledRef.current && thumbVideoRef.current) thumbVideoRef.current.src = fileUrl
     video.play()
@@ -742,6 +756,23 @@ export default function Player() {
               : <PauseIcon     sx={{ fontSize: 64, color: 'white' }} />
             }
           </Box>
+        </Box>
+      )}
+
+      {videoError && (
+        <Box sx={{
+          position: 'absolute', inset: 0, zIndex: 15,
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 1,
+          pointerEvents: 'none',
+        }}>
+          <ErrorOutlineIcon sx={{ fontSize: 64, color: 'rgba(255,80,80,0.8)' }} />
+          <Typography sx={{ color: 'rgba(255,255,255,0.8)', fontSize: 16 }}>
+            {t('error.videoLoad')}
+          </Typography>
+          <Typography sx={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>
+            {videoError}
+          </Typography>
         </Box>
       )}
 
