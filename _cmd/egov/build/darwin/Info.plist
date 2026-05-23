@@ -5,15 +5,15 @@
 		<key>CFBundleExecutable</key>
 		<string/>
 		<key>CFBundleGetInfoString</key>
-		<string>Media Player</string>
+		<string>This is a comment</string>
 		<key>CFBundleIconFile</key>
 		<string>icons</string>
 		<key>CFBundleIconName</key>
 		<string>appicon</string>
 		<key>CFBundleIdentifier</key>
-		<string>com.github.secondarykey.egov</string>
+		<string/>
 		<key>CFBundleName</key>
-		<string>egov</string>
+		<string>My Product</string>
 		<key>CFBundlePackageType</key>
 		<string>APPL</string>
 		<key>CFBundleShortVersionString</key>
@@ -25,6 +25,6 @@
 		<key>NSHighResolutionCapable</key>
 		<string>true</string>
 		<key>NSHumanReadableCopyright</key>
-		<string>(c)2026, secondarykey</string>
+		<string>© now, My Company</string>
 	</dict>
 </plist>
