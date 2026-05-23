@@ -35,7 +35,7 @@ import RepeatIcon         from '@mui/icons-material/Repeat'
 import LinearScaleIcon   from '@mui/icons-material/LinearScale'
 import PushPinIcon        from '@mui/icons-material/PushPin'
 import SettingsIcon       from '@mui/icons-material/Settings'
-import ErrorOutlineIcon  from '@mui/icons-material/ErrorOutline'
+import ReportProblemIcon from '@mui/icons-material/ReportProblem'
 import { Events, Window } from '@wailsio/runtime'
 import { GetInitialFile, GetServerURL, GetSettings, UpdateAlwaysOnTop, UpdatePlaybackSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
@@ -766,7 +766,7 @@ export default function Player() {
           alignItems: 'center', justifyContent: 'center', gap: 1,
           pointerEvents: 'none',
         }}>
-          <ErrorOutlineIcon sx={{ fontSize: 64, color: 'rgba(255,80,80,0.8)' }} />
+          <ReportProblemIcon sx={{ fontSize: 64, color: 'rgba(255,80,80,0.8)' }} />
           <Typography sx={{ color: 'rgba(255,255,255,0.8)', fontSize: 16 }}>
             {t('error.videoLoad')}
           </Typography>
