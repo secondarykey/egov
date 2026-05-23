@@ -247,6 +247,17 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             min={100} max={3000} step={100}
             format={v => `${v} ms`}
           />
+          <Row label={t('settings.controls.acceptInactiveClick')}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={controls.acceptInactiveClick ?? false}
+                  onChange={e => setC('acceptInactiveClick')(e.target.checked)}
+                />
+              }
+              label=""
+            />
+          </Row>
         </TabPanel>
         {/* App */}
         <TabPanel value={tab} index={3}>

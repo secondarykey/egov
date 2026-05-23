@@ -80,6 +80,7 @@ export default function Player() {
   const seekFeedbackKeyRef  = useRef(0)
   const justFocusedRef      = useRef(false)
   const focusTimerRef       = useRef(null)
+  const acceptInactiveRef   = useRef(false)
 
   const [paused,      setPaused]      = useState(true)
   const [currentTime, setCurrentTime] = useState(0)
@@ -415,6 +416,7 @@ export default function Player() {
       setLanguage(p.language)
       setActiveColor(p.activeColor || '#4fc3f7')
       setAlwaysOnTop(s.app?.alwaysOnTop ?? false)
+      acceptInactiveRef.current = s.controls?.acceptInactiveClick ?? false
       setServerUrl(url)
       if (videoRef.current) {
         videoRef.current.volume = p.volume
@@ -525,11 +527,12 @@ export default function Player() {
   }
 
   const handleCanvasClick = (e) => {
-    if (justFocusedRef.current) {
+    if (justFocusedRef.current && !acceptInactiveRef.current) {
       justFocusedRef.current = false
       clearTimeout(focusTimerRef.current)
       return
     }
+    justFocusedRef.current = false
     const video = videoRef.current
     if (!video?.src) return
     clickCountRef.current++

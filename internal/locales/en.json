@@ -66,7 +66,8 @@
       "doubleClickSeek": "Double-click Seek",
       "tripleClickSeek": "Triple-click Seek",
       "uiHideDelay": "UI Hide Delay",
-      "uiHideOnLeave": "UI Hide on Leave"
+      "uiHideOnLeave": "UI Hide on Leave",
+      "acceptInactiveClick": "Accept clicks from inactive window"
     },
     "app": {
       "singleInstance": "Single Instance",

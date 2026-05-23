@@ -66,7 +66,8 @@
       "doubleClickSeek": "ダブルクリックシーク",
       "tripleClickSeek": "トリプルクリックシーク",
       "uiHideDelay": "UI非表示遅延",
-      "uiHideOnLeave": "離脱時UI非表示遅延"
+      "uiHideOnLeave": "離脱時UI非表示遅延",
+      "acceptInactiveClick": "非アクティブからの操作を受け入れる"
     },
     "app": {
       "singleInstance": "シングルインスタンス",

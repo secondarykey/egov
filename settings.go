@@ -37,11 +37,12 @@ type PlaybackSettings struct {
 }
 
 type ControlSettings struct {
-	ClickTimeoutMs       int `json:"clickTimeoutMs"`
-	DoubleClickSeekSecs  int `json:"doubleClickSeekSecs"`
-	TripleClickSeekSecs  int `json:"tripleClickSeekSecs"`
-	UIHideDelayMs        int `json:"uiHideDelayMs"`
-	UIHideOnLeaveDelayMs int `json:"uiHideOnLeaveDelayMs"`
+	ClickTimeoutMs       int  `json:"clickTimeoutMs"`
+	DoubleClickSeekSecs  int  `json:"doubleClickSeekSecs"`
+	TripleClickSeekSecs  int  `json:"tripleClickSeekSecs"`
+	UIHideDelayMs        int  `json:"uiHideDelayMs"`
+	UIHideOnLeaveDelayMs int  `json:"uiHideOnLeaveDelayMs"`
+	AcceptInactiveClick  bool `json:"acceptInactiveClick"`
 }
 
 type WindowSettings struct {
