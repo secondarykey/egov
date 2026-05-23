@@ -1179,8 +1179,10 @@ export default function Player() {
           py: 1.5, px: 0.5,
           borderRadius: '8px 0 0 8px',
           zIndex: 10,
-          opacity: showUI ? 1 : 0,
+          opacity: showUI ? 0.6 : 0,
           pointerEvents: showUI ? 'auto' : 'none',
+          transition: 'opacity 0.3s',
+          '&:hover': { opacity: showUI ? 1 : 0 },
         }}
       >
         <Tooltip title={t('controls.snapshot')} placement="left">
