@@ -50,7 +50,7 @@ function SliderRow({ label, value, onChange, min, max, step, format }) {
   )
 }
 
-export default function SettingsDialog({ open, onClose, availableLangs, onLanguageChange, activeColor: activeColorProp, onActiveColorChange, acceptInactiveClick: acceptInactiveProp, onAcceptInactiveClickChange, thumbEnabled: thumbEnabledProp, onThumbEnabledChange }) {
+export default function SettingsDialog({ open, onClose, availableLangs, onLanguageChange, activeColor: activeColorProp, onActiveColorChange, acceptInactiveClick: acceptInactiveProp, onAcceptInactiveClickChange, miniProgressBar: miniProgressProp, onMiniProgressBarChange, thumbEnabled: thumbEnabledProp, onThumbEnabledChange }) {
   const { t } = useTranslation()
   const [tab, setTab] = useState(0)
   const [version, setVersion] = useState('')
@@ -100,6 +100,9 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
     }
     if ((controls.acceptInactiveClick ?? false) !== (acceptInactiveProp ?? false)) {
       onAcceptInactiveClickChange?.(controls.acceptInactiveClick)
+    }
+    if ((controls.miniProgressBar ?? false) !== (miniProgressProp ?? false)) {
+      onMiniProgressBarChange?.(controls.miniProgressBar)
     }
     onClose()
   }
@@ -256,6 +259,17 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
                 <Switch
                   checked={controls.acceptInactiveClick ?? false}
                   onChange={e => setC('acceptInactiveClick')(e.target.checked)}
+                />
+              }
+              label=""
+            />
+          </Row>
+          <Row label={t('settings.controls.miniProgressBar')}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={controls.miniProgressBar ?? false}
+                  onChange={e => setC('miniProgressBar')(e.target.checked)}
                 />
               }
               label=""

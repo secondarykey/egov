@@ -43,6 +43,7 @@ type ControlSettings struct {
 	UIHideDelayMs        int  `json:"uiHideDelayMs"`
 	UIHideOnLeaveDelayMs int  `json:"uiHideOnLeaveDelayMs"`
 	AcceptInactiveClick  bool `json:"acceptInactiveClick"`
+	MiniProgressBar      bool `json:"miniProgressBar"`
 }
 
 type WindowSettings struct {

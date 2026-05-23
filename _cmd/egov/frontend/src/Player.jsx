@@ -81,6 +81,8 @@ export default function Player() {
   const justFocusedRef      = useRef(false)
   const focusTimerRef       = useRef(null)
   const acceptInactiveRef   = useRef(false)
+  const miniProgressRef     = useRef(false)
+  const [miniProgress, setMiniProgress] = useState(false)
 
   const [paused,      setPaused]      = useState(true)
   const [currentTime, setCurrentTime] = useState(0)
@@ -417,6 +419,8 @@ export default function Player() {
       setActiveColor(p.activeColor || '#4fc3f7')
       setAlwaysOnTop(s.app?.alwaysOnTop ?? false)
       acceptInactiveRef.current = s.controls?.acceptInactiveClick ?? false
+      miniProgressRef.current = s.controls?.miniProgressBar ?? false
+      setMiniProgress(s.controls?.miniProgressBar ?? false)
       setServerUrl(url)
       if (videoRef.current) {
         videoRef.current.volume = p.volume
@@ -1034,6 +1038,21 @@ export default function Player() {
         </Stack>
       </Box>
 
+      {/* ミニプログレスバー */}
+      {miniProgress && !showUI && duration > 0 && (
+        <Box sx={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          height: 3, zIndex: 5, pointerEvents: 'none',
+          bgcolor: 'rgba(255,255,255,0.15)',
+        }}>
+          <Box sx={{
+            height: '100%',
+            width: `${(currentTime / duration) * 100}%`,
+            bgcolor: 'rgba(255,255,255,0.45)',
+          }} />
+        </Box>
+      )}
+
       {/* コントロールバー */}
       <Box sx={{
         ...barStyle,
@@ -1245,6 +1264,8 @@ export default function Player() {
         onActiveColorChange={handleActiveColorChange}
         acceptInactiveClick={acceptInactiveRef.current}
         onAcceptInactiveClickChange={(next) => { acceptInactiveRef.current = next }}
+        miniProgressBar={miniProgress}
+        onMiniProgressBarChange={(next) => { miniProgressRef.current = next; setMiniProgress(next) }}
         thumbEnabled={thumbEnabled}
         onThumbEnabledChange={(next) => {
           setThumbEnabled(next)
