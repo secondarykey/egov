@@ -205,6 +205,7 @@ export default function Player() {
       if (!seekDragging.current) setCurrentTime(video.currentTime)
     })
     video.addEventListener('error', () => {
+      if (!video.src || video.src === location.href) return
       const e = video.error
       const messages = {
         [MediaError.MEDIA_ERR_ABORTED]:  'MEDIA_ERR_ABORTED',
