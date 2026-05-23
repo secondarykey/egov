@@ -1243,6 +1243,8 @@ export default function Player() {
         onLanguageChange={handleLanguageChange}
         activeColor={activeColor}
         onActiveColorChange={handleActiveColorChange}
+        acceptInactiveClick={acceptInactiveRef.current}
+        onAcceptInactiveClickChange={(next) => { acceptInactiveRef.current = next }}
         thumbEnabled={thumbEnabled}
         onThumbEnabledChange={(next) => {
           setThumbEnabled(next)

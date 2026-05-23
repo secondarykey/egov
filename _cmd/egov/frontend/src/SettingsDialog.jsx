@@ -50,7 +50,7 @@ function SliderRow({ label, value, onChange, min, max, step, format }) {
   )
 }
 
-export default function SettingsDialog({ open, onClose, availableLangs, onLanguageChange, activeColor: activeColorProp, onActiveColorChange, thumbEnabled: thumbEnabledProp, onThumbEnabledChange }) {
+export default function SettingsDialog({ open, onClose, availableLangs, onLanguageChange, activeColor: activeColorProp, onActiveColorChange, acceptInactiveClick: acceptInactiveProp, onAcceptInactiveClickChange, thumbEnabled: thumbEnabledProp, onThumbEnabledChange }) {
   const { t } = useTranslation()
   const [tab, setTab] = useState(0)
   const [version, setVersion] = useState('')
@@ -97,6 +97,9 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
     onActiveColorChange?.(playback.activeColor)
     if (playback.thumbnailEnabled !== thumbEnabledProp) {
       onThumbEnabledChange?.(playback.thumbnailEnabled)
+    }
+    if ((controls.acceptInactiveClick ?? false) !== (acceptInactiveProp ?? false)) {
+      onAcceptInactiveClickChange?.(controls.acceptInactiveClick)
     }
     onClose()
   }
