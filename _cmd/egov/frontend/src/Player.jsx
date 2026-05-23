@@ -1043,12 +1043,12 @@ export default function Player() {
         <Box sx={{
           position: 'absolute', bottom: 0, left: 0, right: 0,
           height: 3, zIndex: 5, pointerEvents: 'none',
-          bgcolor: 'rgba(255,255,255,0.15)',
         }}>
           <Box sx={{
             height: '100%',
             width: `${(currentTime / duration) * 100}%`,
-            bgcolor: 'rgba(255,255,255,0.45)',
+            bgcolor: activeColor,
+            opacity: 0.7,
           }} />
         </Box>
       )}
