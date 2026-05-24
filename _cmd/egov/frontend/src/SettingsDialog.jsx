@@ -188,10 +188,9 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
               <Typography variant="body2" sx={{ fontFamily: 'monospace', color: 'text.secondary', lineHeight: '32px' }}>
                 {playback.activeColor}
               </Typography>
-              <Box sx={{ width: 24, height: 24, borderRadius: '50%', bgcolor: playback.activeColor, flexShrink: 0 }} />
             </Stack>
           </Row>
-          <Box sx={{ textAlign: 'right', mt: 1 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
             <Button size="small" sx={{ whiteSpace: 'nowrap' }} onClick={() => setPlayback(p => ({ ...p, ...defaults.playback }))}>
               {t('settings.resetDefaults')}
             </Button>
@@ -225,7 +224,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
               </Select>
             </FormControl>
           </Row>
-          <Box sx={{ textAlign: 'right', mt: 1 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
             <Button size="small" sx={{ whiteSpace: 'nowrap' }} onClick={() => setVr(defaults.vr)}>
               {t('settings.resetDefaults')}
             </Button>
@@ -259,7 +258,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             min={100} max={3000} step={100}
             format={v => `${v} ms`}
           />
-          <Box sx={{ textAlign: 'right', mt: 1 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
             <Button size="small" sx={{ whiteSpace: 'nowrap' }} onClick={() => setControls(defaults.controls)}>
               {t('settings.resetDefaults')}
             </Button>
@@ -314,7 +313,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
           <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: -1.5 }}>
             {t('settings.app.restartRequired')}
           </Typography>
-          <Box sx={{ textAlign: 'right', mt: 1 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
             <Button size="small" sx={{ whiteSpace: 'nowrap' }} onClick={() => { setAppSettings(s => ({ ...s, ...defaults.app })); setPlayback(p => ({ ...p, thumbnailEnabled: defaults.app.thumbnailEnabled })) }}>
               {t('settings.resetDefaults')}
             </Button>
