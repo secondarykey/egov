@@ -42,7 +42,7 @@ function SliderRow({ label, value, onChange, min, max, step, format }) {
     <Row label={label}>
       <Stack direction="row" alignItems="center" spacing={1.5}>
         <Slider min={min} max={max} step={step} value={value} onChange={(_, v) => onChange(v)} size="small" />
-        <Typography variant="body2" sx={{ minWidth: 44, textAlign: 'right', fontFamily: 'monospace' }}>
+        <Typography variant="body2" sx={{ minWidth: 64, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
           {format ? format(value) : value}
         </Typography>
       </Stack>
