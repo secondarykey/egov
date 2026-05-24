@@ -191,7 +191,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             </Stack>
           </Row>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-            <Button size="small" sx={{ whiteSpace: 'nowrap' }} onClick={() => setPlayback(p => ({ ...p, ...defaults.playback }))}>
+            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => setPlayback(p => ({ ...p, ...defaults.playback }))}>
               {t('settings.resetDefaults')}
             </Button>
           </Box>
@@ -225,7 +225,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             </FormControl>
           </Row>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-            <Button size="small" sx={{ whiteSpace: 'nowrap' }} onClick={() => setVr(defaults.vr)}>
+            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => setVr(defaults.vr)}>
               {t('settings.resetDefaults')}
             </Button>
           </Box>
@@ -259,7 +259,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             format={v => `${v} ms`}
           />
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-            <Button size="small" sx={{ whiteSpace: 'nowrap' }} onClick={() => setControls(defaults.controls)}>
+            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => setControls(defaults.controls)}>
               {t('settings.resetDefaults')}
             </Button>
           </Box>
@@ -314,7 +314,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             {t('settings.app.restartRequired')}
           </Typography>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-            <Button size="small" sx={{ whiteSpace: 'nowrap' }} onClick={() => { setAppSettings(s => ({ ...s, ...defaults.app })); setPlayback(p => ({ ...p, thumbnailEnabled: defaults.app.thumbnailEnabled })) }}>
+            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => { setAppSettings(s => ({ ...s, ...defaults.app })); setPlayback(p => ({ ...p, thumbnailEnabled: defaults.app.thumbnailEnabled })) }}>
               {t('settings.resetDefaults')}
             </Button>
           </Box>
