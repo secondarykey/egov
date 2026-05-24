@@ -41,9 +41,7 @@ type ControlSettings struct {
 	DoubleClickSeekSecs  int  `json:"doubleClickSeekSecs"`
 	TripleClickSeekSecs  int  `json:"tripleClickSeekSecs"`
 	UIHideDelayMs        int  `json:"uiHideDelayMs"`
-	UIHideOnLeaveDelayMs int  `json:"uiHideOnLeaveDelayMs"`
-	AcceptInactiveClick  bool `json:"acceptInactiveClick"`
-	MiniProgressBar      bool `json:"miniProgressBar"`
+	UIHideOnLeaveDelayMs int `json:"uiHideOnLeaveDelayMs"`
 }
 
 type WindowSettings struct {
@@ -54,8 +52,10 @@ type WindowSettings struct {
 }
 
 type AppSettings struct {
-	SingleInstance bool `json:"singleInstance"`
-	AlwaysOnTop    bool `json:"alwaysOnTop"`
+	SingleInstance      bool `json:"singleInstance"`
+	AlwaysOnTop         bool `json:"alwaysOnTop"`
+	AcceptInactiveClick bool `json:"acceptInactiveClick"`
+	MiniProgressBar     bool `json:"miniProgressBar"`
 }
 
 type Settings struct {
