@@ -1,7 +1,7 @@
 [Desktop Entry]
 Version=1.0
-Name=egov
-Comment=Media Player
+Name=My Product
+Comment=My Product Description
 # The Exec line includes %u to pass the URL to the application
 Exec=/usr/local/bin/ %u
 Terminal=false

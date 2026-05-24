@@ -42,7 +42,7 @@ function SliderRow({ label, value, onChange, min, max, step, format }) {
     <Row label={label}>
       <Stack direction="row" alignItems="center" spacing={1.5}>
         <Slider min={min} max={max} step={step} value={value} onChange={(_, v) => onChange(v)} size="small" />
-        <Typography variant="body2" sx={{ minWidth: 44, textAlign: 'right', fontFamily: 'monospace' }}>
+        <Typography variant="body2" sx={{ minWidth: 64, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
           {format ? format(value) : value}
         </Typography>
       </Stack>
@@ -50,7 +50,7 @@ function SliderRow({ label, value, onChange, min, max, step, format }) {
   )
 }
 
-export default function SettingsDialog({ open, onClose, availableLangs, onLanguageChange, activeColor: activeColorProp, onActiveColorChange, thumbEnabled: thumbEnabledProp, onThumbEnabledChange }) {
+export default function SettingsDialog({ open, onClose, availableLangs, onLanguageChange, activeColor: activeColorProp, onActiveColorChange, acceptInactiveClick: acceptInactiveProp, onAcceptInactiveClickChange, miniProgressBar: miniProgressProp, onMiniProgressBarChange, thumbEnabled: thumbEnabledProp, onThumbEnabledChange }) {
   const { t } = useTranslation()
   const [tab, setTab] = useState(0)
   const [version, setVersion] = useState('')
@@ -98,7 +98,20 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
     if (playback.thumbnailEnabled !== thumbEnabledProp) {
       onThumbEnabledChange?.(playback.thumbnailEnabled)
     }
+    if ((appSettings.acceptInactiveClick ?? false) !== (acceptInactiveProp ?? false)) {
+      onAcceptInactiveClickChange?.(appSettings.acceptInactiveClick)
+    }
+    if ((appSettings.miniProgressBar ?? false) !== (miniProgressProp ?? false)) {
+      onMiniProgressBarChange?.(appSettings.miniProgressBar)
+    }
     onClose()
+  }
+
+  const defaults = {
+    playback: { defaultMode: 'fit', activeColor: '#4fc3f7' },
+    vr: { fov: 75, dragSensitivity: 0.004, scrollSpeed: 0.05, defaultStart: 'left' },
+    controls: { clickTimeoutMs: 300, doubleClickSeekSecs: 10, tripleClickSeekSecs: 60, uiHideDelayMs: 1500, uiHideOnLeaveDelayMs: 800 },
+    app: { singleInstance: false, acceptInactiveClick: false, miniProgressBar: false, thumbnailEnabled: true },
   }
 
   const setV = (k) => (v) => setVr(s => ({ ...s, [k]: v }))
@@ -131,7 +144,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
         </IconButton>
       </DialogTitle>
       <DialogContent sx={{ pt: 0, flex: 1, overflow: 'auto' }}>
-        <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider', mb: 0 }}>
+        <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="fullWidth" sx={{ borderBottom: 1, borderColor: 'divider', mb: 0 }}>
           <Tab label={t('settings.tab.playback')} />
           <Tab label={t('settings.tab.vr')} />
           <Tab label={t('settings.tab.controls')} />
@@ -172,23 +185,16 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
                   bgcolor: 'transparent',
                 }}
               />
-              <Typography variant="body2" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
+              <Typography variant="body2" sx={{ fontFamily: 'monospace', color: 'text.secondary', lineHeight: '32px' }}>
                 {playback.activeColor}
               </Typography>
-              <Box sx={{ width: 24, height: 24, borderRadius: '50%', bgcolor: playback.activeColor, flexShrink: 0 }} />
             </Stack>
           </Row>
-          <Row label={t('settings.playback.thumbnailEnabled')}>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={playback.thumbnailEnabled}
-                  onChange={e => setPlayback(p => ({ ...p, thumbnailEnabled: e.target.checked }))}
-                />
-              }
-              label=""
-            />
-          </Row>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => setPlayback(p => ({ ...p, ...defaults.playback }))}>
+              {t('settings.resetDefaults')}
+            </Button>
+          </Box>
         </TabPanel>
 
         {/* VR */}
@@ -218,6 +224,11 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
               </Select>
             </FormControl>
           </Row>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => setVr(defaults.vr)}>
+              {t('settings.resetDefaults')}
+            </Button>
+          </Box>
         </TabPanel>
 
         {/* Controls */}
@@ -247,9 +258,47 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             min={100} max={3000} step={100}
             format={v => `${v} ms`}
           />
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => setControls(defaults.controls)}>
+              {t('settings.resetDefaults')}
+            </Button>
+          </Box>
         </TabPanel>
         {/* App */}
         <TabPanel value={tab} index={3}>
+          <Row label={t('settings.app.thumbnailEnabled')}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={playback.thumbnailEnabled}
+                  onChange={e => setPlayback(p => ({ ...p, thumbnailEnabled: e.target.checked }))}
+                />
+              }
+              label=""
+            />
+          </Row>
+          <Row label={t('settings.app.acceptInactiveClick')}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={appSettings.acceptInactiveClick ?? false}
+                  onChange={e => setAppSettings(s => ({ ...s, acceptInactiveClick: e.target.checked }))}
+                />
+              }
+              label=""
+            />
+          </Row>
+          <Row label={t('settings.app.miniProgressBar')}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={appSettings.miniProgressBar ?? false}
+                  onChange={e => setAppSettings(s => ({ ...s, miniProgressBar: e.target.checked }))}
+                />
+              }
+              label=""
+            />
+          </Row>
           <Row label={t('settings.app.singleInstance')}>
             <FormControlLabel
               control={
@@ -264,12 +313,17 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
           <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: -1.5 }}>
             {t('settings.app.restartRequired')}
           </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => { setAppSettings(s => ({ ...s, ...defaults.app })); setPlayback(p => ({ ...p, thumbnailEnabled: defaults.app.thumbnailEnabled })) }}>
+              {t('settings.resetDefaults')}
+            </Button>
+          </Box>
         </TabPanel>
         </Box>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose}>{t('settings.cancel')}</Button>
-        <Button onClick={handleSave} variant="contained">{t('settings.save')}</Button>
+        <Button onClick={onClose} sx={{ whiteSpace: 'nowrap', minWidth: 100 }}>{t('settings.cancel')}</Button>
+        <Button onClick={handleSave} variant="contained" sx={{ whiteSpace: 'nowrap', minWidth: 100 }}>{t('settings.save')}</Button>
       </DialogActions>
     </Dialog>
   )

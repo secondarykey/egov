@@ -35,6 +35,7 @@ import RepeatIcon         from '@mui/icons-material/Repeat'
 import LinearScaleIcon   from '@mui/icons-material/LinearScale'
 import PushPinIcon        from '@mui/icons-material/PushPin'
 import SettingsIcon       from '@mui/icons-material/Settings'
+import ReportProblemIcon from '@mui/icons-material/ReportProblem'
 import { Events, Window } from '@wailsio/runtime'
 import { GetInitialFile, GetServerURL, GetSettings, UpdateAlwaysOnTop, UpdatePlaybackSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
@@ -79,6 +80,9 @@ export default function Player() {
   const seekFeedbackKeyRef  = useRef(0)
   const justFocusedRef      = useRef(false)
   const focusTimerRef       = useRef(null)
+  const acceptInactiveRef   = useRef(false)
+  const miniProgressRef     = useRef(false)
+  const [miniProgress, setMiniProgress] = useState(false)
 
   const [paused,      setPaused]      = useState(true)
   const [currentTime, setCurrentTime] = useState(0)
@@ -105,6 +109,7 @@ export default function Player() {
   const [alwaysOnTop,    setAlwaysOnTop]    = useState(false)
   const [fullscreen,     setFullscreen]     = useState(false)
   const [loop,           setLoop]           = useState(true)
+  const [videoError,     setVideoError]     = useState(null)
   const [rangeLoop,      setRangeLoop]      = useState(false)
   const [rangePoint1,    setRangePoint1]    = useState(null)
   const [rangePoint2,    setRangePoint2]    = useState(null)
@@ -201,6 +206,17 @@ export default function Player() {
     })
     video.addEventListener('timeupdate', () => {
       if (!seekDragging.current) setCurrentTime(video.currentTime)
+    })
+    video.addEventListener('error', () => {
+      if (!video.src || video.src === location.href) return
+      const e = video.error
+      const messages = {
+        [MediaError.MEDIA_ERR_ABORTED]:  'MEDIA_ERR_ABORTED',
+        [MediaError.MEDIA_ERR_NETWORK]:  'MEDIA_ERR_NETWORK',
+        [MediaError.MEDIA_ERR_DECODE]:   'MEDIA_ERR_DECODE',
+        [MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED]: 'MEDIA_ERR_SRC_NOT_SUPPORTED',
+      }
+      setVideoError(messages[e?.code] || `UNKNOWN_ERROR (code: ${e?.code})`)
     })
 
     let animId
@@ -370,6 +386,7 @@ export default function Player() {
     if (!file || !file.type.startsWith('video/')) return
     const video = videoRef.current
     const url   = URL.createObjectURL(file)
+    setVideoError(null)
     video.src = url
     if (thumbEnabledRef.current && thumbVideoRef.current) thumbVideoRef.current.src = url
     video.play()
@@ -381,6 +398,7 @@ export default function Player() {
   const loadFilePath = (fileUrl) => {
     if (!fileUrl) return
     const video = videoRef.current
+    setVideoError(null)
     video.src = fileUrl
     if (thumbEnabledRef.current && thumbVideoRef.current) thumbVideoRef.current.src = fileUrl
     video.play()
@@ -400,6 +418,9 @@ export default function Player() {
       setLanguage(p.language)
       setActiveColor(p.activeColor || '#4fc3f7')
       setAlwaysOnTop(s.app?.alwaysOnTop ?? false)
+      acceptInactiveRef.current = s.controls?.acceptInactiveClick ?? false
+      miniProgressRef.current = s.controls?.miniProgressBar ?? false
+      setMiniProgress(s.controls?.miniProgressBar ?? false)
       setServerUrl(url)
       if (videoRef.current) {
         videoRef.current.volume = p.volume
@@ -510,11 +531,12 @@ export default function Player() {
   }
 
   const handleCanvasClick = (e) => {
-    if (justFocusedRef.current) {
+    if (justFocusedRef.current && !acceptInactiveRef.current) {
       justFocusedRef.current = false
       clearTimeout(focusTimerRef.current)
       return
     }
+    justFocusedRef.current = false
     const video = videoRef.current
     if (!video?.src) return
     clickCountRef.current++
@@ -742,6 +764,23 @@ export default function Player() {
               : <PauseIcon     sx={{ fontSize: 64, color: 'white' }} />
             }
           </Box>
+        </Box>
+      )}
+
+      {videoError && (
+        <Box sx={{
+          position: 'absolute', inset: 0, zIndex: 15,
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 1,
+          pointerEvents: 'none',
+        }}>
+          <ReportProblemIcon sx={{ fontSize: 64, color: 'rgba(255,80,80,0.8)' }} />
+          <Typography sx={{ color: 'rgba(255,255,255,0.8)', fontSize: 16 }}>
+            {t('error.videoLoad')}
+          </Typography>
+          <Typography sx={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>
+            {videoError}
+          </Typography>
         </Box>
       )}
 
@@ -999,6 +1038,21 @@ export default function Player() {
         </Stack>
       </Box>
 
+      {/* ミニプログレスバー */}
+      {miniProgress && !showUI && duration > 0 && (
+        <Box sx={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          height: 3, zIndex: 5, pointerEvents: 'none',
+        }}>
+          <Box sx={{
+            height: '100%',
+            width: `${(currentTime / duration) * 100}%`,
+            bgcolor: activeColor,
+            opacity: 0.7,
+          }} />
+        </Box>
+      )}
+
       {/* コントロールバー */}
       <Box sx={{
         ...barStyle,
@@ -1179,8 +1233,10 @@ export default function Player() {
           py: 1.5, px: 0.5,
           borderRadius: '8px 0 0 8px',
           zIndex: 10,
-          opacity: showUI ? 1 : 0,
+          opacity: showUI ? 0.6 : 0,
           pointerEvents: showUI ? 'auto' : 'none',
+          transition: 'opacity 0.3s',
+          '&:hover': { opacity: showUI ? 1 : 0 },
         }}
       >
         <Tooltip title={t('controls.snapshot')} placement="left">
@@ -1206,6 +1262,10 @@ export default function Player() {
         onLanguageChange={handleLanguageChange}
         activeColor={activeColor}
         onActiveColorChange={handleActiveColorChange}
+        acceptInactiveClick={acceptInactiveRef.current}
+        onAcceptInactiveClickChange={(next) => { acceptInactiveRef.current = next }}
+        miniProgressBar={miniProgress}
+        onMiniProgressBarChange={(next) => { miniProgressRef.current = next; setMiniProgress(next) }}
         thumbEnabled={thumbEnabled}
         onThumbEnabledChange={(next) => {
           setThumbEnabled(next)

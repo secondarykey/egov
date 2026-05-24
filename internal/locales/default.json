@@ -37,8 +37,9 @@
     "title": "Settings",
     "save": "Save",
     "cancel": "Cancel",
+    "resetDefaults": "Reset to defaults",
     "tab": {
-      "playback": "Playback",
+      "playback": "General",
       "vr": "VR",
       "controls": "Controls",
       "app": "Application"
@@ -62,6 +63,9 @@
       "uiHideOnLeave": "UI Hide on Leave"
     },
     "app": {
+      "thumbnailEnabled": "Seek Thumbnail Preview",
+      "acceptInactiveClick": "Accept clicks from inactive window",
+      "miniProgressBar": "Mini progress bar",
       "singleInstance": "Single Instance",
       "restartRequired": "* Takes effect after restart"
     }
