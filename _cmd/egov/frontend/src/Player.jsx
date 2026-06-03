@@ -77,7 +77,11 @@ export default function Player() {
   const clickTimerRef       = useRef(null)
   const clickCountRef       = useRef(0)
   const lastClickXRef       = useRef(0)
+  const holdSeekTimerRef    = useRef(null)
+  const holdSeekActiveRef   = useRef(false)
   const seekFeedbackKeyRef  = useRef(0)
+  const clickTimeoutMsRef   = useRef(300)
+  const doubleClickSeekRef  = useRef(10)
   const justFocusedRef      = useRef(false)
   const focusTimerRef       = useRef(null)
   const acceptInactiveRef   = useRef(false)
@@ -418,9 +422,11 @@ export default function Player() {
       setLanguage(p.language)
       setActiveColor(p.activeColor || '#4fc3f7')
       setAlwaysOnTop(s.app?.alwaysOnTop ?? false)
-      acceptInactiveRef.current = s.controls?.acceptInactiveClick ?? false
-      miniProgressRef.current = s.controls?.miniProgressBar ?? false
-      setMiniProgress(s.controls?.miniProgressBar ?? false)
+      acceptInactiveRef.current  = s.app?.acceptInactiveClick ?? false
+      clickTimeoutMsRef.current  = s.controls?.clickTimeoutMs ?? 300
+      doubleClickSeekRef.current = s.controls?.doubleClickSeekSecs ?? 10
+      miniProgressRef.current = s.app?.miniProgressBar ?? false
+      setMiniProgress(s.app?.miniProgressBar ?? false)
       setServerUrl(url)
       if (videoRef.current) {
         videoRef.current.volume = p.volume
@@ -530,6 +536,40 @@ export default function Player() {
     }
   }
 
+  const startHoldSeek = (forward) => {
+    const video = videoRef.current
+    if (!video?.src) return
+    const seconds = doubleClickSeekRef.current
+    holdSeekActiveRef.current = true
+    const tick = () => {
+      if (!holdSeekActiveRef.current) return
+      video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? seconds : -seconds)))
+      setCurrentTime(video.currentTime)
+      seekFeedbackKeyRef.current++
+      setSeekFeedback({ forward, seconds, key: seekFeedbackKeyRef.current })
+      holdSeekTimerRef.current = setTimeout(tick, 1000)
+    }
+    holdSeekTimerRef.current = setTimeout(tick, 1000)
+  }
+
+  const stopHoldSeek = () => {
+    holdSeekActiveRef.current = false
+    clearTimeout(holdSeekTimerRef.current)
+    holdSeekTimerRef.current = null
+  }
+
+  const handleCanvasMouseDown = (e) => {
+    if (e.button !== 0) return
+    if (clickCountRef.current >= 2) {
+      const forward = e.clientX > window.innerWidth / 2
+      startHoldSeek(forward)
+    }
+  }
+
+  const handleCanvasMouseUp = () => {
+    stopHoldSeek()
+  }
+
   const handleCanvasClick = (e) => {
     if (justFocusedRef.current && !acceptInactiveRef.current) {
       justFocusedRef.current = false
@@ -553,13 +593,13 @@ export default function Player() {
         feedbackKeyRef.current++
         setClickFeedback({ type: willPlay ? 'play' : 'pause', key: feedbackKeyRef.current })
       } else {
-        const seconds = count === 2 ? 10 : 60
+        const seconds = doubleClickSeekRef.current
         video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? seconds : -seconds)))
         setCurrentTime(video.currentTime)
         seekFeedbackKeyRef.current++
         setSeekFeedback({ forward, seconds, key: seekFeedbackKeyRef.current })
       }
-    }, 300)
+    }, clickTimeoutMsRef.current)
   }
 
   const handleSnapshot = () => {
@@ -697,6 +737,9 @@ export default function Player() {
         ref={mountRef}
         style={{ width: '100%', height: '100%' }}
         onClick={handleCanvasClick}
+        onMouseDown={handleCanvasMouseDown}
+        onMouseUp={handleCanvasMouseUp}
+        onMouseLeave={handleCanvasMouseUp}
         onContextMenu={e => e.preventDefault()}
       />
 
