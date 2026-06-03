@@ -74,11 +74,10 @@ export default function Player() {
   const headGroupRef    = useRef(null)
   const rendererRef     = useRef(null)
   const feedbackKeyRef      = useRef(0)
-  const clickTimerRef           = useRef(null)
-  const lastPointerDownTimeRef  = useRef(0)
-  const holdSeekTimerRef        = useRef(null)
-  const holdSeekActiveRef       = useRef(false)
-  const holdSeekFiredRef        = useRef(false)
+  const clickTimerRef       = useRef(null)
+  const holdSeekTimerRef    = useRef(null)
+  const holdSeekActiveRef   = useRef(false)
+  const holdSeekFiredRef    = useRef(false)
   const seekFeedbackKeyRef  = useRef(0)
   const clickTimeoutMsRef   = useRef(300)
   const doubleClickSeekRef  = useRef(10)
@@ -560,7 +559,21 @@ export default function Player() {
     holdSeekTimerRef.current = null
   }
 
-  // シングルクリック: play/pause タイマーを開始（dblclick が来たらキャンセルされる）
+  // mousedown.detail >= 2 はブラウザがダブルクリックと判定した2回目の押下
+  // OSのダブルクリック速度設定をそのまま利用できる
+  const handleCanvasMouseDown = (e) => {
+    if (e.button !== 0) return
+    if (e.detail >= 2) {
+      clearTimeout(clickTimerRef.current)
+      clickTimerRef.current = null
+      startHoldSeek(e.clientX > window.innerWidth / 2)
+    }
+  }
+
+  const handleCanvasMouseUp = () => { stopHoldSeek() }
+
+  // click.detail > 1 はダブルクリックの2回目: タイマーをキャンセルして終了
+  // onDoubleClick がシークを担当する
   const handleCanvasClick = (e) => {
     if (justFocusedRef.current && !acceptInactiveRef.current) {
       justFocusedRef.current = false
@@ -570,7 +583,12 @@ export default function Player() {
     justFocusedRef.current = false
     const video = videoRef.current
     if (!video?.src) return
-    if (clickTimerRef.current) clearTimeout(clickTimerRef.current)
+    if (e.detail > 1) {
+      clearTimeout(clickTimerRef.current)
+      clickTimerRef.current = null
+      return
+    }
+    clearTimeout(clickTimerRef.current)
     const willPlay = video.paused
     clickTimerRef.current = setTimeout(() => {
       clickTimerRef.current = null
@@ -580,8 +598,7 @@ export default function Player() {
     }, clickTimeoutMsRef.current)
   }
 
-  // ダブルクリック: タイマーをキャンセルしてシーク
-  // ホールド後のリリース時は hold-seek 側が既にシークしているのでスキップ
+  // ダブルクリック: ホールドシークが未発動ならシーク、発動済みなら何もしない
   const handleCanvasDblClick = (e) => {
     clearTimeout(clickTimerRef.current)
     clickTimerRef.current = null
@@ -595,21 +612,6 @@ export default function Player() {
     seekFeedbackKeyRef.current++
     setSeekFeedback({ forward, seconds, key: seekFeedbackKeyRef.current })
   }
-
-  // mousedown でタイミングを計測し、2回目のクリック押下なら hold-seek を開始
-  const handleCanvasMouseDown = (e) => {
-    if (e.button !== 0) return
-    const now = Date.now()
-    const isSecondClick = (now - lastPointerDownTimeRef.current) <= clickTimeoutMsRef.current
-    lastPointerDownTimeRef.current = isSecondClick ? 0 : now
-    if (isSecondClick) {
-      clearTimeout(clickTimerRef.current)
-      clickTimerRef.current = null
-      startHoldSeek(e.clientX > window.innerWidth / 2)
-    }
-  }
-
-  const handleCanvasMouseUp = () => { stopHoldSeek() }
 
   const handleSnapshot = () => {
     const canvas = rendererRef.current?.domElement
