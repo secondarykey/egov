@@ -64,7 +64,6 @@
     "controls": {
       "clickTimeout": "クリックタイムアウト",
       "doubleClickSeek": "ダブルクリックシーク",
-      "tripleClickSeek": "トリプルクリックシーク",
       "uiHideDelay": "UI非表示遅延",
       "uiHideOnLeave": "離脱時UI非表示遅延"
     },

@@ -110,7 +110,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
   const defaults = {
     playback: { defaultMode: 'fit', activeColor: '#4fc3f7' },
     vr: { fov: 75, dragSensitivity: 0.004, scrollSpeed: 0.05, defaultStart: 'left' },
-    controls: { clickTimeoutMs: 300, doubleClickSeekSecs: 10, tripleClickSeekSecs: 60, uiHideDelayMs: 1500, uiHideOnLeaveDelayMs: 800 },
+    controls: { clickTimeoutMs: 300, doubleClickSeekSecs: 10, uiHideDelayMs: 1500, uiHideOnLeaveDelayMs: 800 },
     app: { singleInstance: false, acceptInactiveClick: false, miniProgressBar: false, thumbnailEnabled: true },
   }
 
@@ -241,11 +241,6 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
           <SliderRow label={t('settings.controls.doubleClickSeek')}
             value={controls.doubleClickSeekSecs} onChange={setC('doubleClickSeekSecs')}
             min={1} max={60} step={1}
-            format={v => `${v} s`}
-          />
-          <SliderRow label={t('settings.controls.tripleClickSeek')}
-            value={controls.tripleClickSeekSecs} onChange={setC('tripleClickSeekSecs')}
-            min={10} max={300} step={10}
             format={v => `${v} s`}
           />
           <SliderRow label={t('settings.controls.uiHideDelay')}
