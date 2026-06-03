@@ -74,10 +74,11 @@ export default function Player() {
   const headGroupRef    = useRef(null)
   const rendererRef     = useRef(null)
   const feedbackKeyRef      = useRef(0)
-  const clickTimerRef       = useRef(null)
-  const holdSeekTimerRef    = useRef(null)
-  const holdSeekActiveRef   = useRef(false)
-  const holdSeekFiredRef    = useRef(false)
+  const clickTimerRef           = useRef(null)
+  const lastPointerDownTimeRef  = useRef(0)
+  const holdSeekTimerRef        = useRef(null)
+  const holdSeekActiveRef       = useRef(false)
+  const holdSeekFiredRef        = useRef(false)
   const seekFeedbackKeyRef  = useRef(0)
   const clickTimeoutMsRef   = useRef(300)
   const doubleClickSeekRef  = useRef(10)
@@ -559,11 +560,14 @@ export default function Player() {
     holdSeekTimerRef.current = null
   }
 
-  // mousedown.detail >= 2 はブラウザがダブルクリックと判定した2回目の押下
-  // OSのダブルクリック速度設定をそのまま利用できる
+  // mousedown のタイミングでホールドシークを検出する
+  // click.detail は mouseup 後のイベントなので hold 検出には使えないため独自計測を使う
   const handleCanvasMouseDown = (e) => {
     if (e.button !== 0) return
-    if (e.detail >= 2) {
+    const now = Date.now()
+    const isDouble = e.detail >= 2 || (now - lastPointerDownTimeRef.current) <= clickTimeoutMsRef.current
+    lastPointerDownTimeRef.current = isDouble ? 0 : now
+    if (isDouble) {
       clearTimeout(clickTimerRef.current)
       clickTimerRef.current = null
       startHoldSeek(e.clientX > window.innerWidth / 2)
