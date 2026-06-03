@@ -74,11 +74,11 @@ export default function Player() {
   const headGroupRef    = useRef(null)
   const rendererRef     = useRef(null)
   const feedbackKeyRef      = useRef(0)
-  const clickTimerRef       = useRef(null)
-  const clickCountRef       = useRef(0)
-  const lastClickXRef       = useRef(0)
-  const holdSeekTimerRef    = useRef(null)
-  const holdSeekActiveRef   = useRef(false)
+  const clickTimerRef           = useRef(null)
+  const lastPointerDownTimeRef  = useRef(0)
+  const holdSeekTimerRef        = useRef(null)
+  const holdSeekActiveRef       = useRef(false)
+  const holdSeekFiredRef        = useRef(false)
   const seekFeedbackKeyRef  = useRef(0)
   const clickTimeoutMsRef   = useRef(300)
   const doubleClickSeekRef  = useRef(10)
@@ -541,8 +541,10 @@ export default function Player() {
     if (!video?.src) return
     const seconds = doubleClickSeekRef.current
     holdSeekActiveRef.current = true
+    holdSeekFiredRef.current = false
     const tick = () => {
       if (!holdSeekActiveRef.current) return
+      holdSeekFiredRef.current = true
       video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? seconds : -seconds)))
       setCurrentTime(video.currentTime)
       seekFeedbackKeyRef.current++
@@ -558,18 +560,7 @@ export default function Player() {
     holdSeekTimerRef.current = null
   }
 
-  const handleCanvasMouseDown = (e) => {
-    if (e.button !== 0) return
-    if (clickCountRef.current >= 2) {
-      const forward = e.clientX > window.innerWidth / 2
-      startHoldSeek(forward)
-    }
-  }
-
-  const handleCanvasMouseUp = () => {
-    stopHoldSeek()
-  }
-
+  // シングルクリック: play/pause タイマーを開始（dblclick が来たらキャンセルされる）
   const handleCanvasClick = (e) => {
     if (justFocusedRef.current && !acceptInactiveRef.current) {
       justFocusedRef.current = false
@@ -579,28 +570,46 @@ export default function Player() {
     justFocusedRef.current = false
     const video = videoRef.current
     if (!video?.src) return
-    clickCountRef.current++
-    lastClickXRef.current = e.clientX
     if (clickTimerRef.current) clearTimeout(clickTimerRef.current)
     const willPlay = video.paused
     clickTimerRef.current = setTimeout(() => {
       clickTimerRef.current = null
-      const count = clickCountRef.current
-      clickCountRef.current = 0
-      const forward = lastClickXRef.current > window.innerWidth / 2
-      if (count === 1) {
-        handlePlayPause()
-        feedbackKeyRef.current++
-        setClickFeedback({ type: willPlay ? 'play' : 'pause', key: feedbackKeyRef.current })
-      } else {
-        const seconds = doubleClickSeekRef.current
-        video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? seconds : -seconds)))
-        setCurrentTime(video.currentTime)
-        seekFeedbackKeyRef.current++
-        setSeekFeedback({ forward, seconds, key: seekFeedbackKeyRef.current })
-      }
+      handlePlayPause()
+      feedbackKeyRef.current++
+      setClickFeedback({ type: willPlay ? 'play' : 'pause', key: feedbackKeyRef.current })
     }, clickTimeoutMsRef.current)
   }
+
+  // ダブルクリック: タイマーをキャンセルしてシーク
+  // ホールド後のリリース時は hold-seek 側が既にシークしているのでスキップ
+  const handleCanvasDblClick = (e) => {
+    clearTimeout(clickTimerRef.current)
+    clickTimerRef.current = null
+    const video = videoRef.current
+    if (!video?.src) return
+    if (holdSeekFiredRef.current) { holdSeekFiredRef.current = false; return }
+    const forward = e.clientX > window.innerWidth / 2
+    const seconds = doubleClickSeekRef.current
+    video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? seconds : -seconds)))
+    setCurrentTime(video.currentTime)
+    seekFeedbackKeyRef.current++
+    setSeekFeedback({ forward, seconds, key: seekFeedbackKeyRef.current })
+  }
+
+  // mousedown でタイミングを計測し、2回目のクリック押下なら hold-seek を開始
+  const handleCanvasMouseDown = (e) => {
+    if (e.button !== 0) return
+    const now = Date.now()
+    const isSecondClick = (now - lastPointerDownTimeRef.current) <= clickTimeoutMsRef.current
+    lastPointerDownTimeRef.current = isSecondClick ? 0 : now
+    if (isSecondClick) {
+      clearTimeout(clickTimerRef.current)
+      clickTimerRef.current = null
+      startHoldSeek(e.clientX > window.innerWidth / 2)
+    }
+  }
+
+  const handleCanvasMouseUp = () => { stopHoldSeek() }
 
   const handleSnapshot = () => {
     const canvas = rendererRef.current?.domElement
@@ -737,6 +746,7 @@ export default function Player() {
         ref={mountRef}
         style={{ width: '100%', height: '100%' }}
         onClick={handleCanvasClick}
+        onDoubleClick={handleCanvasDblClick}
         onMouseDown={handleCanvasMouseDown}
         onMouseUp={handleCanvasMouseUp}
         onMouseLeave={handleCanvasMouseUp}
