@@ -190,10 +190,36 @@ func main() {
 		win.SetAlwaysOnTop(true)
 	}
 
-	// 前回のウィンドウ位置・サイズを復元
+	// 前回のウィンドウ位置・サイズを復元（スクリーンに収まるよう調整）
 	if ws := settings.Window; ws.Width > 0 && ws.Height > 0 {
-		win.SetSize(ws.Width, ws.Height)
-		win.SetPosition(ws.X, ws.Y)
+		w, h := ws.Width, ws.Height
+		x, y := ws.X, ws.Y
+		// ウィンドウ中心に最も近いスクリーンを取得してサイズを制限
+		cx, cy := x+w/2, y+h/2
+		if screen := application.ScreenNearestDipPoint(application.Point{X: cx, Y: cy}); screen != nil {
+			wa := screen.WorkArea
+			if w > wa.Width {
+				w = wa.Width
+			}
+			if h > wa.Height {
+				h = wa.Height
+			}
+			// 位置もスクリーン内に収める
+			if x < wa.X {
+				x = wa.X
+			}
+			if y < wa.Y {
+				y = wa.Y
+			}
+			if x+w > wa.X+wa.Width {
+				x = wa.X + wa.Width - w
+			}
+			if y+h > wa.Y+wa.Height {
+				y = wa.Y + wa.Height - h
+			}
+		}
+		win.SetSize(w, h)
+		win.SetPosition(x, y)
 	}
 
 	// 閉じる時にウィンドウ位置・サイズを保存
