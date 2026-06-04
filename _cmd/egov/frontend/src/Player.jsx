@@ -614,7 +614,7 @@ export default function Player() {
       // 即シーク（クリック位置の左右）
       doZoneSeek(doubleClickSeekRef.current, e.clientX > window.innerWidth / 2)
       // 500ms ホールドでオーバーレイ表示
-      overlayShowTimerRef.current = setTimeout(() => setSeekOverlay(pos), 500)
+      overlayShowTimerRef.current = setTimeout(() => setSeekOverlay(pos), 800)
     }
   }
 
@@ -857,10 +857,15 @@ export default function Player() {
             transform: 'translate(-50%, -50%)',
             zIndex: 20, pointerEvents: 'none',
             display: 'flex', alignItems: 'stretch',
-            background: 'rgba(0,0,0,0.65)',
-            backdropFilter: 'blur(6px)',
+            background: 'rgba(0,0,0,0.3)',
+            backdropFilter: 'blur(4px)',
             borderRadius: 2, overflow: 'hidden',
             userSelect: 'none',
+            '@keyframes seekOverlayFadeIn': {
+              '0%':   { opacity: 0, transform: 'translate(-50%, -50%) scale(0.9)' },
+              '100%': { opacity: 1, transform: 'translate(-50%, -50%) scale(1)' },
+            },
+            animation: 'seekOverlayFadeIn 0.2s ease-out forwards',
           }}>
             {zones.map(({ label, sub, seconds, forward }, i) => {
               const isActive = seconds === 0
@@ -870,14 +875,14 @@ export default function Player() {
                 <Box key={i} sx={{
                   display: 'flex', flexDirection: 'column',
                   alignItems: 'center', justifyContent: 'center',
-                  px: 1, py: 0.5, minWidth: 38,
-                  bgcolor: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
+                  px: 1.5, py: 0.75, minWidth: 52,
+                  bgcolor: isActive ? 'rgba(255,255,255,0.15)' : 'transparent',
                   borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none',
                   transition: 'background 0.1s',
                 }}>
                   <Typography sx={{
                     color: isActive ? activeColor : 'rgba(255,255,255,0.4)',
-                    fontSize: isActive ? 13 : 11,
+                    fontSize: isActive ? 16 : 13,
                     fontWeight: isActive ? 'bold' : 'normal',
                     fontFamily: 'monospace', lineHeight: 1.2,
                     transition: 'all 0.1s',
@@ -885,7 +890,7 @@ export default function Player() {
                   {sub && (
                     <Typography sx={{
                       color: isActive ? activeColor : 'rgba(255,255,255,0.3)',
-                      fontSize: 8, fontFamily: 'monospace', lineHeight: 1,
+                      fontSize: 9, fontFamily: 'monospace', lineHeight: 1,
                     }}>{sub}</Typography>
                   )}
                 </Box>
