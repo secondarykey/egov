@@ -430,6 +430,7 @@ export default function Player() {
       acceptInactiveRef.current  = s.app?.acceptInactiveClick ?? false
       clickTimeoutMsRef.current  = s.controls?.clickTimeoutMs ?? 300
       doubleClickSeekRef.current = s.controls?.doubleClickSeekSecs ?? 10
+      fastSeekSecsRef.current    = s.controls?.fastSeekSecs ?? 60
       miniProgressRef.current = s.app?.miniProgressBar ?? false
       setMiniProgress(s.app?.miniProgressBar ?? false)
       setServerUrl(url)
