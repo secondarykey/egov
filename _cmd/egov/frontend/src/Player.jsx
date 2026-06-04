@@ -80,6 +80,7 @@ export default function Player() {
   const seekZoneTimerRef        = useRef(null)
   const seekZoneRef             = useRef(null)
   const seekOverlayRef          = useRef(null)
+  const overlayShowTimerRef     = useRef(null)
   const fastSeekSecsRef         = useRef(60)
   const seekFeedbackKeyRef  = useRef(0)
   const clickTimeoutMsRef   = useRef(300)
@@ -590,13 +591,15 @@ export default function Player() {
   }
 
   const hideSeekOverlay = () => {
+    clearTimeout(overlayShowTimerRef.current)
     isMouseHeldRef.current = false
     seekOverlayRef.current = null
     setSeekOverlay(null)
     stopZoneSeek()
   }
 
-  // mousedown でダブルクリックを検出してオーバーレイ表示
+  // mousedown でダブルクリックを検出:
+  // 即シーク → 500ms ホールドでオーバーレイ表示
   const handleCanvasMouseDown = (e) => {
     if (e.button !== 0) return
     const now = Date.now()
@@ -608,9 +611,10 @@ export default function Player() {
       isMouseHeldRef.current = true
       const pos = { x: e.clientX, y: e.clientY }
       seekOverlayRef.current = pos
-      setSeekOverlay(pos)
-      // 初回: クリック位置の左右で即シーク
+      // 即シーク（クリック位置の左右）
       doZoneSeek(doubleClickSeekRef.current, e.clientX > window.innerWidth / 2)
+      // 500ms ホールドでオーバーレイ表示
+      overlayShowTimerRef.current = setTimeout(() => setSeekOverlay(pos), 500)
     }
   }
 
@@ -789,44 +793,52 @@ export default function Player() {
         onContextMenu={e => e.preventDefault()}
       />
 
-      {seekFeedback && (
-        <Box
-          key={seekFeedback.key}
-          sx={{
-            position: 'absolute', top: '50%',
-            ...(seekFeedback.forward ? { right: '15%' } : { left: '15%' }),
-            pointerEvents: 'none', zIndex: 20,
-            '@keyframes seekFade': {
-              '0%':   { opacity: 0.9, transform: 'translateY(-50%) scale(1)' },
-              '30%':  { opacity: 0.9, transform: 'translateY(-50%) scale(1)' },
-              '100%': { opacity: 0,   transform: 'translateY(-50%) scale(1.3)' },
-            },
-            animation: 'seekFade 0.6s ease-out forwards',
-          }}
-          onAnimationEnd={() => setSeekFeedback(null)}
-        >
-          <Box sx={{
-            bgcolor: 'rgba(0,0,0,0.45)', borderRadius: 2, px: 2, py: 1,
-            display: 'flex', alignItems: 'center', gap: 1,
-          }}>
-            {seekFeedback.forward ? (
-              <>
-                <FastForwardIcon sx={{ fontSize: 32, color: 'white' }} />
-                <Typography sx={{ color: 'white', fontSize: 28, fontWeight: 'bold', lineHeight: 1 }}>
-                  {`+${seekFeedback.seconds}s`}
-                </Typography>
-              </>
-            ) : (
-              <>
-                <Typography sx={{ color: 'white', fontSize: 28, fontWeight: 'bold', lineHeight: 1 }}>
-                  {`-${seekFeedback.seconds}s`}
-                </Typography>
-                <FastRewindIcon sx={{ fontSize: 32, color: 'white' }} />
-              </>
-            )}
+      {seekFeedback && (() => {
+        const nearOverlay = !!seekOverlayRef.current
+        const ox = nearOverlay ? Math.max(100, Math.min(window.innerWidth - 100, seekOverlayRef.current.x)) : 0
+        const oy = nearOverlay ? seekOverlayRef.current.y : 0
+        return (
+          <Box
+            key={seekFeedback.key}
+            sx={{
+              position: 'absolute',
+              ...(nearOverlay
+                ? { left: ox, top: oy - 52, transform: 'translate(-50%, -50%)' }
+                : { top: '50%', ...(seekFeedback.forward ? { right: '15%' } : { left: '15%' }) }
+              ),
+              pointerEvents: 'none', zIndex: 21,
+              '@keyframes seekFade': {
+                '0%':   { opacity: 0.9, transform: `${nearOverlay ? 'translate(-50%,-50%)' : 'translateY(-50%)'} scale(1)` },
+                '30%':  { opacity: 0.9, transform: `${nearOverlay ? 'translate(-50%,-50%)' : 'translateY(-50%)'} scale(1)` },
+                '100%': { opacity: 0,   transform: `${nearOverlay ? 'translate(-50%,-50%)' : 'translateY(-50%)'} scale(1.2)` },
+              },
+              animation: 'seekFade 0.5s ease-out forwards',
+            }}
+            onAnimationEnd={() => setSeekFeedback(null)}
+          >
+            <Box sx={{
+              bgcolor: 'rgba(0,0,0,0.55)', borderRadius: 1.5, px: 1, py: 0.5,
+              display: 'flex', alignItems: 'center', gap: 0.5,
+            }}>
+              {seekFeedback.forward ? (
+                <>
+                  <FastForwardIcon sx={{ fontSize: 18, color: 'white' }} />
+                  <Typography sx={{ color: 'white', fontSize: 14, fontWeight: 'bold', lineHeight: 1 }}>
+                    {`+${seekFeedback.seconds}s`}
+                  </Typography>
+                </>
+              ) : (
+                <>
+                  <Typography sx={{ color: 'white', fontSize: 14, fontWeight: 'bold', lineHeight: 1 }}>
+                    {`-${seekFeedback.seconds}s`}
+                  </Typography>
+                  <FastRewindIcon sx={{ fontSize: 18, color: 'white' }} />
+                </>
+              )}
+            </Box>
           </Box>
-        </Box>
-      )}
+        )
+      })()}
 
       {/* シークオーバーレイ */}
       {seekOverlay && (() => {
@@ -858,14 +870,14 @@ export default function Player() {
                 <Box key={i} sx={{
                   display: 'flex', flexDirection: 'column',
                   alignItems: 'center', justifyContent: 'center',
-                  px: 1.5, py: 0.75, minWidth: 52,
+                  px: 1, py: 0.5, minWidth: 38,
                   bgcolor: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
                   borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none',
                   transition: 'background 0.1s',
                 }}>
                   <Typography sx={{
-                    color: isActive ? activeColor : 'rgba(255,255,255,0.45)',
-                    fontSize: isActive ? 18 : 15,
+                    color: isActive ? activeColor : 'rgba(255,255,255,0.4)',
+                    fontSize: isActive ? 13 : 11,
                     fontWeight: isActive ? 'bold' : 'normal',
                     fontFamily: 'monospace', lineHeight: 1.2,
                     transition: 'all 0.1s',
@@ -873,7 +885,7 @@ export default function Player() {
                   {sub && (
                     <Typography sx={{
                       color: isActive ? activeColor : 'rgba(255,255,255,0.3)',
-                      fontSize: 9, fontFamily: 'monospace', lineHeight: 1,
+                      fontSize: 8, fontFamily: 'monospace', lineHeight: 1,
                     }}>{sub}</Typography>
                   )}
                 </Box>
