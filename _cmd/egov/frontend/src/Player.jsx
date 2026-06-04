@@ -566,7 +566,7 @@ export default function Player() {
     video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? seconds : -seconds)))
     setCurrentTime(video.currentTime)
     seekFeedbackKeyRef.current++
-    setSeekFeedback({ forward, seconds, key: seekFeedbackKeyRef.current })
+    setSeekFeedback({ forward, seconds, key: seekFeedbackKeyRef.current, overlayPos: seekOverlayRef.current ?? null })
   }
 
   const startZoneSeek = (seconds, forward) => {
@@ -794,9 +794,9 @@ export default function Player() {
       />
 
       {seekFeedback && (() => {
-        const nearOverlay = !!seekOverlayRef.current
-        const ox = nearOverlay ? Math.max(100, Math.min(window.innerWidth - 100, seekOverlayRef.current.x)) : 0
-        const oy = nearOverlay ? seekOverlayRef.current.y : 0
+        const nearOverlay = !!seekFeedback.overlayPos
+        const ox = nearOverlay ? Math.max(100, Math.min(window.innerWidth - 100, seekFeedback.overlayPos.x)) : 0
+        const oy = nearOverlay ? seekFeedback.overlayPos.y : 0
         return (
           <Box
             key={seekFeedback.key}
