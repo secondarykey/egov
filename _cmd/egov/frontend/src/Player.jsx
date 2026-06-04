@@ -76,9 +76,11 @@ export default function Player() {
   const feedbackKeyRef      = useRef(0)
   const clickTimerRef           = useRef(null)
   const lastPointerDownTimeRef  = useRef(0)
-  const holdSeekTimerRef        = useRef(null)
-  const holdSeekActiveRef       = useRef(false)
-  const holdSeekFiredRef        = useRef(false)
+  const isMouseHeldRef          = useRef(false)
+  const seekZoneTimerRef        = useRef(null)
+  const seekZoneRef             = useRef(null)
+  const seekOverlayRef          = useRef(null)
+  const fastSeekSecsRef         = useRef(60)
   const seekFeedbackKeyRef  = useRef(0)
   const clickTimeoutMsRef   = useRef(300)
   const doubleClickSeekRef  = useRef(10)
@@ -114,6 +116,8 @@ export default function Player() {
   const [fullscreen,     setFullscreen]     = useState(false)
   const [loop,           setLoop]           = useState(true)
   const [videoError,     setVideoError]     = useState(null)
+  const [seekOverlay,    setSeekOverlay]    = useState(null)   // { x, y } or null
+  const [seekZoneActive, setSeekZoneActive] = useState(null)   // { seconds, forward } or null
   const [rangeLoop,      setRangeLoop]      = useState(false)
   const [rangePoint1,    setRangePoint1]    = useState(null)
   const [rangePoint2,    setRangePoint2]    = useState(null)
@@ -476,11 +480,30 @@ export default function Player() {
       clearTimeout(hideTimer.current)
       hideTimer.current = setTimeout(() => setShowUI(false), 1500)
     }
+    // シークオーバーレイのゾーン検出
+    if (seekOverlayRef.current && isMouseHeldRef.current) {
+      const dx = e.clientX - seekOverlayRef.current.x
+      const dy = Math.abs(e.clientY - seekOverlayRef.current.y)
+      if (dy > 55) {
+        stopZoneSeek()
+      } else if (dx > 75) {
+        startZoneSeek(fastSeekSecsRef.current, true)
+      } else if (dx > 20) {
+        startZoneSeek(doubleClickSeekRef.current, true)
+      } else if (dx < -75) {
+        startZoneSeek(fastSeekSecsRef.current, false)
+      } else if (dx < -20) {
+        startZoneSeek(doubleClickSeekRef.current, false)
+      } else {
+        stopZoneSeek()
+      }
+    }
   }
 
   const handleMouseLeave = () => {
     clearTimeout(hideTimer.current)
     hideTimer.current = setTimeout(() => setShowUI(false), 800)
+    if (seekOverlayRef.current) hideSeekOverlay()
   }
 
   const handleSeekBarMouseMove = (e) => {
@@ -536,32 +559,44 @@ export default function Player() {
     }
   }
 
-  const startHoldSeek = (forward) => {
+  const doZoneSeek = (seconds, forward) => {
     const video = videoRef.current
     if (!video?.src) return
-    const seconds = doubleClickSeekRef.current
-    holdSeekActiveRef.current = true
-    holdSeekFiredRef.current = false
+    video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? seconds : -seconds)))
+    setCurrentTime(video.currentTime)
+    seekFeedbackKeyRef.current++
+    setSeekFeedback({ forward, seconds, key: seekFeedbackKeyRef.current })
+  }
+
+  const startZoneSeek = (seconds, forward) => {
+    const cur = seekZoneRef.current
+    if (cur?.seconds === seconds && cur?.forward === forward) return
+    clearTimeout(seekZoneTimerRef.current)
+    seekZoneRef.current = { seconds, forward }
+    setSeekZoneActive({ seconds, forward })
+    doZoneSeek(seconds, forward)
     const tick = () => {
-      if (!holdSeekActiveRef.current) return
-      holdSeekFiredRef.current = true
-      video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? seconds : -seconds)))
-      setCurrentTime(video.currentTime)
-      seekFeedbackKeyRef.current++
-      setSeekFeedback({ forward, seconds, key: seekFeedbackKeyRef.current })
-      holdSeekTimerRef.current = setTimeout(tick, 1000)
+      if (!seekZoneRef.current) return
+      doZoneSeek(seekZoneRef.current.seconds, seekZoneRef.current.forward)
+      seekZoneTimerRef.current = setTimeout(tick, 1000)
     }
-    holdSeekTimerRef.current = setTimeout(tick, 1000)
+    seekZoneTimerRef.current = setTimeout(tick, 1000)
   }
 
-  const stopHoldSeek = () => {
-    holdSeekActiveRef.current = false
-    clearTimeout(holdSeekTimerRef.current)
-    holdSeekTimerRef.current = null
+  const stopZoneSeek = () => {
+    clearTimeout(seekZoneTimerRef.current)
+    seekZoneRef.current = null
+    setSeekZoneActive(null)
   }
 
-  // mousedown のタイミングでホールドシークを検出する
-  // click.detail は mouseup 後のイベントなので hold 検出には使えないため独自計測を使う
+  const hideSeekOverlay = () => {
+    isMouseHeldRef.current = false
+    seekOverlayRef.current = null
+    setSeekOverlay(null)
+    stopZoneSeek()
+  }
+
+  // mousedown でダブルクリックを検出してオーバーレイ表示
   const handleCanvasMouseDown = (e) => {
     if (e.button !== 0) return
     const now = Date.now()
@@ -570,14 +605,18 @@ export default function Player() {
     if (isDouble) {
       clearTimeout(clickTimerRef.current)
       clickTimerRef.current = null
-      startHoldSeek(e.clientX > window.innerWidth / 2)
+      isMouseHeldRef.current = true
+      const pos = { x: e.clientX, y: e.clientY }
+      seekOverlayRef.current = pos
+      setSeekOverlay(pos)
+      // 初回: クリック位置の左右で即シーク
+      doZoneSeek(doubleClickSeekRef.current, e.clientX > window.innerWidth / 2)
     }
   }
 
-  const handleCanvasMouseUp = () => { stopHoldSeek() }
+  const handleCanvasMouseUp = () => { hideSeekOverlay() }
 
   // click.detail > 1 はダブルクリックの2回目: タイマーをキャンセルして終了
-  // onDoubleClick がシークを担当する
   const handleCanvasClick = (e) => {
     if (justFocusedRef.current && !acceptInactiveRef.current) {
       justFocusedRef.current = false
@@ -602,19 +641,10 @@ export default function Player() {
     }, clickTimeoutMsRef.current)
   }
 
-  // ダブルクリック: ホールドシークが未発動ならシーク、発動済みなら何もしない
-  const handleCanvasDblClick = (e) => {
+  // dblclick: play/pause タイマーのキャンセルのみ（シークは mousedown で実施済み）
+  const handleCanvasDblClick = () => {
     clearTimeout(clickTimerRef.current)
     clickTimerRef.current = null
-    const video = videoRef.current
-    if (!video?.src) return
-    if (holdSeekFiredRef.current) { holdSeekFiredRef.current = false; return }
-    const forward = e.clientX > window.innerWidth / 2
-    const seconds = doubleClickSeekRef.current
-    video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? seconds : -seconds)))
-    setCurrentTime(video.currentTime)
-    seekFeedbackKeyRef.current++
-    setSeekFeedback({ forward, seconds, key: seekFeedbackKeyRef.current })
   }
 
   const handleSnapshot = () => {
@@ -797,6 +827,61 @@ export default function Player() {
           </Box>
         </Box>
       )}
+
+      {/* シークオーバーレイ */}
+      {seekOverlay && (() => {
+        const zones = [
+          { label: '<<<', sub: `${fastSeekSecsRef.current}s`,  seconds: fastSeekSecsRef.current,  forward: false },
+          { label: '<<',  sub: `${doubleClickSeekRef.current}s`, seconds: doubleClickSeekRef.current, forward: false },
+          { label: '·',   sub: '',                              seconds: 0, forward: false },
+          { label: '>>',  sub: `${doubleClickSeekRef.current}s`, seconds: doubleClickSeekRef.current, forward: true },
+          { label: '>>>',  sub: `${fastSeekSecsRef.current}s`,  seconds: fastSeekSecsRef.current,  forward: true },
+        ]
+        return (
+          <Box sx={{
+            position: 'absolute',
+            left: Math.max(140, Math.min(window.innerWidth - 140, seekOverlay.x)),
+            top: seekOverlay.y,
+            transform: 'translate(-50%, -50%)',
+            zIndex: 20, pointerEvents: 'none',
+            display: 'flex', alignItems: 'stretch',
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(6px)',
+            borderRadius: 2, overflow: 'hidden',
+            userSelect: 'none',
+          }}>
+            {zones.map(({ label, sub, seconds, forward }, i) => {
+              const isActive = seconds === 0
+                ? !seekZoneActive
+                : seekZoneActive?.seconds === seconds && seekZoneActive?.forward === forward
+              return (
+                <Box key={i} sx={{
+                  display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', justifyContent: 'center',
+                  px: 1.5, py: 0.75, minWidth: 52,
+                  bgcolor: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
+                  borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none',
+                  transition: 'background 0.1s',
+                }}>
+                  <Typography sx={{
+                    color: isActive ? activeColor : 'rgba(255,255,255,0.45)',
+                    fontSize: isActive ? 18 : 15,
+                    fontWeight: isActive ? 'bold' : 'normal',
+                    fontFamily: 'monospace', lineHeight: 1.2,
+                    transition: 'all 0.1s',
+                  }}>{label}</Typography>
+                  {sub && (
+                    <Typography sx={{
+                      color: isActive ? activeColor : 'rgba(255,255,255,0.3)',
+                      fontSize: 9, fontFamily: 'monospace', lineHeight: 1,
+                    }}>{sub}</Typography>
+                  )}
+                </Box>
+              )
+            })}
+          </Box>
+        )
+      })()}
 
       {clickFeedback && (
         <Box
