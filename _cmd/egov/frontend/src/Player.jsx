@@ -74,10 +74,17 @@ export default function Player() {
   const headGroupRef    = useRef(null)
   const rendererRef     = useRef(null)
   const feedbackKeyRef      = useRef(0)
-  const clickTimerRef       = useRef(null)
-  const clickCountRef       = useRef(0)
-  const lastClickXRef       = useRef(0)
+  const clickTimerRef           = useRef(null)
+  const lastPointerDownTimeRef  = useRef(0)
+  const isMouseHeldRef          = useRef(false)
+  const seekZoneTimerRef        = useRef(null)
+  const seekZoneRef             = useRef(null)
+  const seekOverlayRef          = useRef(null)
+  const overlayShowTimerRef     = useRef(null)
+  const fastSeekSecsRef         = useRef(60)
   const seekFeedbackKeyRef  = useRef(0)
+  const clickTimeoutMsRef   = useRef(300)
+  const doubleClickSeekRef  = useRef(10)
   const justFocusedRef      = useRef(false)
   const focusTimerRef       = useRef(null)
   const acceptInactiveRef   = useRef(false)
@@ -110,6 +117,8 @@ export default function Player() {
   const [fullscreen,     setFullscreen]     = useState(false)
   const [loop,           setLoop]           = useState(true)
   const [videoError,     setVideoError]     = useState(null)
+  const [seekOverlay,    setSeekOverlay]    = useState(null)   // { x, y } or null
+  const [seekZoneActive, setSeekZoneActive] = useState(null)   // { seconds, forward } or null
   const [rangeLoop,      setRangeLoop]      = useState(false)
   const [rangePoint1,    setRangePoint1]    = useState(null)
   const [rangePoint2,    setRangePoint2]    = useState(null)
@@ -418,9 +427,12 @@ export default function Player() {
       setLanguage(p.language)
       setActiveColor(p.activeColor || '#4fc3f7')
       setAlwaysOnTop(s.app?.alwaysOnTop ?? false)
-      acceptInactiveRef.current = s.controls?.acceptInactiveClick ?? false
-      miniProgressRef.current = s.controls?.miniProgressBar ?? false
-      setMiniProgress(s.controls?.miniProgressBar ?? false)
+      acceptInactiveRef.current  = s.app?.acceptInactiveClick ?? false
+      clickTimeoutMsRef.current  = s.controls?.clickTimeoutMs ?? 300
+      doubleClickSeekRef.current = s.controls?.doubleClickSeekSecs ?? 10
+      fastSeekSecsRef.current    = s.controls?.fastSeekSecs ?? 60
+      miniProgressRef.current = s.app?.miniProgressBar ?? false
+      setMiniProgress(s.app?.miniProgressBar ?? false)
       setServerUrl(url)
       if (videoRef.current) {
         videoRef.current.volume = p.volume
@@ -470,11 +482,30 @@ export default function Player() {
       clearTimeout(hideTimer.current)
       hideTimer.current = setTimeout(() => setShowUI(false), 1500)
     }
+    // シークオーバーレイのゾーン検出（seekOverlay state が設定された後＝800ms経過後のみ）
+    if (seekOverlay && isMouseHeldRef.current) {
+      const dx = e.clientX - seekOverlay.x
+      const dy = Math.abs(e.clientY - seekOverlay.y)
+      if (dy > 55) {
+        stopZoneSeek()
+      } else if (dx > 75) {
+        startZoneSeek(fastSeekSecsRef.current, true)
+      } else if (dx > 20) {
+        startZoneSeek(doubleClickSeekRef.current, true)
+      } else if (dx < -75) {
+        startZoneSeek(fastSeekSecsRef.current, false)
+      } else if (dx < -20) {
+        startZoneSeek(doubleClickSeekRef.current, false)
+      } else {
+        stopZoneSeek()
+      }
+    }
   }
 
   const handleMouseLeave = () => {
     clearTimeout(hideTimer.current)
     hideTimer.current = setTimeout(() => setShowUI(false), 800)
+    if (seekOverlayRef.current) hideSeekOverlay()
   }
 
   const handleSeekBarMouseMove = (e) => {
@@ -530,6 +561,67 @@ export default function Player() {
     }
   }
 
+  const doZoneSeek = (seconds, forward) => {
+    const video = videoRef.current
+    if (!video?.src) return
+    video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? seconds : -seconds)))
+    setCurrentTime(video.currentTime)
+    seekFeedbackKeyRef.current++
+    setSeekFeedback({ forward, seconds, key: seekFeedbackKeyRef.current, overlayPos: seekOverlayRef.current ?? null })
+  }
+
+  const startZoneSeek = (seconds, forward) => {
+    const cur = seekZoneRef.current
+    if (cur?.seconds === seconds && cur?.forward === forward) return
+    clearTimeout(seekZoneTimerRef.current)
+    seekZoneRef.current = { seconds, forward }
+    setSeekZoneActive({ seconds, forward })
+    doZoneSeek(seconds, forward)
+    const tick = () => {
+      if (!seekZoneRef.current) return
+      doZoneSeek(seekZoneRef.current.seconds, seekZoneRef.current.forward)
+      seekZoneTimerRef.current = setTimeout(tick, 1000)
+    }
+    seekZoneTimerRef.current = setTimeout(tick, 1000)
+  }
+
+  const stopZoneSeek = () => {
+    clearTimeout(seekZoneTimerRef.current)
+    seekZoneRef.current = null
+    setSeekZoneActive(null)
+  }
+
+  const hideSeekOverlay = () => {
+    clearTimeout(overlayShowTimerRef.current)
+    isMouseHeldRef.current = false
+    seekOverlayRef.current = null
+    setSeekOverlay(null)
+    stopZoneSeek()
+  }
+
+  // mousedown でダブルクリックを検出:
+  // 即シーク → 500ms ホールドでオーバーレイ表示
+  const handleCanvasMouseDown = (e) => {
+    if (e.button !== 0) return
+    const now = Date.now()
+    const isDouble = e.detail >= 2 || (now - lastPointerDownTimeRef.current) <= clickTimeoutMsRef.current
+    lastPointerDownTimeRef.current = isDouble ? 0 : now
+    if (isDouble) {
+      clearTimeout(clickTimerRef.current)
+      clickTimerRef.current = null
+      isMouseHeldRef.current = true
+      const pos = { x: e.clientX, y: e.clientY }
+      seekOverlayRef.current = pos
+      // 即シーク（クリック位置の左右）
+      doZoneSeek(doubleClickSeekRef.current, e.clientX > window.innerWidth / 2)
+      // 500ms ホールドでオーバーレイ表示
+      overlayShowTimerRef.current = setTimeout(() => setSeekOverlay(pos), 800)
+    }
+  }
+
+  const handleCanvasMouseUp = () => { hideSeekOverlay() }
+
+  // click.detail > 1 はダブルクリックの2回目: タイマーをキャンセルして終了
   const handleCanvasClick = (e) => {
     if (justFocusedRef.current && !acceptInactiveRef.current) {
       justFocusedRef.current = false
@@ -539,27 +631,25 @@ export default function Player() {
     justFocusedRef.current = false
     const video = videoRef.current
     if (!video?.src) return
-    clickCountRef.current++
-    lastClickXRef.current = e.clientX
-    if (clickTimerRef.current) clearTimeout(clickTimerRef.current)
+    if (e.detail > 1) {
+      clearTimeout(clickTimerRef.current)
+      clickTimerRef.current = null
+      return
+    }
+    clearTimeout(clickTimerRef.current)
     const willPlay = video.paused
     clickTimerRef.current = setTimeout(() => {
       clickTimerRef.current = null
-      const count = clickCountRef.current
-      clickCountRef.current = 0
-      const forward = lastClickXRef.current > window.innerWidth / 2
-      if (count === 1) {
-        handlePlayPause()
-        feedbackKeyRef.current++
-        setClickFeedback({ type: willPlay ? 'play' : 'pause', key: feedbackKeyRef.current })
-      } else {
-        const seconds = count === 2 ? 10 : 60
-        video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? seconds : -seconds)))
-        setCurrentTime(video.currentTime)
-        seekFeedbackKeyRef.current++
-        setSeekFeedback({ forward, seconds, key: seekFeedbackKeyRef.current })
-      }
-    }, 300)
+      handlePlayPause()
+      feedbackKeyRef.current++
+      setClickFeedback({ type: willPlay ? 'play' : 'pause', key: feedbackKeyRef.current })
+    }, clickTimeoutMsRef.current)
+  }
+
+  // dblclick: play/pause タイマーのキャンセルのみ（シークは mousedown で実施済み）
+  const handleCanvasDblClick = () => {
+    clearTimeout(clickTimerRef.current)
+    clickTimerRef.current = null
   }
 
   const handleSnapshot = () => {
@@ -697,47 +787,119 @@ export default function Player() {
         ref={mountRef}
         style={{ width: '100%', height: '100%' }}
         onClick={handleCanvasClick}
+        onDoubleClick={handleCanvasDblClick}
+        onMouseDown={handleCanvasMouseDown}
+        onMouseUp={handleCanvasMouseUp}
+        onMouseLeave={handleCanvasMouseUp}
         onContextMenu={e => e.preventDefault()}
       />
 
-      {seekFeedback && (
-        <Box
-          key={seekFeedback.key}
-          sx={{
-            position: 'absolute', top: '50%',
-            ...(seekFeedback.forward ? { right: '15%' } : { left: '15%' }),
-            pointerEvents: 'none', zIndex: 20,
-            '@keyframes seekFade': {
-              '0%':   { opacity: 0.9, transform: 'translateY(-50%) scale(1)' },
-              '30%':  { opacity: 0.9, transform: 'translateY(-50%) scale(1)' },
-              '100%': { opacity: 0,   transform: 'translateY(-50%) scale(1.3)' },
-            },
-            animation: 'seekFade 0.6s ease-out forwards',
-          }}
-          onAnimationEnd={() => setSeekFeedback(null)}
-        >
-          <Box sx={{
-            bgcolor: 'rgba(0,0,0,0.45)', borderRadius: 2, px: 2, py: 1,
-            display: 'flex', alignItems: 'center', gap: 1,
-          }}>
-            {seekFeedback.forward ? (
-              <>
-                <FastForwardIcon sx={{ fontSize: 32, color: 'white' }} />
-                <Typography sx={{ color: 'white', fontSize: 28, fontWeight: 'bold', lineHeight: 1 }}>
-                  {`+${seekFeedback.seconds}s`}
-                </Typography>
-              </>
-            ) : (
-              <>
-                <Typography sx={{ color: 'white', fontSize: 28, fontWeight: 'bold', lineHeight: 1 }}>
-                  {`-${seekFeedback.seconds}s`}
-                </Typography>
-                <FastRewindIcon sx={{ fontSize: 32, color: 'white' }} />
-              </>
-            )}
+      {seekFeedback && (() => {
+        const nearOverlay = !!seekFeedback.overlayPos
+        const ox = nearOverlay ? Math.max(100, Math.min(window.innerWidth - 100, seekFeedback.overlayPos.x)) : 0
+        const oy = nearOverlay ? seekFeedback.overlayPos.y : 0
+        return (
+          <Box
+            key={seekFeedback.key}
+            sx={{
+              position: 'absolute',
+              ...(nearOverlay
+                ? { left: ox, top: oy - 52, transform: 'translate(-50%, -50%)' }
+                : { top: '50%', ...(seekFeedback.forward ? { right: '15%' } : { left: '15%' }) }
+              ),
+              pointerEvents: 'none', zIndex: 21,
+              '@keyframes seekFade': {
+                '0%':   { opacity: 0.9, transform: `${nearOverlay ? 'translate(-50%,-50%)' : 'translateY(-50%)'} scale(1)` },
+                '30%':  { opacity: 0.9, transform: `${nearOverlay ? 'translate(-50%,-50%)' : 'translateY(-50%)'} scale(1)` },
+                '100%': { opacity: 0,   transform: `${nearOverlay ? 'translate(-50%,-50%)' : 'translateY(-50%)'} scale(1.2)` },
+              },
+              animation: 'seekFade 0.5s ease-out forwards',
+            }}
+            onAnimationEnd={() => setSeekFeedback(null)}
+          >
+            <Box sx={{
+              bgcolor: 'rgba(0,0,0,0.55)', borderRadius: 1.5, px: 1, py: 0.5,
+              display: 'flex', alignItems: 'center', gap: 0.5,
+            }}>
+              {seekFeedback.forward ? (
+                <>
+                  <FastForwardIcon sx={{ fontSize: 18, color: 'white' }} />
+                  <Typography sx={{ color: 'white', fontSize: 14, fontWeight: 'bold', lineHeight: 1 }}>
+                    {`+${seekFeedback.seconds}s`}
+                  </Typography>
+                </>
+              ) : (
+                <>
+                  <Typography sx={{ color: 'white', fontSize: 14, fontWeight: 'bold', lineHeight: 1 }}>
+                    {`-${seekFeedback.seconds}s`}
+                  </Typography>
+                  <FastRewindIcon sx={{ fontSize: 18, color: 'white' }} />
+                </>
+              )}
+            </Box>
           </Box>
-        </Box>
-      )}
+        )
+      })()}
+
+      {/* シークオーバーレイ */}
+      {seekOverlay && (() => {
+        const zones = [
+          { label: '<<<', sub: `${fastSeekSecsRef.current}s`,  seconds: fastSeekSecsRef.current,  forward: false },
+          { label: '<<',  sub: `${doubleClickSeekRef.current}s`, seconds: doubleClickSeekRef.current, forward: false },
+          { label: '·',   sub: '',                              seconds: 0, forward: false },
+          { label: '>>',  sub: `${doubleClickSeekRef.current}s`, seconds: doubleClickSeekRef.current, forward: true },
+          { label: '>>>',  sub: `${fastSeekSecsRef.current}s`,  seconds: fastSeekSecsRef.current,  forward: true },
+        ]
+        return (
+          <Box sx={{
+            position: 'absolute',
+            left: Math.max(140, Math.min(window.innerWidth - 140, seekOverlay.x)),
+            top: seekOverlay.y,
+            transform: 'translate(-50%, -50%)',
+            zIndex: 20, pointerEvents: 'none',
+            display: 'flex', alignItems: 'stretch',
+            background: 'rgba(0,0,0,0.3)',
+            backdropFilter: 'blur(4px)',
+            borderRadius: 2, overflow: 'hidden',
+            userSelect: 'none',
+            '@keyframes seekOverlayFadeIn': {
+              '0%':   { opacity: 0, transform: 'translate(-50%, -50%) scale(0.9)' },
+              '100%': { opacity: 1, transform: 'translate(-50%, -50%) scale(1)' },
+            },
+            animation: 'seekOverlayFadeIn 0.2s ease-out forwards',
+          }}>
+            {zones.map(({ label, sub, seconds, forward }, i) => {
+              const isActive = seconds === 0
+                ? !seekZoneActive
+                : seekZoneActive?.seconds === seconds && seekZoneActive?.forward === forward
+              return (
+                <Box key={i} sx={{
+                  display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', justifyContent: 'center',
+                  px: 2, py: 1, minWidth: 64,
+                  bgcolor: isActive ? 'rgba(255,255,255,0.15)' : 'transparent',
+                  borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none',
+                  transition: 'background 0.1s',
+                }}>
+                  <Typography sx={{
+                    color: isActive ? activeColor : 'rgba(255,255,255,0.4)',
+                    fontSize: isActive ? 20 : 16,
+                    fontWeight: isActive ? 'bold' : 'normal',
+                    fontFamily: 'monospace', lineHeight: 1.2,
+                    transition: 'all 0.1s',
+                  }}>{label}</Typography>
+                  {sub && (
+                    <Typography sx={{
+                      color: isActive ? activeColor : 'rgba(255,255,255,0.3)',
+                      fontSize: 10, fontFamily: 'monospace', lineHeight: 1,
+                    }}>{sub}</Typography>
+                  )}
+                </Box>
+              )
+            })}
+          </Box>
+        )
+      })()}
 
       {clickFeedback && (
         <Box

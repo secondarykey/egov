@@ -58,7 +58,7 @@
     "controls": {
       "clickTimeout": "Click Timeout",
       "doubleClickSeek": "Double-click Seek",
-      "tripleClickSeek": "Triple-click Seek",
+      "fastSeek": "Fast Seek (>>>)",
       "uiHideDelay": "UI Hide Delay",
       "uiHideOnLeave": "UI Hide on Leave"
     },

@@ -37,10 +37,10 @@ type PlaybackSettings struct {
 }
 
 type ControlSettings struct {
-	ClickTimeoutMs       int  `json:"clickTimeoutMs"`
-	DoubleClickSeekSecs  int  `json:"doubleClickSeekSecs"`
-	TripleClickSeekSecs  int  `json:"tripleClickSeekSecs"`
-	UIHideDelayMs        int  `json:"uiHideDelayMs"`
+	ClickTimeoutMs       int `json:"clickTimeoutMs"`
+	DoubleClickSeekSecs  int `json:"doubleClickSeekSecs"`
+	FastSeekSecs         int `json:"fastSeekSecs"`
+	UIHideDelayMs        int `json:"uiHideDelayMs"`
 	UIHideOnLeaveDelayMs int `json:"uiHideOnLeaveDelayMs"`
 }
 
@@ -106,7 +106,7 @@ func defaultSettings() *Settings {
 		Controls: ControlSettings{
 			ClickTimeoutMs:       300,
 			DoubleClickSeekSecs:  10,
-			TripleClickSeekSecs:  60,
+			FastSeekSecs:         60,
 			UIHideDelayMs:        1500,
 			UIHideOnLeaveDelayMs: 800,
 		},

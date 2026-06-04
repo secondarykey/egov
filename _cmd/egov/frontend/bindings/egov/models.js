@@ -26,6 +26,20 @@ export class AppSettings {
              */
             this["alwaysOnTop"] = false;
         }
+        if (!("acceptInactiveClick" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["acceptInactiveClick"] = false;
+        }
+        if (!("miniProgressBar" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["miniProgressBar"] = false;
+        }
 
         Object.assign(this, $$source);
     }
@@ -61,12 +75,12 @@ export class ControlSettings {
              */
             this["doubleClickSeekSecs"] = 0;
         }
-        if (!("tripleClickSeekSecs" in $$source)) {
+        if (!("fastSeekSecs" in $$source)) {
             /**
              * @member
              * @type {number}
              */
-            this["tripleClickSeekSecs"] = 0;
+            this["fastSeekSecs"] = 0;
         }
         if (!("uiHideDelayMs" in $$source)) {
             /**
