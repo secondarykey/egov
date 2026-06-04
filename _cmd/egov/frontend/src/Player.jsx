@@ -481,10 +481,10 @@ export default function Player() {
       clearTimeout(hideTimer.current)
       hideTimer.current = setTimeout(() => setShowUI(false), 1500)
     }
-    // シークオーバーレイのゾーン検出
-    if (seekOverlayRef.current && isMouseHeldRef.current) {
-      const dx = e.clientX - seekOverlayRef.current.x
-      const dy = Math.abs(e.clientY - seekOverlayRef.current.y)
+    // シークオーバーレイのゾーン検出（seekOverlay state が設定された後＝800ms経過後のみ）
+    if (seekOverlay && isMouseHeldRef.current) {
+      const dx = e.clientX - seekOverlay.x
+      const dy = Math.abs(e.clientY - seekOverlay.y)
       if (dy > 55) {
         stopZoneSeek()
       } else if (dx > 75) {
@@ -875,14 +875,14 @@ export default function Player() {
                 <Box key={i} sx={{
                   display: 'flex', flexDirection: 'column',
                   alignItems: 'center', justifyContent: 'center',
-                  px: 1.5, py: 0.75, minWidth: 52,
+                  px: 2, py: 1, minWidth: 64,
                   bgcolor: isActive ? 'rgba(255,255,255,0.15)' : 'transparent',
                   borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none',
                   transition: 'background 0.1s',
                 }}>
                   <Typography sx={{
                     color: isActive ? activeColor : 'rgba(255,255,255,0.4)',
-                    fontSize: isActive ? 16 : 13,
+                    fontSize: isActive ? 20 : 16,
                     fontWeight: isActive ? 'bold' : 'normal',
                     fontFamily: 'monospace', lineHeight: 1.2,
                     transition: 'all 0.1s',
@@ -890,7 +890,7 @@ export default function Player() {
                   {sub && (
                     <Typography sx={{
                       color: isActive ? activeColor : 'rgba(255,255,255,0.3)',
-                      fontSize: 9, fontFamily: 'monospace', lineHeight: 1,
+                      fontSize: 10, fontFamily: 'monospace', lineHeight: 1,
                     }}>{sub}</Typography>
                   )}
                 </Box>
