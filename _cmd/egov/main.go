@@ -166,12 +166,9 @@ func main() {
 	})
 
 	debug := false
-	// Create a new window with the necessary options.
-	// 'Title' is the title of the window.
-	// 'Mac' options tailor the window when running on macOS.
-	// 'BackgroundColour' is the background colour of the window.
-	// 'URL' is the URL that will be loaded into the webview.
-	win := app.Window.NewWithOptions(application.WebviewWindowOptions{
+
+	// ウィンドウオプションを構築
+	winOpts := application.WebviewWindowOptions{
 		Title: "EgoV",
 		Mac: application.MacWindow{
 			InvisibleTitleBarHeight: 50,
@@ -183,18 +180,16 @@ func main() {
 		Frameless:              true,
 		OpenInspectorOnStartup: debug,
 		EnableFileDrop:         true,
-	})
-
-	// 最前面表示を復元
-	if settings.App.AlwaysOnTop {
-		win.SetAlwaysOnTop(true)
 	}
 
 	// 前回のウィンドウ位置・サイズを復元（スクリーンに収まるよう調整）
+	// NewWithOptions に直接渡すことで位置とサイズをアトミックに適用し、
+	// DPI 変換が正しいスクリーンで行われるようにする。
+	// SetPosition は app.Run() 前は impl==nil のため無視されるため、この方法が必要。
 	if ws := settings.Window; ws.Width > 0 && ws.Height > 0 {
 		w, h := ws.Width, ws.Height
 		x, y := ws.X, ws.Y
-		// ウィンドウ中心に最も近いスクリーンを取得してサイズを制限
+		// ウィンドウ中心に最も近いスクリーンを取得してサイズと位置を制限
 		cx, cy := x+w/2, y+h/2
 		if screen := application.ScreenNearestDipPoint(application.Point{X: cx, Y: cy}); screen != nil {
 			wa := screen.WorkArea
@@ -204,7 +199,6 @@ func main() {
 			if h > wa.Height {
 				h = wa.Height
 			}
-			// 位置もスクリーン内に収める
 			if x < wa.X {
 				x = wa.X
 			}
@@ -218,8 +212,18 @@ func main() {
 				y = wa.Y + wa.Height - h
 			}
 		}
-		win.SetSize(w, h)
-		win.SetPosition(x, y)
+		winOpts.Width = w
+		winOpts.Height = h
+		winOpts.X = x
+		winOpts.Y = y
+		winOpts.InitialPosition = application.WindowXY
+	}
+
+	win := app.Window.NewWithOptions(winOpts)
+
+	// 最前面表示を復元
+	if settings.App.AlwaysOnTop {
+		win.SetAlwaysOnTop(true)
 	}
 
 	// 閉じる時にウィンドウ位置・サイズを保存
