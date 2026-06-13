@@ -64,9 +64,33 @@ func ReadLanguagesJSON() ([]byte, error) {
 	return os.ReadFile(filepath.Join(dir, "locales", "languages.json"))
 }
 
+// IsValidLocaleCode reports whether code is a safe locale identifier
+// (letters, digits, hyphen, underscore only). Rejects path separators and
+// dots to prevent path traversal when building file paths from the code.
+func IsValidLocaleCode(code string) bool {
+	if code == "" {
+		return false
+	}
+	for _, r := range code {
+		switch {
+		case r >= 'a' && r <= 'z',
+			r >= 'A' && r <= 'Z',
+			r >= '0' && r <= '9',
+			r == '-', r == '_':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // ReadLocaleFile returns locale data for the given language code.
 // Fallback chain: user file → core file → default.json
 func ReadLocaleFile(code string) ([]byte, error) {
+	// 防御的バリデーション: 不正なコードはパストラバーサルになりうるため拒否。
+	if !IsValidLocaleCode(code) {
+		return nil, fs.ErrNotExist
+	}
 	dir, err := settingsDir()
 	if err != nil {
 		return nil, err

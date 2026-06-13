@@ -73,6 +73,8 @@ export default function Player() {
   const vrOffsetsRef    = useRef({ left: { x: 0, y: 0, z: 0.1 }, right: { x: 0, y: 0, z: 0.1 }, top: { x: 0, y: 0, z: 0.1 }, bottom: { x: 0, y: 0, z: 0.1 } })
   const headGroupRef    = useRef(null)
   const rendererRef     = useRef(null)
+  const requestRenderRef = useRef(null)   // 単発レンダーを要求（操作・状態変化時）
+  const renderOnceRef    = useRef(null)   // 即時レンダー（スナップショット用）
   const feedbackKeyRef      = useRef(0)
   const clickTimerRef           = useRef(null)
   const lastPointerDownTimeRef  = useRef(0)
@@ -89,6 +91,8 @@ export default function Player() {
   const focusTimerRef       = useRef(null)
   const acceptInactiveRef   = useRef(false)
   const miniProgressRef     = useRef(false)
+  const showUIRef           = useRef(false)
+  const rangeLoopRef        = useRef(false)
   const [miniProgress, setMiniProgress] = useState(false)
 
   const [paused,      setPaused]      = useState(true)
@@ -140,7 +144,7 @@ export default function Player() {
     scene.add(headGroup)
     headGroupRef.current = headGroup
 
-    const renderer = new THREE.WebGLRenderer({ preserveDrawingBuffer: true })
+    const renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setSize(mount.clientWidth, mount.clientHeight)
     mount.appendChild(renderer.domElement)
     rendererRef.current = renderer
@@ -178,6 +182,28 @@ export default function Player() {
     controls.enableZoom   = false
     controlsRef.current   = controls
 
+    // --- レンダーオンデマンド ---
+    // 常時 60fps で回す代わりに、実フレーム到着時と操作・状態変化時だけ描画する。
+    const renderOnce = () => {
+      controls.update()
+      renderer.render(scene, camera)
+    }
+    renderOnceRef.current = renderOnce
+
+    let renderScheduled = false
+    const requestRender = () => {
+      if (renderScheduled) return
+      renderScheduled = true
+      requestAnimationFrame(() => {
+        renderScheduled = false
+        renderOnce()
+      })
+    }
+    requestRenderRef.current = requestRender
+
+    // OrbitControls（ズーム・パン・回転）の変化で再描画
+    controls.addEventListener('change', requestRender)
+
     const fitCamera = () => {
       const videoAspect  = (16 * plane.scale.x) / 9
       const screenAspect = mount.clientWidth / mount.clientHeight
@@ -194,6 +220,7 @@ export default function Player() {
       e.preventDefault()
       camera.fov = Math.max(20, Math.min(100, camera.fov + e.deltaY * 0.05))
       camera.updateProjectionMatrix()
+      requestRender()
     }
     renderer.domElement.addEventListener('wheel', onWheel, { passive: false })
 
@@ -202,6 +229,7 @@ export default function Player() {
       camera.updateProjectionMatrix()
       renderer.setSize(mount.clientWidth, mount.clientHeight)
       if (modeRef.current === 'fit') fitCamera()
+      requestRender()
     }
     window.addEventListener('resize', onResize)
 
@@ -212,9 +240,14 @@ export default function Player() {
         plane.scale.set(aspect / (16 / 9), 1, 1)
         if (modeRef.current === 'fit') fitCamera()
       }
+      requestRender()
     })
     video.addEventListener('timeupdate', () => {
-      if (!seekDragging.current) setCurrentTime(video.currentTime)
+      if (seekDragging.current) return
+      // currentTime が表示に使われない場合（UI非表示・ミニバー無効・範囲ループ無効）は
+      // 再レンダーを避けるため state 更新を省略する。
+      if (!showUIRef.current && !miniProgressRef.current && !rangeLoopRef.current) return
+      setCurrentTime(video.currentTime)
     })
     video.addEventListener('error', () => {
       if (!video.src || video.src === location.href) return
@@ -228,18 +261,58 @@ export default function Player() {
       setVideoError(messages[e?.code] || `UNKNOWN_ERROR (code: ${e?.code})`)
     })
 
-    let animId
-    const animate = () => {
-      animId = requestAnimationFrame(animate)
-      controls.update()
-      renderer.render(scene, camera)
+    // 再生中: 新しい動画フレームが提示されたときのみ描画する。
+    // requestVideoFrameCallback 対応環境では一時停止中に一切描画しない。
+    const hasRVFC = typeof video.requestVideoFrameCallback === 'function'
+    let animId = null
+    let framesRunning = false
+
+    const onVideoFrame = () => {
+      texture.needsUpdate = true
+      renderOnce()
+      if (!video.paused && !video.ended) {
+        animId = video.requestVideoFrameCallback(onVideoFrame)
+      } else {
+        framesRunning = false
+      }
     }
-    animate()
+    const startFrames = () => {
+      if (!hasRVFC || framesRunning) return
+      framesRunning = true
+      animId = video.requestVideoFrameCallback(onVideoFrame)
+    }
+
+    // フォールバック（rVFC 非対応環境）: 再生中のみ rAF ループで描画
+    const rafLoop = () => {
+      animId = requestAnimationFrame(rafLoop)
+      if (!video.paused && !video.ended) {
+        texture.needsUpdate = true
+        renderOnce()
+      }
+    }
+
+    if (hasRVFC) {
+      video.addEventListener('play', startFrames)
+      // 一時停止中のシークでも新フレームを表示する
+      video.addEventListener('seeked', requestRender)
+    } else {
+      rafLoop()
+    }
+
+    // 初期表示（黒画面）を一度描画
+    renderOnce()
 
     return () => {
-      cancelAnimationFrame(animId)
+      if (hasRVFC) {
+        if (animId != null) video.cancelVideoFrameCallback(animId)
+        video.removeEventListener('play', startFrames)
+        video.removeEventListener('seeked', requestRender)
+      } else if (animId != null) {
+        cancelAnimationFrame(animId)
+      }
       window.removeEventListener('resize', onResize)
       renderer.domElement.removeEventListener('wheel', onWheel)
+      controls.removeEventListener('change', requestRender)
       controls.dispose()
       renderer.dispose()
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement)
@@ -288,6 +361,7 @@ export default function Player() {
       camera.updateProjectionMatrix()
       fitCameraRef.current?.()
     }
+    requestRenderRef.current?.()
   }, [mode, vrStart])
 
   // テクスチャ切替（モードまたはVR始点変更時）
@@ -303,6 +377,7 @@ export default function Player() {
       textureRef.current.offset.set(0, 0)
     }
     textureRef.current.needsUpdate = true
+    requestRenderRef.current?.()
   }, [mode, vrStart])
 
   // VRモード: 右クリックドラッグでheadGroupを回転（首振り）
@@ -336,6 +411,7 @@ export default function Player() {
       pitch  = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch - (e.clientY - startY) * sensitivity))
       startX = e.clientX; startY = e.clientY
       applyRotation()
+      requestRenderRef.current?.()
     }
     const onPointerUp = () => { active = false }
 
@@ -457,6 +533,14 @@ export default function Player() {
     return () => window.removeEventListener('focus', onFocus)
   }, [])
 
+  // currentTime の表示要否を timeupdate ハンドラへ伝えるための ref 同期。
+  // UI を表示した瞬間は省略していた更新を取り戻すため最新位置に同期する。
+  useEffect(() => {
+    showUIRef.current = showUI
+    if (showUI && videoRef.current) setCurrentTime(videoRef.current.currentTime)
+  }, [showUI])
+  useEffect(() => { rangeLoopRef.current = rangeLoop }, [rangeLoop])
+
   const handleFileChange = (e) => loadFile(e.target.files[0])
 
   const handleDragEnter = (e) => { e.preventDefault(); dragCounter.current++; setDragging(true) }
@@ -559,6 +643,7 @@ export default function Player() {
       controls.target.set(0, 0, 0)
       controls.update()
     }
+    requestRenderRef.current?.()
   }
 
   const doZoneSeek = (seconds, forward) => {
@@ -655,6 +740,8 @@ export default function Player() {
   const handleSnapshot = () => {
     const canvas = rendererRef.current?.domElement
     if (!canvas) return
+    // preserveDrawingBuffer を切ったため、読み出し直前に同フレームで再描画する
+    renderOnceRef.current?.()
     const url = canvas.toDataURL('image/png')
     const a = document.createElement('a')
     a.href = url
@@ -1054,6 +1141,7 @@ export default function Player() {
                           if (cameraRef.current) {
                             cameraRef.current.position[axis] = 0
                             controlsRef.current?.update()
+                            requestRenderRef.current?.()
                           }
                         }}
                       >
@@ -1072,6 +1160,7 @@ export default function Player() {
                     if (cameraRef.current && controlsRef.current) {
                       cameraRef.current.position[axis] = v
                       controlsRef.current.update()
+                      requestRenderRef.current?.()
                     }
                   }}
                   sx={{
