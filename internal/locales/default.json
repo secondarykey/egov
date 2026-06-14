@@ -1,5 +1,8 @@
 {
   "drop": "Drop video here",
+  "error": {
+    "videoLoad": "Failed to load video"
+  },
   "vr": {
     "selectViewpoint": "Select Viewpoint",
     "xOffset": "X Offset",

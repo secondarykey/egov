@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -32,16 +31,9 @@ var assets embed.FS
 //go:embed version
 var appVersion string
 
-func init() {
-	// Register a custom event whose associated data type is string.
-	// This is not required, but the binding generator will pick up registered events
-	// and provide a strongly typed JS/TS API for them.
-	application.RegisterEvent[string]("time")
-}
-
-// main function serves as the application's entry point. It initializes the application, creates a window,
-// and starts a goroutine that emits a time-based event every second. It subsequently runs the application and
-// logs any error that might occur.
+// main function serves as the application's entry point. It initializes the
+// application, creates a window, and runs the application, logging any error
+// that might occur.
 func main() {
 
 	// Create a new Wails application by providing the necessary options.
@@ -99,7 +91,12 @@ func main() {
 	}
 	fileServerPort := listener.Addr().(*net.TCPAddr).Port
 	go http.Serve(listener, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		// CORS: webview（wails オリジン）とローカル開発サーバのみ許可。
+		// 任意オリジンに開かないことで、外部サイトからの読み出しを防ぐ。
+		if origin := r.Header.Get("Origin"); isAllowedOrigin(origin) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+		}
 		urlPath := r.URL.Path
 
 		// ロケール: /languages.json
@@ -117,6 +114,11 @@ func main() {
 		// ロケール: /languages/{code}.json
 		if strings.HasPrefix(urlPath, "/languages/") && strings.HasSuffix(urlPath, ".json") {
 			code := strings.TrimSuffix(strings.TrimPrefix(urlPath, "/languages/"), ".json")
+			// パストラバーサル対策: ロケールコードは英数字とハイフン・アンダースコアのみ許可。
+			if !egov.IsValidLocaleCode(code) {
+				http.Error(w, "Not Found", http.StatusNotFound)
+				return
+			}
 			data, err := egov.ReadLocaleFile(code)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -166,12 +168,9 @@ func main() {
 	})
 
 	debug := false
-	// Create a new window with the necessary options.
-	// 'Title' is the title of the window.
-	// 'Mac' options tailor the window when running on macOS.
-	// 'BackgroundColour' is the background colour of the window.
-	// 'URL' is the URL that will be loaded into the webview.
-	win := app.Window.NewWithOptions(application.WebviewWindowOptions{
+
+	// ウィンドウオプションを構築
+	winOpts := application.WebviewWindowOptions{
 		Title: "EgoV",
 		Mac: application.MacWindow{
 			InvisibleTitleBarHeight: 50,
@@ -183,18 +182,16 @@ func main() {
 		Frameless:              true,
 		OpenInspectorOnStartup: debug,
 		EnableFileDrop:         true,
-	})
-
-	// 最前面表示を復元
-	if settings.App.AlwaysOnTop {
-		win.SetAlwaysOnTop(true)
 	}
 
 	// 前回のウィンドウ位置・サイズを復元（スクリーンに収まるよう調整）
+	// NewWithOptions に直接渡すことで位置とサイズをアトミックに適用し、
+	// DPI 変換が正しいスクリーンで行われるようにする。
+	// SetPosition は app.Run() 前は impl==nil のため無視されるため、この方法が必要。
 	if ws := settings.Window; ws.Width > 0 && ws.Height > 0 {
 		w, h := ws.Width, ws.Height
 		x, y := ws.X, ws.Y
-		// ウィンドウ中心に最も近いスクリーンを取得してサイズを制限
+		// ウィンドウ中心に最も近いスクリーンを取得してサイズと位置を制限
 		cx, cy := x+w/2, y+h/2
 		if screen := application.ScreenNearestDipPoint(application.Point{X: cx, Y: cy}); screen != nil {
 			wa := screen.WorkArea
@@ -204,7 +201,6 @@ func main() {
 			if h > wa.Height {
 				h = wa.Height
 			}
-			// 位置もスクリーン内に収める
 			if x < wa.X {
 				x = wa.X
 			}
@@ -218,8 +214,18 @@ func main() {
 				y = wa.Y + wa.Height - h
 			}
 		}
-		win.SetSize(w, h)
-		win.SetPosition(x, y)
+		winOpts.Width = w
+		winOpts.Height = h
+		winOpts.X = x
+		winOpts.Y = y
+		winOpts.InitialPosition = application.WindowXY
+	}
+
+	win := app.Window.NewWithOptions(winOpts)
+
+	// 最前面表示を復元
+	if settings.App.AlwaysOnTop {
+		win.SetAlwaysOnTop(true)
 	}
 
 	// 閉じる時にウィンドウ位置・サイズを保存
@@ -246,20 +252,27 @@ func main() {
 		}
 	}()
 
-	// Create a goroutine that emits an event containing the current time every second.
-	// The frontend can listen to this event and update the UI accordingly.
-	go func() {
-		for {
-			now := time.Now().Format(time.RFC1123)
-			app.Event.Emit("time", now)
-			time.Sleep(time.Second)
-		}
-	}()
-
 	// Run the application. This blocks until the application has been exited.
 	err = app.Run()
 	// If an error occurred while running the application, log it and exit.
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+// isAllowedOrigin reports whether a CORS Origin header should be reflected.
+// 本番では webview の wails オリジン（wails.localhost）、開発時はループバックの
+// dev サーバを許可する。dev では wails がオリジンにポートを付与する
+// （例: http://wails.localhost:9245）ため、完全一致ではなくホスト名で判定する。
+// 外部サイトのオリジン（例: https://evil.com）はブラウザが詐称できないため拒否される。
+func isAllowedOrigin(origin string) bool {
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	switch u.Hostname() {
+	case "wails.localhost", "localhost", "127.0.0.1", "::1":
+		return true
+	}
+	return false
 }

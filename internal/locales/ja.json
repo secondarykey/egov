@@ -1,5 +1,8 @@
 {
   "drop": "動画をドロップ",
+  "error": {
+    "videoLoad": "動画を読み込めませんでした"
+  },
   "vr": {
     "selectViewpoint": "視点を選択",
     "xOffset": "X オフセット",
