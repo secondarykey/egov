@@ -262,26 +262,21 @@ func main() {
 		win.SetPosition(x, y)
 	})
 
-	// WindowClosing 時の Position() が (0,0) を返すことがある（frameless + 左端スナップ等）。
-	// 移動・リサイズイベントで最後の正しい座標を追跡し、保存時に使う。
+	// WindowClosing 時は既にウィンドウ破棄が進行中で Position()/Size() が
+	// 不正な値を返すことがある。移動・リサイズイベントで最後の正しい状態を
+	// メモリに保持し、WindowClosing でその値を保存する。
 	var lastX, lastY, lastW, lastH int
-	trackWindowState := func(source string) {
-		x, y := win.Position()
-		w, h := win.Size()
-		log.Printf("[window-track] %s: Position()=%d,%d Size()=%d,%d", source, x, y, w, h)
-		if x != 0 || y != 0 || w != lastW || h != lastH {
-			lastX, lastY, lastW, lastH = x, y, w, h
-		}
+	trackWindowState := func() {
+		lastX, lastY = win.Position()
+		lastW, lastH = win.Size()
 	}
 	win.OnWindowEvent(events.Common.WindowDidMove, func(e *application.WindowEvent) {
-		trackWindowState("move")
+		trackWindowState()
 	})
 	win.OnWindowEvent(events.Common.WindowDidResize, func(e *application.WindowEvent) {
-		trackWindowState("resize")
+		trackWindowState()
 	})
-
 	win.OnWindowEvent(events.Common.WindowClosing, func(e *application.WindowEvent) {
-		log.Printf("[window-save] tracked: x=%d y=%d w=%d h=%d", lastX, lastY, lastW, lastH)
 		settings.Window = egov.WindowSettings{X: lastX, Y: lastY, Width: lastW, Height: lastH}
 		if err := egov.SaveSettings(settings); err != nil {
 			log.Printf("settings save error: %v", err)
