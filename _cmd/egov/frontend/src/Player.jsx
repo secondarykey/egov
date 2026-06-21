@@ -881,10 +881,8 @@ export default function Player() {
       <div
         ref={mountRef}
         style={{
-          width: rotation % 180 ? '100vh' : '100%',
-          height: rotation % 180 ? '100vw' : '100%',
+          width: '100%', height: '100%',
           transform: rotation ? `rotate(${rotation}deg)` : undefined,
-          transformOrigin: 'center center',
         }}
         onClick={handleCanvasClick}
         onDoubleClick={handleCanvasDblClick}
@@ -1261,7 +1259,15 @@ export default function Player() {
           <Tooltip title={`${t('controls.rotate', 'Rotate')} ${(rotation + 90) % 360}°`} placement="bottom">
             <IconButton
               sx={{ color: rotation ? activeColor : 'white', width: 28, height: 28 }}
-              onClick={() => setRotation(r => (r + 90) % 360)}
+              onClick={() => {
+                const next = (rotation + 90) % 360
+                const prev = rotation
+                // 90/270度境界をまたぐ場合、幅と高さを入れ替える
+                if ((prev % 180 === 0) !== (next % 180 === 0)) {
+                  Window.SetSize(window.innerHeight, window.innerWidth)
+                }
+                setRotation(next)
+              }}
             >
               <RotateRightIcon fontSize="small" />
             </IconButton>
