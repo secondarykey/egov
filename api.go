@@ -11,6 +11,7 @@ type API struct {
 	secret         string
 	settings       *Settings
 	version        string
+	quitFunc       func()
 }
 
 func NewApi(initialFile string, fileServerPort int, secret string, settings *Settings, version string) *API {
@@ -89,6 +90,18 @@ func (a *API) UpdateActiveColor(color string) {
 	a.settings.Playback.ActiveColor = color
 	if err := SaveSettings(a.settings); err != nil {
 		_ = err
+	}
+}
+
+// SetQuitFunc sets the function called by Quit() to save state and exit.
+func (a *API) SetQuitFunc(f func()) {
+	a.quitFunc = f
+}
+
+// Quit saves the window state and exits the application.
+func (a *API) Quit() {
+	if a.quitFunc != nil {
+		a.quitFunc()
 	}
 }
 

@@ -150,11 +150,13 @@ func main() {
 		version += "+DEV"
 	}
 
+	api := egov.NewApi(initialFile, fileServerPort, secret, settings, version)
+
 	app := application.New(application.Options{
 		Name:        "egov",
 		Description: "A demo of using raw HTML & CSS",
 		Services: []application.Service{
-			application.NewService(egov.NewApi(initialFile, fileServerPort, secret, settings, version)),
+			application.NewService(api),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
@@ -262,25 +264,16 @@ func main() {
 		win.SetPosition(x, y)
 	})
 
-	// WindowClosing 時は既にウィンドウ破棄が進行中で Position()/Size() が
-	// 不正な値を返すことがある。移動・リサイズイベントで最後の正しい状態を
-	// メモリに保持し、WindowClosing でその値を保存する。
-	var lastX, lastY, lastW, lastH int
-	trackWindowState := func() {
-		lastX, lastY = win.Position()
-		lastW, lastH = win.Size()
-	}
-	win.OnWindowEvent(events.Common.WindowDidMove, func(e *application.WindowEvent) {
-		trackWindowState()
-	})
-	win.OnWindowEvent(events.Common.WindowDidResize, func(e *application.WindowEvent) {
-		trackWindowState()
-	})
-	win.OnWindowEvent(events.Common.WindowClosing, func(e *application.WindowEvent) {
-		settings.Window = egov.WindowSettings{X: lastX, Y: lastY, Width: lastW, Height: lastH}
+	// フロントエンドから API.Quit() 経由で呼ばれる。
+	// ウィンドウ破棄前に Position()/Size() を取得して保存する。
+	api.SetQuitFunc(func() {
+		x, y := win.Position()
+		w, h := win.Size()
+		settings.Window = egov.WindowSettings{X: x, Y: y, Width: w, Height: h}
 		if err := egov.SaveSettings(settings); err != nil {
 			log.Printf("settings save error: %v", err)
 		}
+		app.Quit()
 	})
 
 	// IPC経由で受信したファイルパスをホワイトリストに追加してフロントエンドへ転送

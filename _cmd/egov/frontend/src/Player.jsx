@@ -37,7 +37,7 @@ import PushPinIcon        from '@mui/icons-material/PushPin'
 import SettingsIcon       from '@mui/icons-material/Settings'
 import ReportProblemIcon from '@mui/icons-material/ReportProblem'
 import { Events, Window } from '@wailsio/runtime'
-import { GetInitialFile, GetServerURL, GetSettings, UpdateAlwaysOnTop, UpdatePlaybackSettings } from '../bindings/egov/api'
+import { GetInitialFile, GetServerURL, GetSettings, Quit, UpdateAlwaysOnTop, UpdatePlaybackSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
 import { loadLanguages } from './languages'
 import SettingsDialog from './SettingsDialog'
@@ -1288,7 +1288,7 @@ export default function Player() {
           </IconButton>
           <IconButton
             sx={{ color: 'white', width: 28, height: 28, '&:hover': { color: '#ef5350', bgcolor: 'rgba(239,83,80,0.15)' } }}
-            onClick={() => Window.Close()}
+            onClick={() => Quit()}
           >
             <CloseIcon fontSize="small" />
           </IconButton>
