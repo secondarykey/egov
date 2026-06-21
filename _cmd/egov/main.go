@@ -227,12 +227,9 @@ func main() {
 		cx, cy := x+w/2, y+h/2
 		screen := application.ScreenNearestDipPoint(application.Point{X: cx, Y: cy})
 		if screen == nil {
-			log.Printf("[window-restore] no screen found for center (%d,%d)", cx, cy)
 			return
 		}
 		wa := screen.WorkArea
-		log.Printf("[window-restore] saved: x=%d y=%d w=%d h=%d", savedWS.X, savedWS.Y, savedWS.Width, savedWS.Height)
-		log.Printf("[window-restore] workArea: x=%d y=%d w=%d h=%d", wa.X, wa.Y, wa.Width, wa.Height)
 
 		const margin = 10
 		maxW := wa.Width - margin*2
@@ -261,7 +258,6 @@ func main() {
 		if y+h > wa.Y+wa.Height-margin {
 			y = wa.Y + wa.Height - margin - h
 		}
-		log.Printf("[window-restore] clamped: x=%d y=%d w=%d h=%d", x, y, w, h)
 		win.SetSize(w, h)
 		win.SetPosition(x, y)
 	})
