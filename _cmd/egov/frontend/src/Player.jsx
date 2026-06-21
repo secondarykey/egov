@@ -637,7 +637,11 @@ export default function Player() {
     } else if (mode === 'fit') {
       const video = videoRef.current
       if (video?.videoWidth && video?.videoHeight) {
-        Window.SetSize(video.videoWidth, video.videoHeight)
+        if (rotation % 180) {
+          Window.SetSize(video.videoHeight, video.videoWidth)
+        } else {
+          Window.SetSize(video.videoWidth, video.videoHeight)
+        }
       }
     } else {
       camera.position.set(0, 0, 9)
