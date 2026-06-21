@@ -194,7 +194,6 @@ func main() {
 	savedWS := settings.Window
 	if savedWS.Width > 0 && savedWS.Height > 0 {
 		w, h := savedWS.Width, savedWS.Height
-		// Run()前のフォールバック上限（FHD相当）
 		const fallbackMaxW, fallbackMaxH = 1280, 800
 		if w > fallbackMaxW {
 			w = fallbackMaxW
@@ -204,6 +203,9 @@ func main() {
 		}
 		winOpts.Width = w
 		winOpts.Height = h
+		winOpts.X = savedWS.X
+		winOpts.Y = savedWS.Y
+		winOpts.InitialPosition = application.WindowXY
 	}
 
 	win := app.Window.NewWithOptions(winOpts)
