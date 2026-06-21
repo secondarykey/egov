@@ -36,8 +36,9 @@ import LinearScaleIcon   from '@mui/icons-material/LinearScale'
 import PushPinIcon        from '@mui/icons-material/PushPin'
 import SettingsIcon       from '@mui/icons-material/Settings'
 import ReportProblemIcon from '@mui/icons-material/ReportProblem'
+import RotateRightIcon   from '@mui/icons-material/RotateRight'
 import { Events, Window } from '@wailsio/runtime'
-import { GetInitialFile, GetServerURL, GetSettings, UpdateAlwaysOnTop, UpdatePlaybackSettings } from '../bindings/egov/api'
+import { GetInitialFile, GetServerURL, GetSettings, Quit, UpdateAlwaysOnTop, UpdatePlaybackSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
 import { loadLanguages } from './languages'
 import SettingsDialog from './SettingsDialog'
@@ -126,6 +127,7 @@ export default function Player() {
   const [rangeLoop,      setRangeLoop]      = useState(false)
   const [rangePoint1,    setRangePoint1]    = useState(null)
   const [rangePoint2,    setRangePoint2]    = useState(null)
+  const [rotation,       setRotation]       = useState(0)
 
   // Three.js セットアップ
   useEffect(() => {
@@ -878,7 +880,12 @@ export default function Player() {
     >
       <div
         ref={mountRef}
-        style={{ width: '100%', height: '100%' }}
+        style={{
+          width: rotation % 180 ? '100vh' : '100%',
+          height: rotation % 180 ? '100vw' : '100%',
+          transform: rotation ? `rotate(${rotation}deg)` : undefined,
+          transformOrigin: 'center center',
+        }}
         onClick={handleCanvasClick}
         onDoubleClick={handleCanvasDblClick}
         onMouseDown={handleCanvasMouseDown}
@@ -1249,6 +1256,18 @@ export default function Player() {
           </ToggleButtonGroup>
         </Box>
 
+        {/* 回転 */}
+        <Box style={{ '--wails-draggable': 'no-drag' }} sx={{ ml: 0.5 }}>
+          <Tooltip title={`${t('controls.rotate', 'Rotate')} ${(rotation + 90) % 360}°`} placement="bottom">
+            <IconButton
+              sx={{ color: rotation ? activeColor : 'white', width: 28, height: 28 }}
+              onClick={() => setRotation(r => (r + 90) % 360)}
+            >
+              <RotateRightIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
+
         {/* VRモード時: 始点変更ボタン */}
         {mode === 'vr' && (
           <Box style={{ '--wails-draggable': 'no-drag' }} sx={{ ml: 0.5 }}>
@@ -1288,7 +1307,7 @@ export default function Player() {
           </IconButton>
           <IconButton
             sx={{ color: 'white', width: 28, height: 28, '&:hover': { color: '#ef5350', bgcolor: 'rgba(239,83,80,0.15)' } }}
-            onClick={() => Window.Close()}
+            onClick={() => Quit()}
           >
             <CloseIcon fontSize="small" />
           </IconButton>

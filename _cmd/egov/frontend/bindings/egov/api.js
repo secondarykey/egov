@@ -19,6 +19,14 @@ export function GetInitialFile() {
 }
 
 /**
+ * Quit saves the window state and exits the application.
+ * @returns {$CancellablePromise<void>}
+ */
+export function Quit() {
+    return $Call.ByID(874407559);
+}
+
+/**
  * GetServerURL returns the base URL of the local file server.
  * @returns {$CancellablePromise<string>}
  */
