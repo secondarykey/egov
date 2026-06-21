@@ -265,18 +265,19 @@ func main() {
 	// WindowClosing 時の Position() が (0,0) を返すことがある（frameless + 左端スナップ等）。
 	// 移動・リサイズイベントで最後の正しい座標を追跡し、保存時に使う。
 	var lastX, lastY, lastW, lastH int
-	trackWindowState := func() {
+	trackWindowState := func(source string) {
 		x, y := win.Position()
 		w, h := win.Size()
+		log.Printf("[window-track] %s: Position()=%d,%d Size()=%d,%d", source, x, y, w, h)
 		if x != 0 || y != 0 || w != lastW || h != lastH {
 			lastX, lastY, lastW, lastH = x, y, w, h
 		}
 	}
 	win.OnWindowEvent(events.Common.WindowDidMove, func(e *application.WindowEvent) {
-		trackWindowState()
+		trackWindowState("move")
 	})
 	win.OnWindowEvent(events.Common.WindowDidResize, func(e *application.WindowEvent) {
-		trackWindowState()
+		trackWindowState("resize")
 	})
 
 	win.OnWindowEvent(events.Common.WindowClosing, func(e *application.WindowEvent) {
