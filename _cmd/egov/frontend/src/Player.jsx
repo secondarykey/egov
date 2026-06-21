@@ -701,14 +701,16 @@ export default function Player() {
     const isDouble = e.detail >= 2 || (now - lastPointerDownTimeRef.current) <= clickTimeoutMsRef.current
     lastPointerDownTimeRef.current = isDouble ? 0 : now
     if (isDouble) {
+      // 中央30%はデッドゾーン（再生/停止の誤操作防止）
+      const cx = window.innerWidth / 2
+      const deadZone = window.innerWidth * 0.15
+      if (e.clientX > cx - deadZone && e.clientX < cx + deadZone) return
       clearTimeout(clickTimerRef.current)
       clickTimerRef.current = null
       isMouseHeldRef.current = true
       const pos = { x: e.clientX, y: e.clientY }
       seekOverlayRef.current = pos
-      // 即シーク（クリック位置の左右）
-      doZoneSeek(doubleClickSeekRef.current, e.clientX > window.innerWidth / 2)
-      // 500ms ホールドでオーバーレイ表示
+      doZoneSeek(doubleClickSeekRef.current, e.clientX > cx)
       overlayShowTimerRef.current = setTimeout(() => setSeekOverlay(pos), 800)
     }
   }
