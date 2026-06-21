@@ -862,7 +862,13 @@ export default function Player() {
   return (
     <div
       data-file-drop-target
-      style={{ position: 'relative', width: '100vw', height: '100vh', background: '#000' }}
+      style={{
+        position: 'relative',
+        width: 'calc(100vw - 10px)',
+        height: 'calc(100vh - 10px)',
+        margin: '5px',
+        background: '#000',
+      }}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       onDragEnter={handleDragEnter}
