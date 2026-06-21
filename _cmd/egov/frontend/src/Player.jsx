@@ -341,6 +341,7 @@ export default function Player() {
       camera.fov     = 75
       controls.enabled = false
       camera.updateProjectionMatrix()
+      planeRef.current.rotation.z = 0
     } else if (mode === 'normal') {
       headGroup.rotation.set(0, 0, 0)
       camera.position.set(0, 0, 9)
@@ -353,6 +354,7 @@ export default function Player() {
       camera.updateProjectionMatrix()
       controls.target.set(0, 0, 0)
       controls.update()
+      planeRef.current.rotation.z = -(rotation * Math.PI) / 180
     } else {
       headGroup.rotation.set(0, 0, 0)
       camera.fov            = 60
@@ -361,10 +363,11 @@ export default function Player() {
       controls.enableZoom   = false
       controls.enablePan    = false
       camera.updateProjectionMatrix()
+      planeRef.current.rotation.z = 0
       fitCameraRef.current?.()
     }
     requestRenderRef.current?.()
-  }, [mode, vrStart])
+  }, [mode, vrStart, rotation])
 
   // テクスチャ切替（モードまたはVR始点変更時）
   useEffect(() => {
@@ -885,7 +888,7 @@ export default function Player() {
       <div
         ref={mountRef}
         style={{
-          ...(rotation % 180
+          ...(mode === 'fit' && rotation % 180
             ? {
                 position: 'absolute',
                 top: '50%', left: '50%',
@@ -895,7 +898,7 @@ export default function Player() {
               }
             : {
                 width: '100%', height: '100%',
-                transform: rotation ? `rotate(${rotation}deg)` : undefined,
+                transform: mode === 'fit' && rotation ? `rotate(${rotation}deg)` : undefined,
               }),
         }}
         onClick={handleCanvasClick}
@@ -1243,7 +1246,11 @@ export default function Player() {
         <Box style={{ '--wails-draggable': 'no-drag' }} sx={{ ml: 1 }}>
           <ToggleButtonGroup
             value={mode} exclusive size="small"
-            onChange={(_, v) => { if (v) setMode(v) }}
+            onChange={(_, v) => {
+              if (!v) return
+              if (v === 'vr' && rotation) setRotation(0)
+              setMode(v)
+            }}
             sx={{
               '& .MuiToggleButton-root': {
                 color: 'rgba(255,255,255,0.5)',
@@ -1268,23 +1275,25 @@ export default function Player() {
           </ToggleButtonGroup>
         </Box>
 
-        {/* 回転 */}
-        <Box style={{ '--wails-draggable': 'no-drag' }} sx={{ ml: 0.5 }}>
-          <Tooltip title={`${t('controls.rotate', 'Rotate')} ${(rotation + 90) % 360}°`} placement="bottom">
-            <IconButton
-              sx={{ color: rotation ? activeColor : 'white', width: 28, height: 28 }}
-              onClick={() => {
-                const next = (rotation + 90) % 360
-                if ((rotation % 180 === 0) !== (next % 180 === 0)) {
-                  Window.SetSize(window.innerHeight, window.innerWidth)
-                }
-                setRotation(next)
-              }}
-            >
-              <RotateRightIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </Box>
+        {/* 回転（VRモード以外） */}
+        {mode !== 'vr' && (
+          <Box style={{ '--wails-draggable': 'no-drag' }} sx={{ ml: 0.5 }}>
+            <Tooltip title={`${t('controls.rotate', 'Rotate')} ${(rotation + 90) % 360}°`} placement="bottom">
+              <IconButton
+                sx={{ color: rotation ? activeColor : 'white', width: 28, height: 28 }}
+                onClick={() => {
+                  const next = (rotation + 90) % 360
+                  if (mode === 'fit' && (rotation % 180 === 0) !== (next % 180 === 0)) {
+                    Window.SetSize(window.innerHeight, window.innerWidth)
+                  }
+                  setRotation(next)
+                }}
+              >
+                <RotateRightIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        )}
 
         {/* VRモード時: 始点変更ボタン */}
         {mode === 'vr' && (
