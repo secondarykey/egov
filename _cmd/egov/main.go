@@ -281,14 +281,17 @@ func main() {
 
 	win.OnWindowEvent(events.Common.WindowClosing, func(e *application.WindowEvent) {
 		posX, posY := win.Position()
-		w, h := win.Size()
+		sizeW, sizeH := win.Size()
 		x, y := posX, posY
-		// Position() が (0,0) を返した場合、追跡していた最後の正しい座標を使う
+		w, h := sizeW, sizeH
 		if x == 0 && y == 0 && (lastX != 0 || lastY != 0) {
 			x, y = lastX, lastY
 		}
-		log.Printf("[window-save] Position()=%d,%d tracked=%d,%d final=%d,%d Size()=%d,%d",
-			posX, posY, lastX, lastY, x, y, w, h)
+		if w == 0 && h == 0 && (lastW != 0 || lastH != 0) {
+			w, h = lastW, lastH
+		}
+		log.Printf("[window-save] Position()=%d,%d Size()=%d,%d tracked=%d,%d,%d,%d final=%d,%d,%d,%d",
+			posX, posY, sizeW, sizeH, lastX, lastY, lastW, lastH, x, y, w, h)
 		settings.Window = egov.WindowSettings{X: x, Y: y, Width: w, Height: h}
 		if err := egov.SaveSettings(settings); err != nil {
 			log.Printf("settings save error: %v", err)
