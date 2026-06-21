@@ -281,19 +281,8 @@ func main() {
 	})
 
 	win.OnWindowEvent(events.Common.WindowClosing, func(e *application.WindowEvent) {
-		posX, posY := win.Position()
-		sizeW, sizeH := win.Size()
-		x, y := posX, posY
-		w, h := sizeW, sizeH
-		if x == 0 && y == 0 && (lastX != 0 || lastY != 0) {
-			x, y = lastX, lastY
-		}
-		if w == 0 && h == 0 && (lastW != 0 || lastH != 0) {
-			w, h = lastW, lastH
-		}
-		log.Printf("[window-save] Position()=%d,%d Size()=%d,%d tracked=%d,%d,%d,%d final=%d,%d,%d,%d",
-			posX, posY, sizeW, sizeH, lastX, lastY, lastW, lastH, x, y, w, h)
-		settings.Window = egov.WindowSettings{X: x, Y: y, Width: w, Height: h}
+		log.Printf("[window-save] tracked: x=%d y=%d w=%d h=%d", lastX, lastY, lastW, lastH)
+		settings.Window = egov.WindowSettings{X: lastX, Y: lastY, Width: lastW, Height: lastH}
 		if err := egov.SaveSettings(settings); err != nil {
 			log.Printf("settings save error: %v", err)
 		}
