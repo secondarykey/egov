@@ -193,10 +193,14 @@ func main() {
 	if ws := settings.Window; ws.Width > 0 && ws.Height > 0 {
 		w, h := ws.Width, ws.Height
 		x, y := ws.X, ws.Y
+		log.Printf("[window-restore] saved: x=%d y=%d w=%d h=%d", x, y, w, h)
 		// ウィンドウ中心に最も近いスクリーンを取得してサイズと位置を制限
 		cx, cy := x+w/2, y+h/2
-		if screen := application.ScreenNearestDipPoint(application.Point{X: cx, Y: cy}); screen != nil {
+		screen := application.ScreenNearestDipPoint(application.Point{X: cx, Y: cy})
+		log.Printf("[window-restore] screen=%v (center: %d,%d)", screen != nil, cx, cy)
+		if screen != nil {
 			wa := screen.WorkArea
+			log.Printf("[window-restore] workArea: x=%d y=%d w=%d h=%d", wa.X, wa.Y, wa.Width, wa.Height)
 			// Framelessウィンドウのリサイズハンドル用マージン。
 			// WorkArea一杯だとウィンドウ端がスクリーン端/タスクバーに密着し
 			// リサイズ操作が不可能になる。
@@ -228,6 +232,7 @@ func main() {
 				y = wa.Y + wa.Height - margin - h
 			}
 		}
+		log.Printf("[window-restore] final: x=%d y=%d w=%d h=%d", x, y, w, h)
 		winOpts.Width = w
 		winOpts.Height = h
 		winOpts.X = x
