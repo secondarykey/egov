@@ -186,58 +186,22 @@ func main() {
 		EnableFileDrop:         true,
 	}
 
-	// 前回のウィンドウ位置・サイズを復元（スクリーンに収まるよう調整）
-	// NewWithOptions に直接渡すことで位置とサイズをアトミックに適用し、
-	// DPI 変換が正しいスクリーンで行われるようにする。
-	// SetPosition は app.Run() 前は impl==nil のため無視されるため、この方法が必要。
-	if ws := settings.Window; ws.Width > 0 && ws.Height > 0 {
-		w, h := ws.Width, ws.Height
-		x, y := ws.X, ws.Y
-		log.Printf("[window-restore] saved: x=%d y=%d w=%d h=%d", x, y, w, h)
-		// ウィンドウ中心に最も近いスクリーンを取得してサイズと位置を制限
-		cx, cy := x+w/2, y+h/2
-		screen := application.ScreenNearestDipPoint(application.Point{X: cx, Y: cy})
-		log.Printf("[window-restore] screen=%v (center: %d,%d)", screen != nil, cx, cy)
-		if screen != nil {
-			wa := screen.WorkArea
-			log.Printf("[window-restore] workArea: x=%d y=%d w=%d h=%d", wa.X, wa.Y, wa.Width, wa.Height)
-			// Framelessウィンドウのリサイズハンドル用マージン。
-			// WorkArea一杯だとウィンドウ端がスクリーン端/タスクバーに密着し
-			// リサイズ操作が不可能になる。
-			const margin = 10
-			maxW := wa.Width - margin*2
-			maxH := wa.Height - margin*2
-			if maxW < 400 {
-				maxW = 400
-			}
-			if maxH < 300 {
-				maxH = 300
-			}
-			if w > maxW {
-				w = maxW
-			}
-			if h > maxH {
-				h = maxH
-			}
-			if x < wa.X+margin {
-				x = wa.X + margin
-			}
-			if y < wa.Y+margin {
-				y = wa.Y + margin
-			}
-			if x+w > wa.X+wa.Width-margin {
-				x = wa.X + wa.Width - margin - w
-			}
-			if y+h > wa.Y+wa.Height-margin {
-				y = wa.Y + wa.Height - margin - h
-			}
+	// 前回のウィンドウ位置・サイズを復元。
+	// app.Run() 前は ScreenNearestDipPoint が使えないため、
+	// ここでは安全な上限でクランプし、Run() 後にスクリーン情報で再調整する。
+	savedWS := settings.Window
+	if savedWS.Width > 0 && savedWS.Height > 0 {
+		w, h := savedWS.Width, savedWS.Height
+		// Run()前のフォールバック上限（FHD相当）
+		const fallbackMaxW, fallbackMaxH = 1280, 800
+		if w > fallbackMaxW {
+			w = fallbackMaxW
 		}
-		log.Printf("[window-restore] final: x=%d y=%d w=%d h=%d", x, y, w, h)
+		if h > fallbackMaxH {
+			h = fallbackMaxH
+		}
 		winOpts.Width = w
 		winOpts.Height = h
-		winOpts.X = x
-		winOpts.Y = y
-		winOpts.InitialPosition = application.WindowXY
 	}
 
 	win := app.Window.NewWithOptions(winOpts)
@@ -246,6 +210,57 @@ func main() {
 	if settings.App.AlwaysOnTop {
 		win.SetAlwaysOnTop(true)
 	}
+
+	// app.Run() 後にスクリーン情報が利用可能になったら、
+	// 保存済みの位置・サイズを正しいスクリーンにクランプして適用する。
+	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(e *application.ApplicationEvent) {
+		if savedWS.Width <= 0 || savedWS.Height <= 0 {
+			return
+		}
+		w, h := savedWS.Width, savedWS.Height
+		x, y := savedWS.X, savedWS.Y
+
+		cx, cy := x+w/2, y+h/2
+		screen := application.ScreenNearestDipPoint(application.Point{X: cx, Y: cy})
+		if screen == nil {
+			log.Printf("[window-restore] no screen found for center (%d,%d)", cx, cy)
+			return
+		}
+		wa := screen.WorkArea
+		log.Printf("[window-restore] saved: x=%d y=%d w=%d h=%d", savedWS.X, savedWS.Y, savedWS.Width, savedWS.Height)
+		log.Printf("[window-restore] workArea: x=%d y=%d w=%d h=%d", wa.X, wa.Y, wa.Width, wa.Height)
+
+		const margin = 10
+		maxW := wa.Width - margin*2
+		maxH := wa.Height - margin*2
+		if maxW < 400 {
+			maxW = 400
+		}
+		if maxH < 300 {
+			maxH = 300
+		}
+		if w > maxW {
+			w = maxW
+		}
+		if h > maxH {
+			h = maxH
+		}
+		if x < wa.X+margin {
+			x = wa.X + margin
+		}
+		if y < wa.Y+margin {
+			y = wa.Y + margin
+		}
+		if x+w > wa.X+wa.Width-margin {
+			x = wa.X + wa.Width - margin - w
+		}
+		if y+h > wa.Y+wa.Height-margin {
+			y = wa.Y + wa.Height - margin - h
+		}
+		log.Printf("[window-restore] clamped: x=%d y=%d w=%d h=%d", x, y, w, h)
+		win.SetSize(w, h)
+		win.SetPosition(x, y)
+	})
 
 	// 閉じる時にウィンドウ位置・サイズを保存
 	win.OnWindowEvent(events.Common.WindowClosing, func(e *application.WindowEvent) {
