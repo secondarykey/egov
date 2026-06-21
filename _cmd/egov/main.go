@@ -266,6 +266,7 @@ func main() {
 	win.OnWindowEvent(events.Common.WindowClosing, func(e *application.WindowEvent) {
 		w, h := win.Size()
 		x, y := win.Position()
+		log.Printf("[window-save] Position()=%d,%d Size()=%d,%d", x, y, w, h)
 		settings.Window = egov.WindowSettings{X: x, Y: y, Width: w, Height: h}
 		if err := egov.SaveSettings(settings); err != nil {
 			log.Printf("settings save error: %v", err)
