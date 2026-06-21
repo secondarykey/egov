@@ -701,9 +701,9 @@ export default function Player() {
     const isDouble = e.detail >= 2 || (now - lastPointerDownTimeRef.current) <= clickTimeoutMsRef.current
     lastPointerDownTimeRef.current = isDouble ? 0 : now
     if (isDouble) {
-      // 中央30%はデッドゾーン（再生/停止の誤操作防止）
+      // 中央25%はデッドゾーン（再生/停止の誤操作防止）
       const cx = window.innerWidth / 2
-      const deadZone = window.innerWidth * 0.15
+      const deadZone = window.innerWidth * 0.125
       if (e.clientX > cx - deadZone && e.clientX < cx + deadZone) return
       clearTimeout(clickTimerRef.current)
       clickTimerRef.current = null
