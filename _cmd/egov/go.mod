@@ -1,4 +1,4 @@
-module changeme
+module github.com/secondarykey/egov/cmd/egov
 
 go 1.26.1
 

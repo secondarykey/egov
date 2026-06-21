@@ -180,6 +180,8 @@ func main() {
 		BackgroundColour:       application.NewRGB(27, 38, 54),
 		URL:                    "/",
 		Frameless:              true,
+		MinWidth:               400,
+		MinHeight:              300,
 		OpenInspectorOnStartup: debug,
 		EnableFileDrop:         true,
 	}
@@ -195,23 +197,35 @@ func main() {
 		cx, cy := x+w/2, y+h/2
 		if screen := application.ScreenNearestDipPoint(application.Point{X: cx, Y: cy}); screen != nil {
 			wa := screen.WorkArea
-			if w > wa.Width {
-				w = wa.Width
+			// Framelessウィンドウのリサイズハンドル用マージン。
+			// WorkArea一杯だとウィンドウ端がスクリーン端/タスクバーに密着し
+			// リサイズ操作が不可能になる。
+			const margin = 10
+			maxW := wa.Width - margin*2
+			maxH := wa.Height - margin*2
+			if maxW < 400 {
+				maxW = 400
 			}
-			if h > wa.Height {
-				h = wa.Height
+			if maxH < 300 {
+				maxH = 300
 			}
-			if x < wa.X {
-				x = wa.X
+			if w > maxW {
+				w = maxW
 			}
-			if y < wa.Y {
-				y = wa.Y
+			if h > maxH {
+				h = maxH
 			}
-			if x+w > wa.X+wa.Width {
-				x = wa.X + wa.Width - w
+			if x < wa.X+margin {
+				x = wa.X + margin
 			}
-			if y+h > wa.Y+wa.Height {
-				y = wa.Y + wa.Height - h
+			if y < wa.Y+margin {
+				y = wa.Y + margin
+			}
+			if x+w > wa.X+wa.Width-margin {
+				x = wa.X + wa.Width - margin - w
+			}
+			if y+h > wa.Y+wa.Height-margin {
+				y = wa.Y + wa.Height - margin - h
 			}
 		}
 		winOpts.Width = w
