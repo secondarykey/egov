@@ -94,6 +94,7 @@ export default function Player() {
   const miniProgressRef     = useRef(false)
   const showUIRef           = useRef(false)
   const rangeLoopRef        = useRef(false)
+  const detectedFpsRef    = useRef(0)
   const [miniProgress, setMiniProgress] = useState(false)
 
   const [paused,      setPaused]      = useState(true)
@@ -269,9 +270,17 @@ export default function Player() {
     let animId = null
     let framesRunning = false
 
-    const onVideoFrame = () => {
+    let prevMediaTime = -1
+    const onVideoFrame = (_now, metadata) => {
       texture.needsUpdate = true
       renderOnce()
+      if (metadata && prevMediaTime >= 0 && metadata.mediaTime > prevMediaTime) {
+        const delta = metadata.mediaTime - prevMediaTime
+        if (delta > 0.001 && delta < 0.2) {
+          detectedFpsRef.current = 1 / delta
+        }
+      }
+      if (metadata) prevMediaTime = metadata.mediaTime
       if (!video.paused && !video.ended) {
         animId = video.requestVideoFrameCallback(onVideoFrame)
       } else {
@@ -536,6 +545,29 @@ export default function Player() {
     }
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
+  }, [])
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+      const video = videoRef.current
+      if (!video?.src) return
+      e.preventDefault()
+      const forward = e.key === 'ArrowRight'
+      if (video.paused) {
+        const fps = detectedFpsRef.current > 1 ? detectedFpsRef.current : 30
+        const step = 1 / fps
+        video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? step : -step)))
+        setCurrentTime(video.currentTime)
+        textureRef.current.needsUpdate = true
+        requestRenderRef.current?.()
+      } else {
+        if (e.repeat) return
+        doZoneSeek(5, forward)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
   // currentTime の表示要否を timeupdate ハンドラへ伝えるための ref 同期。
