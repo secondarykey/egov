@@ -108,6 +108,20 @@ Frameless ウィンドウではコンテンツがウィンドウ端に密着す�
 
 ワークツリーでは node_modules をメインリポジトリからジャンクション（Windows）でリンクする。ワークツリー側で `npm install` を実行するとジャンクションが破壊される。パッケージの追加・削除は必ずメイン側で行う。
 
+**ワークツリーでのセッション開始時（必須）**: `_cmd/egov/frontend/node_modules` が存在しない場合、以下のコマンドでメインリポジトリからジャンクションを作成すること。ビルドや `task dev` の前に必ず実行する。
+
+```powershell
+# PowerShell で実行（cmd の mklink /J でも可）
+New-Item -ItemType Junction -Path "_cmd\egov\frontend\node_modules" -Target "D:\Go\Projects\egov\_cmd\egov\frontend\node_modules"
+```
+
+同様に `frontend/dist` も存在しないとGoの `//go:embed all:frontend/dist` がビルドエラーになる。空ディレクトリを作成するか、ジャンクションを作成すること。
+
+```powershell
+# 空ディレクトリで十分（ビルド時に上書きされる）
+New-Item -ItemType Directory -Path "_cmd\egov\frontend\dist" -Force
+```
+
 `build/Taskfile.yml` の `install:frontend:deps` は `status: test -d node_modules` で存在チェックに変更済み（`generates: node_modules` はViteキャッシュで誤検知し不要な npm install を走らせるため）。`wails3 update build-assets` を実行すると `build/Taskfile.yml` が上書きされるため、再修正が必要。
 
 ## Key Configuration Files
