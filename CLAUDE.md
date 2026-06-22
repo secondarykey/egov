@@ -92,7 +92,7 @@ Vite builds to `_cmd/egov/frontend/dist/`. The Go binary embeds that directory w
 Window position/size restoration uses a **two-phase approach**:
 
 - **Phase 1 (before `app.Run()`)**: `NewWebviewWindowWithOptions` に保存済み座標を渡す。`ScreenNearestDipPoint` は Run() 前に nil を返すため、サイズは安全な上限でクランプのみ。`InitialPosition: application.WindowXY` を明示的に指定しないと X/Y が無視され中央配置になる。
-- **Phase 2 (after `app.Run()`)**: `OnApplicationEvent(ApplicationStarted)` 内で `ScreenNearestDipPoint` を使い正式なクランプを行い `SetSize`/`SetPosition` で補正。
+- **Phase 2 (after `app.Run()`)**: `win.OnWindowEvent(WindowRuntimeReady)` 内で `ScreenNearestDipPoint` を使い正式なクランプを行い `SetSize`/`SetPosition` で補正。`ApplicationStarted` では `SetSize` が効かない場合がある。
 
 終了時の保存は `API.Quit()` 経由で行う。`WindowClosing` 時点ではウィンドウ破棄が進行中のため `Position()`/`Size()` が (0,0) を返すことがある。フロントエンドの閉じるボタンは `Window.Close()` ではなく `Quit()` binding を呼ぶ。
 
