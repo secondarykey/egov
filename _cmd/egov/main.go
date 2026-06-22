@@ -227,6 +227,7 @@ func main() {
 		}
 		w, h := savedWS.Width, savedWS.Height
 		x, y := savedWS.X, savedWS.Y
+		slog.Debug("phase2: restoring window state", "savedW", w, "savedH", h, "savedX", x, "savedY", y)
 
 		cx, cy := x+w/2, y+h/2
 		screen := application.ScreenNearestDipPoint(application.Point{X: cx, Y: cy})
@@ -262,6 +263,7 @@ func main() {
 		if y+h > wa.Y+wa.Height-margin {
 			y = wa.Y + wa.Height - margin - h
 		}
+		slog.Debug("phase2: applying window state", "w", w, "h", h, "x", x, "y", y)
 		win.SetSize(w, h)
 		win.SetPosition(x, y)
 	})
