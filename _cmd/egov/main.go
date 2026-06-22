@@ -7,7 +7,7 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -46,13 +46,15 @@ func main() {
 		initialFile = os.Args[1]
 	}
 
+	setupLogger()
+
 	if err := egov.DistributeLocales(); err != nil {
-		log.Printf("locales distribute error: %v", err)
+		slog.Warn("locales distribute error", "err", err)
 	}
 
 	settings, err := egov.LoadSettings()
 	if err != nil {
-		log.Printf("settings load error: %v", err)
+		slog.Warn("settings load error", "err", err)
 		settings = &egov.Settings{}
 	}
 
@@ -63,7 +65,7 @@ func main() {
 		if !isServer {
 			if initialFile != "" {
 				if err := sendIPC(initialFile); err != nil {
-					log.Printf("IPC send error: %v", err)
+					slog.Error("IPC send error", "err", err)
 				}
 			}
 			return
@@ -73,7 +75,8 @@ func main() {
 	// 起動時ランダムトークンを生成
 	tokenBytes := make([]byte, 16)
 	if _, err := rand.Read(tokenBytes); err != nil {
-		log.Fatal(err)
+		slog.Error("failed to generate token", "err", err)
+		os.Exit(1)
 	}
 	secret := hex.EncodeToString(tokenBytes)
 
@@ -87,7 +90,8 @@ func main() {
 	// ローカルファイル配信用サーバをランダムポートで起動
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("failed to listen", "err", err)
+		os.Exit(1)
 	}
 	fileServerPort := listener.Addr().(*net.TCPAddr).Port
 	go http.Serve(listener, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -269,7 +273,7 @@ func main() {
 		w, h := win.Size()
 		settings.Window = egov.WindowSettings{X: x, Y: y, Width: w, Height: h}
 		if err := egov.SaveSettings(settings); err != nil {
-			log.Printf("settings save error: %v", err)
+			slog.Error("settings save error", "err", err)
 		}
 		app.Quit()
 	})
@@ -288,12 +292,20 @@ func main() {
 		}
 	}()
 
-	// Run the application. This blocks until the application has been exited.
-	err = app.Run()
-	// If an error occurred while running the application, log it and exit.
-	if err != nil {
-		log.Fatal(err)
+	if err = app.Run(); err != nil {
+		slog.Error("application error", "err", err)
+		os.Exit(1)
 	}
+}
+
+func setupLogger() {
+	level := slog.LevelInfo
+	if isDev {
+		level = slog.LevelDebug
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: level,
+	})))
 }
 
 // isAllowedOrigin reports whether a CORS Origin header should be reflected.
