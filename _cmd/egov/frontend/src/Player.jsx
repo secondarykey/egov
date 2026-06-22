@@ -36,8 +36,9 @@ import LinearScaleIcon   from '@mui/icons-material/LinearScale'
 import PushPinIcon        from '@mui/icons-material/PushPin'
 import SettingsIcon       from '@mui/icons-material/Settings'
 import ReportProblemIcon from '@mui/icons-material/ReportProblem'
+import RotateRightIcon   from '@mui/icons-material/RotateRight'
 import { Events, Window } from '@wailsio/runtime'
-import { GetInitialFile, GetServerURL, GetSettings, UpdateAlwaysOnTop, UpdatePlaybackSettings } from '../bindings/egov/api'
+import { GetInitialFile, GetServerURL, GetSettings, Quit, UpdateAlwaysOnTop, UpdatePlaybackSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
 import { loadLanguages } from './languages'
 import SettingsDialog from './SettingsDialog'
@@ -93,6 +94,7 @@ export default function Player() {
   const miniProgressRef     = useRef(false)
   const showUIRef           = useRef(false)
   const rangeLoopRef        = useRef(false)
+  const detectedFpsRef    = useRef(0)
   const [miniProgress, setMiniProgress] = useState(false)
 
   const [paused,      setPaused]      = useState(true)
@@ -126,6 +128,7 @@ export default function Player() {
   const [rangeLoop,      setRangeLoop]      = useState(false)
   const [rangePoint1,    setRangePoint1]    = useState(null)
   const [rangePoint2,    setRangePoint2]    = useState(null)
+  const [rotation,       setRotation]       = useState(0)
 
   // Three.js セットアップ
   useEffect(() => {
@@ -267,9 +270,17 @@ export default function Player() {
     let animId = null
     let framesRunning = false
 
-    const onVideoFrame = () => {
+    let prevMediaTime = -1
+    const onVideoFrame = (_now, metadata) => {
       texture.needsUpdate = true
       renderOnce()
+      if (metadata && prevMediaTime >= 0 && metadata.mediaTime > prevMediaTime) {
+        const delta = metadata.mediaTime - prevMediaTime
+        if (delta > 0.001 && delta < 0.2) {
+          detectedFpsRef.current = 1 / delta
+        }
+      }
+      if (metadata) prevMediaTime = metadata.mediaTime
       if (!video.paused && !video.ended) {
         animId = video.requestVideoFrameCallback(onVideoFrame)
       } else {
@@ -332,6 +343,12 @@ export default function Player() {
     sphereRef.current.visible = mode === 'vr'
     planeRef.current.visible  = mode !== 'vr'
 
+    const mount = mountRef.current
+    if (mount) {
+      camera.aspect = mount.clientWidth / mount.clientHeight
+      rendererRef.current?.setSize(mount.clientWidth, mount.clientHeight)
+    }
+
     if (mode === 'vr') {
       const off = vrOffsetsRef.current[vrStart] ?? { x: 0, y: 0 }
       camera.position.set(off.x, off.y, off.z ?? 0.1)
@@ -339,6 +356,7 @@ export default function Player() {
       camera.fov     = 75
       controls.enabled = false
       camera.updateProjectionMatrix()
+      planeRef.current.rotation.z = 0
     } else if (mode === 'normal') {
       headGroup.rotation.set(0, 0, 0)
       camera.position.set(0, 0, 9)
@@ -351,6 +369,7 @@ export default function Player() {
       camera.updateProjectionMatrix()
       controls.target.set(0, 0, 0)
       controls.update()
+      planeRef.current.rotation.z = -(rotation * Math.PI) / 180
     } else {
       headGroup.rotation.set(0, 0, 0)
       camera.fov            = 60
@@ -359,10 +378,11 @@ export default function Player() {
       controls.enableZoom   = false
       controls.enablePan    = false
       camera.updateProjectionMatrix()
+      planeRef.current.rotation.z = 0
       fitCameraRef.current?.()
     }
     requestRenderRef.current?.()
-  }, [mode, vrStart])
+  }, [mode, vrStart, rotation])
 
   // テクスチャ切替（モードまたはVR始点変更時）
   useEffect(() => {
@@ -533,6 +553,36 @@ export default function Player() {
     return () => window.removeEventListener('focus', onFocus)
   }, [])
 
+  useEffect(() => {
+    let frameSeeking = false
+    const onSeeked = () => { frameSeeking = false }
+    const video = videoRef.current
+    video?.addEventListener('seeked', onSeeked)
+
+    const onKeyDown = (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+      if (!video?.src) return
+      e.preventDefault()
+      const forward = e.key === 'ArrowRight'
+      if (video.paused) {
+        if (frameSeeking) return
+        frameSeeking = true
+        const fps = detectedFpsRef.current > 1 ? detectedFpsRef.current : 30
+        const step = 1 / fps
+        video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? step : -step)))
+        setCurrentTime(video.currentTime)
+      } else {
+        if (e.repeat) return
+        doZoneSeek(5, forward)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      video?.removeEventListener('seeked', onSeeked)
+    }
+  }, [])
+
   // currentTime の表示要否を timeupdate ハンドラへ伝えるための ref 同期。
   // UI を表示した瞬間は省略していた更新を取り戻すため最新位置に同期する。
   useEffect(() => {
@@ -635,7 +685,11 @@ export default function Player() {
     } else if (mode === 'fit') {
       const video = videoRef.current
       if (video?.videoWidth && video?.videoHeight) {
-        Window.SetSize(video.videoWidth, video.videoHeight)
+        if (rotation % 180) {
+          Window.SetSize(video.videoHeight, video.videoWidth)
+        } else {
+          Window.SetSize(video.videoWidth, video.videoHeight)
+        }
       }
     } else {
       camera.position.set(0, 0, 9)
@@ -692,14 +746,16 @@ export default function Player() {
     const isDouble = e.detail >= 2 || (now - lastPointerDownTimeRef.current) <= clickTimeoutMsRef.current
     lastPointerDownTimeRef.current = isDouble ? 0 : now
     if (isDouble) {
+      // 中央25%はデッドゾーン（再生/停止の誤操作防止）
+      const cx = window.innerWidth / 2
+      const deadZone = window.innerWidth * 0.125
+      if (e.clientX > cx - deadZone && e.clientX < cx + deadZone) return
       clearTimeout(clickTimerRef.current)
       clickTimerRef.current = null
       isMouseHeldRef.current = true
       const pos = { x: e.clientX, y: e.clientY }
       seekOverlayRef.current = pos
-      // 即シーク（クリック位置の左右）
-      doZoneSeek(doubleClickSeekRef.current, e.clientX > window.innerWidth / 2)
-      // 500ms ホールドでオーバーレイ表示
+      doZoneSeek(doubleClickSeekRef.current, e.clientX > cx)
       overlayShowTimerRef.current = setTimeout(() => setSeekOverlay(pos), 800)
     }
   }
@@ -862,7 +918,13 @@ export default function Player() {
   return (
     <div
       data-file-drop-target
-      style={{ position: 'relative', width: '100vw', height: '100vh', background: '#000' }}
+      style={{
+        position: 'relative',
+        width: 'calc(100vw - 10px)',
+        height: 'calc(100vh - 10px)',
+        margin: '5px',
+        background: '#000',
+      }}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       onDragEnter={handleDragEnter}
@@ -872,7 +934,20 @@ export default function Player() {
     >
       <div
         ref={mountRef}
-        style={{ width: '100%', height: '100%' }}
+        style={{
+          ...(mode === 'fit' && rotation % 180
+            ? {
+                position: 'absolute',
+                top: '50%', left: '50%',
+                width: 'calc(100vh - 10px)',
+                height: 'calc(100vw - 10px)',
+                transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
+              }
+            : {
+                width: '100%', height: '100%',
+                transform: mode === 'fit' && rotation ? `rotate(${rotation}deg)` : undefined,
+              }),
+        }}
         onClick={handleCanvasClick}
         onDoubleClick={handleCanvasDblClick}
         onMouseDown={handleCanvasMouseDown}
@@ -1218,7 +1293,11 @@ export default function Player() {
         <Box style={{ '--wails-draggable': 'no-drag' }} sx={{ ml: 1 }}>
           <ToggleButtonGroup
             value={mode} exclusive size="small"
-            onChange={(_, v) => { if (v) setMode(v) }}
+            onChange={(_, v) => {
+              if (!v) return
+              if (v === 'vr' && rotation) setRotation(0)
+              setMode(v)
+            }}
             sx={{
               '& .MuiToggleButton-root': {
                 color: 'rgba(255,255,255,0.5)',
@@ -1242,6 +1321,26 @@ export default function Player() {
             </Tooltip>
           </ToggleButtonGroup>
         </Box>
+
+        {/* 回転（VRモード以外） */}
+        {mode !== 'vr' && (
+          <Box style={{ '--wails-draggable': 'no-drag' }} sx={{ ml: 0.5 }}>
+            <Tooltip title={`${t('controls.rotate', 'Rotate')} ${(rotation + 90) % 360}°`} placement="bottom">
+              <IconButton
+                sx={{ color: rotation ? activeColor : 'white', width: 28, height: 28 }}
+                onClick={() => {
+                  const next = (rotation + 90) % 360
+                  if (mode === 'fit' && (rotation % 180 === 0) !== (next % 180 === 0)) {
+                    Window.SetSize(window.innerHeight, window.innerWidth)
+                  }
+                  setRotation(next)
+                }}
+              >
+                <RotateRightIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        )}
 
         {/* VRモード時: 始点変更ボタン */}
         {mode === 'vr' && (
@@ -1282,7 +1381,7 @@ export default function Player() {
           </IconButton>
           <IconButton
             sx={{ color: 'white', width: 28, height: 28, '&:hover': { color: '#ef5350', bgcolor: 'rgba(239,83,80,0.15)' } }}
-            onClick={() => Window.Close()}
+            onClick={() => Quit()}
           >
             <CloseIcon fontSize="small" />
           </IconButton>

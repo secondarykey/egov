@@ -85,6 +85,45 @@ Vite builds to `_cmd/egov/frontend/dist/`. The Go binary embeds that directory w
 
 `@wailsio/runtime/dist/drag.js` registers capture-phase listeners on `mousedown/mousemove/mouseup`. Elements with `--wails-draggable: drag` trigger window drag on left-click-move. **Do not set `--wails-draggable: drag` on the Three.js canvas/mount div** — while `dragging=true`, the library suppresses all `mousedown` events and all non-left-button events via `stopImmediatePropagation`, which breaks OrbitControls right-click. Only set `--wails-draggable: drag` on the title bar.
 
+## Wails3 Known Patterns
+
+### Window State Save/Restore
+
+Window position/size restoration uses a **two-phase approach**:
+
+- **Phase 1 (before `app.Run()`)**: `NewWebviewWindowWithOptions` に保存済み座標を渡す。`ScreenNearestDipPoint` は Run() 前に nil を返すため、サイズは安全な上限でクランプのみ。`InitialPosition: application.WindowXY` を明示的に指定しないと X/Y が無視され中央配置になる。
+- **Phase 2 (after `app.Run()`)**: `win.OnWindowEvent(WindowRuntimeReady)` 内で `ScreenNearestDipPoint` を使い正式なクランプを行い `SetSize`/`SetPosition` で補正。`ApplicationStarted` では `SetSize` が効かない場合がある。
+
+終了時の保存は `API.Quit()` 経由で行う。`WindowClosing` 時点ではウィンドウ破棄が進行中のため `Position()`/`Size()` が (0,0) を返すことがある。フロントエンドの閉じるボタンは `Window.Close()` ではなく `Quit()` binding を呼ぶ。
+
+### Frameless Window Resize Handles
+
+Frameless ウィンドウではコンテンツがウィンドウ端に密着するとリサイズハンドル（5px）が塞がれる。Three.js canvas のような全面要素は `calc(100vw - 10px)` × `calc(100vh - 10px)` + `margin: 5px` でリサイズ領域を確保すること。
+
+### Runtime Import
+
+`main.jsx` で `import '@wailsio/runtime'` をベア import しておくこと。個別の名前付き import（`import { Window } from '@wailsio/runtime'`）だけでは `drag.js` の副作用が有効化されない場合がある。
+
+### Worktree / Junction
+
+ワークツリーでは node_modules をメインリポジトリからジャンクション（Windows）でリンクする。ワークツリー側で `npm install` を実行するとジャンクションが破壊される。パッケージの追加・削除は必ずメイン側で行う。
+
+**ワークツリーでのセッション開始時（必須）**: `_cmd/egov/frontend/node_modules` が存在しない場合、以下のコマンドでメインリポジトリからジャンクションを作成すること。ビルドや `task dev` の前に必ず実行する。
+
+```powershell
+# PowerShell で実行（cmd の mklink /J でも可）
+New-Item -ItemType Junction -Path "_cmd\egov\frontend\node_modules" -Target "D:\Go\Projects\egov\_cmd\egov\frontend\node_modules"
+```
+
+同様に `frontend/dist` も存在しないとGoの `//go:embed all:frontend/dist` がビルドエラーになる。空ディレクトリを作成するか、ジャンクションを作成すること。
+
+```powershell
+# 空ディレクトリで十分（ビルド時に上書きされる）
+New-Item -ItemType Directory -Path "_cmd\egov\frontend\dist" -Force
+```
+
+`build/Taskfile.yml` の `install:frontend:deps` は `status: test -d node_modules` で存在チェックに変更済み（`generates: node_modules` はViteキャッシュで誤検知し不要な npm install を走らせるため）。`wails3 update build-assets` を実行すると `build/Taskfile.yml` が上書きされるため、再修正が必要。
+
 ## Key Configuration Files
 
 - `_cmd/egov/build/config.yml` — Wails3 app metadata and dev server settings

@@ -7,7 +7,7 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -46,13 +46,15 @@ func main() {
 		initialFile = os.Args[1]
 	}
 
+	setupLogger()
+
 	if err := egov.DistributeLocales(); err != nil {
-		log.Printf("locales distribute error: %v", err)
+		slog.Warn("locales distribute error", "err", err)
 	}
 
 	settings, err := egov.LoadSettings()
 	if err != nil {
-		log.Printf("settings load error: %v", err)
+		slog.Warn("settings load error", "err", err)
 		settings = &egov.Settings{}
 	}
 
@@ -63,7 +65,7 @@ func main() {
 		if !isServer {
 			if initialFile != "" {
 				if err := sendIPC(initialFile); err != nil {
-					log.Printf("IPC send error: %v", err)
+					slog.Error("IPC send error", "err", err)
 				}
 			}
 			return
@@ -73,7 +75,8 @@ func main() {
 	// 起動時ランダムトークンを生成
 	tokenBytes := make([]byte, 16)
 	if _, err := rand.Read(tokenBytes); err != nil {
-		log.Fatal(err)
+		slog.Error("failed to generate token", "err", err)
+		os.Exit(1)
 	}
 	secret := hex.EncodeToString(tokenBytes)
 
@@ -87,7 +90,8 @@ func main() {
 	// ローカルファイル配信用サーバをランダムポートで起動
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("failed to listen", "err", err)
+		os.Exit(1)
 	}
 	fileServerPort := listener.Addr().(*net.TCPAddr).Port
 	go http.Serve(listener, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -150,11 +154,13 @@ func main() {
 		version += "+DEV"
 	}
 
+	api := egov.NewApi(initialFile, fileServerPort, secret, settings, version)
+
 	app := application.New(application.Options{
 		Name:        "egov",
 		Description: "A demo of using raw HTML & CSS",
 		Services: []application.Service{
-			application.NewService(egov.NewApi(initialFile, fileServerPort, secret, settings, version)),
+			application.NewService(api),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
@@ -180,44 +186,29 @@ func main() {
 		BackgroundColour:       application.NewRGB(27, 38, 54),
 		URL:                    "/",
 		Frameless:              true,
+		MinWidth:               400,
+		MinHeight:              300,
 		OpenInspectorOnStartup: debug,
 		EnableFileDrop:         true,
 	}
 
-	// 前回のウィンドウ位置・サイズを復元（スクリーンに収まるよう調整）
-	// NewWithOptions に直接渡すことで位置とサイズをアトミックに適用し、
-	// DPI 変換が正しいスクリーンで行われるようにする。
-	// SetPosition は app.Run() 前は impl==nil のため無視されるため、この方法が必要。
-	if ws := settings.Window; ws.Width > 0 && ws.Height > 0 {
-		w, h := ws.Width, ws.Height
-		x, y := ws.X, ws.Y
-		// ウィンドウ中心に最も近いスクリーンを取得してサイズと位置を制限
-		cx, cy := x+w/2, y+h/2
-		if screen := application.ScreenNearestDipPoint(application.Point{X: cx, Y: cy}); screen != nil {
-			wa := screen.WorkArea
-			if w > wa.Width {
-				w = wa.Width
-			}
-			if h > wa.Height {
-				h = wa.Height
-			}
-			if x < wa.X {
-				x = wa.X
-			}
-			if y < wa.Y {
-				y = wa.Y
-			}
-			if x+w > wa.X+wa.Width {
-				x = wa.X + wa.Width - w
-			}
-			if y+h > wa.Y+wa.Height {
-				y = wa.Y + wa.Height - h
-			}
+	// 前回のウィンドウ位置・サイズを復元。
+	// app.Run() 前は ScreenNearestDipPoint が使えないため、
+	// ここでは安全な上限でクランプし、Run() 後にスクリーン情報で再調整する。
+	savedWS := settings.Window
+	if savedWS.Width > 0 && savedWS.Height > 0 {
+		w, h := savedWS.Width, savedWS.Height
+		const fallbackMaxW, fallbackMaxH = 1280, 800
+		if w > fallbackMaxW {
+			w = fallbackMaxW
+		}
+		if h > fallbackMaxH {
+			h = fallbackMaxH
 		}
 		winOpts.Width = w
 		winOpts.Height = h
-		winOpts.X = x
-		winOpts.Y = y
+		winOpts.X = savedWS.X
+		winOpts.Y = savedWS.Y
 		winOpts.InitialPosition = application.WindowXY
 	}
 
@@ -228,14 +219,62 @@ func main() {
 		win.SetAlwaysOnTop(true)
 	}
 
-	// 閉じる時にウィンドウ位置・サイズを保存
-	win.OnWindowEvent(events.Common.WindowClosing, func(e *application.WindowEvent) {
-		w, h := win.Size()
+	// WindowRuntimeReady でウィンドウ準備完了を待ってから
+	// 保存済みの位置・サイズをスクリーンにクランプして適用する。
+	if savedWS.Width > 0 && savedWS.Height > 0 {
+		win.OnWindowEvent(events.Common.WindowRuntimeReady, func(e *application.WindowEvent) {
+			w, h := savedWS.Width, savedWS.Height
+			x, y := savedWS.X, savedWS.Y
+
+			cx, cy := x+w/2, y+h/2
+			screen := application.ScreenNearestDipPoint(application.Point{X: cx, Y: cy})
+			if screen == nil {
+				return
+			}
+			wa := screen.WorkArea
+
+			const margin = 10
+			maxW := wa.Width - margin*2
+			maxH := wa.Height - margin*2
+			if maxW < 400 {
+				maxW = 400
+			}
+			if maxH < 300 {
+				maxH = 300
+			}
+			if w > maxW {
+				w = maxW
+			}
+			if h > maxH {
+				h = maxH
+			}
+			if x < wa.X+margin {
+				x = wa.X + margin
+			}
+			if y < wa.Y+margin {
+				y = wa.Y + margin
+			}
+			if x+w > wa.X+wa.Width-margin {
+				x = wa.X + wa.Width - margin - w
+			}
+			if y+h > wa.Y+wa.Height-margin {
+				y = wa.Y + wa.Height - margin - h
+			}
+			win.SetSize(w, h)
+			win.SetPosition(x, y)
+		})
+	}
+
+	// フロントエンドから API.Quit() 経由で呼ばれる。
+	// ウィンドウ破棄前に Position()/Size() を取得して保存する。
+	api.SetQuitFunc(func() {
 		x, y := win.Position()
+		w, h := win.Size()
 		settings.Window = egov.WindowSettings{X: x, Y: y, Width: w, Height: h}
 		if err := egov.SaveSettings(settings); err != nil {
-			log.Printf("settings save error: %v", err)
+			slog.Error("settings save error", "err", err)
 		}
+		app.Quit()
 	})
 
 	// IPC経由で受信したファイルパスをホワイトリストに追加してフロントエンドへ転送
@@ -252,12 +291,20 @@ func main() {
 		}
 	}()
 
-	// Run the application. This blocks until the application has been exited.
-	err = app.Run()
-	// If an error occurred while running the application, log it and exit.
-	if err != nil {
-		log.Fatal(err)
+	if err = app.Run(); err != nil {
+		slog.Error("application error", "err", err)
+		os.Exit(1)
 	}
+}
+
+func setupLogger() {
+	level := slog.LevelInfo
+	if isDev {
+		level = slog.LevelDebug
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: level,
+	})))
 }
 
 // isAllowedOrigin reports whether a CORS Origin header should be reflected.
