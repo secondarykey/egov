@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -264,8 +265,12 @@ func main() {
 			y = wa.Y + wa.Height - margin - h
 		}
 		slog.Debug("phase2: applying window state", "w", w, "h", h, "x", x, "y", y)
-		win.SetSize(w, h)
-		win.SetPosition(x, y)
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			win.SetSize(w, h)
+			win.SetPosition(x, y)
+			slog.Debug("phase2: applied after delay")
+		}()
 	})
 
 	// フロントエンドから API.Quit() 経由で呼ばれる。
