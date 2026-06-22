@@ -548,26 +548,33 @@ export default function Player() {
   }, [])
 
   useEffect(() => {
+    let frameSeeking = false
+    const onSeeked = () => { frameSeeking = false }
+    const video = videoRef.current
+    video?.addEventListener('seeked', onSeeked)
+
     const onKeyDown = (e) => {
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
-      const video = videoRef.current
       if (!video?.src) return
       e.preventDefault()
       const forward = e.key === 'ArrowRight'
       if (video.paused) {
+        if (frameSeeking) return
+        frameSeeking = true
         const fps = detectedFpsRef.current > 1 ? detectedFpsRef.current : 30
         const step = 1 / fps
         video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? step : -step)))
         setCurrentTime(video.currentTime)
-        textureRef.current.needsUpdate = true
-        requestRenderRef.current?.()
       } else {
         if (e.repeat) return
         doZoneSeek(5, forward)
       }
     }
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      video?.removeEventListener('seeked', onSeeked)
+    }
   }, [])
 
   // currentTime の表示要否を timeupdate ハンドラへ伝えるための ref 同期。
