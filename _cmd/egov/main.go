@@ -271,6 +271,7 @@ func main() {
 	api.SetQuitFunc(func() {
 		x, y := win.Position()
 		w, h := win.Size()
+		slog.Debug("quit: saving window state", "x", x, "y", y, "w", w, "h", h)
 		settings.Window = egov.WindowSettings{X: x, Y: y, Width: w, Height: h}
 		if err := egov.SaveSettings(settings); err != nil {
 			slog.Error("settings save error", "err", err)
