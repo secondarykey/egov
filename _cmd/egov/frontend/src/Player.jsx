@@ -343,6 +343,12 @@ export default function Player() {
     sphereRef.current.visible = mode === 'vr'
     planeRef.current.visible  = mode !== 'vr'
 
+    const mount = mountRef.current
+    if (mount) {
+      camera.aspect = mount.clientWidth / mount.clientHeight
+      rendererRef.current?.setSize(mount.clientWidth, mount.clientHeight)
+    }
+
     if (mode === 'vr') {
       const off = vrOffsetsRef.current[vrStart] ?? { x: 0, y: 0 }
       camera.position.set(off.x, off.y, off.z ?? 0.1)
