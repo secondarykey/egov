@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -220,65 +219,57 @@ func main() {
 		win.SetAlwaysOnTop(true)
 	}
 
-	// app.Run() 後にスクリーン情報が利用可能になったら、
-	// 保存済みの位置・サイズを正しいスクリーンにクランプして適用する。
-	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(e *application.ApplicationEvent) {
-		if savedWS.Width <= 0 || savedWS.Height <= 0 {
-			return
-		}
-		w, h := savedWS.Width, savedWS.Height
-		x, y := savedWS.X, savedWS.Y
-		slog.Debug("phase2: restoring window state", "savedW", w, "savedH", h, "savedX", x, "savedY", y)
+	// WindowRuntimeReady でウィンドウ準備完了を待ってから
+	// 保存済みの位置・サイズをスクリーンにクランプして適用する。
+	if savedWS.Width > 0 && savedWS.Height > 0 {
+		win.OnWindowEvent(events.Common.WindowRuntimeReady, func(e *application.WindowEvent) {
+			w, h := savedWS.Width, savedWS.Height
+			x, y := savedWS.X, savedWS.Y
 
-		cx, cy := x+w/2, y+h/2
-		screen := application.ScreenNearestDipPoint(application.Point{X: cx, Y: cy})
-		if screen == nil {
-			return
-		}
-		wa := screen.WorkArea
+			cx, cy := x+w/2, y+h/2
+			screen := application.ScreenNearestDipPoint(application.Point{X: cx, Y: cy})
+			if screen == nil {
+				return
+			}
+			wa := screen.WorkArea
 
-		const margin = 10
-		maxW := wa.Width - margin*2
-		maxH := wa.Height - margin*2
-		if maxW < 400 {
-			maxW = 400
-		}
-		if maxH < 300 {
-			maxH = 300
-		}
-		if w > maxW {
-			w = maxW
-		}
-		if h > maxH {
-			h = maxH
-		}
-		if x < wa.X+margin {
-			x = wa.X + margin
-		}
-		if y < wa.Y+margin {
-			y = wa.Y + margin
-		}
-		if x+w > wa.X+wa.Width-margin {
-			x = wa.X + wa.Width - margin - w
-		}
-		if y+h > wa.Y+wa.Height-margin {
-			y = wa.Y + wa.Height - margin - h
-		}
-		slog.Debug("phase2: applying window state", "w", w, "h", h, "x", x, "y", y)
-		go func() {
-			time.Sleep(100 * time.Millisecond)
+			const margin = 10
+			maxW := wa.Width - margin*2
+			maxH := wa.Height - margin*2
+			if maxW < 400 {
+				maxW = 400
+			}
+			if maxH < 300 {
+				maxH = 300
+			}
+			if w > maxW {
+				w = maxW
+			}
+			if h > maxH {
+				h = maxH
+			}
+			if x < wa.X+margin {
+				x = wa.X + margin
+			}
+			if y < wa.Y+margin {
+				y = wa.Y + margin
+			}
+			if x+w > wa.X+wa.Width-margin {
+				x = wa.X + wa.Width - margin - w
+			}
+			if y+h > wa.Y+wa.Height-margin {
+				y = wa.Y + wa.Height - margin - h
+			}
 			win.SetSize(w, h)
 			win.SetPosition(x, y)
-			slog.Debug("phase2: applied after delay")
-		}()
-	})
+		})
+	}
 
 	// フロントエンドから API.Quit() 経由で呼ばれる。
 	// ウィンドウ破棄前に Position()/Size() を取得して保存する。
 	api.SetQuitFunc(func() {
 		x, y := win.Position()
 		w, h := win.Size()
-		slog.Debug("quit: saving window state", "x", x, "y", y, "w", w, "h", h)
 		settings.Window = egov.WindowSettings{X: x, Y: y, Width: w, Height: h}
 		if err := egov.SaveSettings(settings); err != nil {
 			slog.Error("settings save error", "err", err)
