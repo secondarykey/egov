@@ -794,13 +794,37 @@ export default function Player() {
   }
 
   const handleSnapshot = () => {
-    const canvas = rendererRef.current?.domElement
-    if (!canvas) return
-    // preserveDrawingBuffer を切ったため、読み出し直前に同フレームで再描画する
-    renderOnceRef.current?.()
-    const url = canvas.toDataURL('image/png')
+    const video = videoRef.current
+    if (!video?.videoWidth) return
+    const vw = video.videoWidth, vh = video.videoHeight
+    const m = modeRef.current
+    const rot = rotation
+
+    let sx = 0, sy = 0, sw = vw, sh = vh
+    if (m === 'vr') {
+      const cfg = VR_START[vrStartRef.current] ?? VR_START.left
+      sw = vw * cfg.repeat[0]
+      sh = vh * cfg.repeat[1]
+      sx = vw * cfg.offset[0]
+      sy = vh * (1 - cfg.offset[1] - cfg.repeat[1])
+    }
+
+    const rotated = rot % 180 !== 0
+    const dw = rotated ? sh : sw
+    const dh = rotated ? sw : sh
+
+    const c = document.createElement('canvas')
+    c.width = dw; c.height = dh
+    const ctx = c.getContext('2d')
+    if (rot) {
+      ctx.translate(dw / 2, dh / 2)
+      ctx.rotate((rot * Math.PI) / 180)
+      ctx.translate(-sw / 2, -sh / 2)
+    }
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh)
+
     const a = document.createElement('a')
-    a.href = url
+    a.href = c.toDataURL('image/png')
     a.download = `egov_${Date.now()}.png`
     a.click()
   }
