@@ -426,6 +426,7 @@ export default function Player() {
   const [fileName,    setFileName]    = useState('')
   const [dragging,    setDragging]    = useState(false)
   const [showUI,      setShowUI]      = useState(false)
+  const [nearTopResizeEdge, setNearTopResizeEdge] = useState(false)
   const [mode,        setMode]        = useState('fit')
   const [vrStart,     setVrStart]     = useState('left')
   const [startOpen,   setStartOpen]   = useState(false)
@@ -1573,8 +1574,13 @@ export default function Player() {
           zIndex: 10,
           opacity: showUI ? 1 : 0,
           pointerEvents: showUI ? 'auto' : 'none',
+          // 最上部5px（Wails3のリサイズ判定領域）は cursor を明示せず、
+          // ランタイムが document.body に設定するリサイズカーソルを継承させる
+          ...(nearTopResizeEdge ? {} : { cursor: 'grab', '&:active': { cursor: 'grabbing' } }),
         }}
         style={{ '--wails-draggable': 'drag' }}
+        onMouseMove={e => setNearTopResizeEdge(e.clientY < 6)}
+        onMouseLeave={() => setNearTopResizeEdge(false)}
       >
         {/* ハンバーガーメニュー */}
         <Box style={{ '--wails-draggable': 'no-drag' }}>
