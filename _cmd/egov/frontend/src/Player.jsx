@@ -1223,9 +1223,8 @@ export default function Player() {
       data-file-drop-target
       style={{
         position: 'relative',
-        width: 'calc(100vw - 10px)',
-        height: 'calc(100vh - 10px)',
-        margin: '5px',
+        width: '100vw',
+        height: '100vh',
         background: '#000',
       }}
       onMouseMove={handleMouseMove}
@@ -1242,8 +1241,8 @@ export default function Player() {
             ? {
                 position: 'absolute',
                 top: '50%', left: '50%',
-                width: 'calc(100vh - 10px)',
-                height: 'calc(100vw - 10px)',
+                width: '100vh',
+                height: '100vw',
                 transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
               }
             : {
