@@ -57,8 +57,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
 
   useEffect(() => { GetVersion().then(setVersion) }, [])
   const [playback, setPlayback] = useState({ defaultMode: 'fit', language: 'en', activeColor: '#4fc3f7', thumbnailEnabled: true })
-  const [savedOffsets, setSavedOffsets] = useState(null)
-  const [vr, setVr] = useState({ fov: 75, dragSensitivity: 0.004, scrollSpeed: 0.05, defaultStart: 'left' })
+  const [vr, setVr] = useState({ initialPitch: 0, initialYaw: 0, fov: 75, dragSensitivity: 0.004, scrollSpeed: 0.05, defaultStart: 'left' })
   const [controls, setControls] = useState({
     clickTimeoutMs: 300, doubleClickSeekSecs: 10, tripleClickSeekSecs: 60,
     uiHideDelayMs: 1500, uiHideOnLeaveDelayMs: 800,
@@ -72,12 +71,13 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
       setPlayback({ defaultMode: s.playback.defaultMode, language: s.playback.language, activeColor: s.playback.activeColor || '#4fc3f7', thumbnailEnabled: thumbEnabledProp ?? s.playback.thumbnailEnabled ?? true })
       setOrigLanguage(s.playback.language)
       setVr({
+        initialPitch: s.vr.initialPitch ?? 0,
+        initialYaw: s.vr.initialYaw ?? 0,
         fov: s.vr.fov,
         dragSensitivity: s.vr.dragSensitivity,
         scrollSpeed: s.vr.scrollSpeed,
         defaultStart: s.vr.defaultStart,
       })
-      setSavedOffsets(s.vr.offsets)
       setControls(s.controls)
       setAppSettings(s.app)
     })
@@ -87,7 +87,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
     await Promise.all([
       UpdateDefaultMode(playback.defaultMode),
       UpdateActiveColor(playback.activeColor),
-      UpdateVRSettings({ ...vr, offsets: savedOffsets }),
+      UpdateVRSettings(vr),
       UpdateControlSettings(controls),
       UpdateAppSettings(appSettings),
     ])
@@ -109,7 +109,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
 
   const defaults = {
     playback: { defaultMode: 'fit', activeColor: '#4fc3f7' },
-    vr: { fov: 75, dragSensitivity: 0.004, scrollSpeed: 0.05, defaultStart: 'left' },
+    vr: { initialPitch: 0, initialYaw: 0, fov: 75, dragSensitivity: 0.004, scrollSpeed: 0.05, defaultStart: 'left' },
     controls: { clickTimeoutMs: 300, doubleClickSeekSecs: 10, fastSeekSecs: 60, uiHideDelayMs: 1500, uiHideOnLeaveDelayMs: 800 },
     app: { singleInstance: false, acceptInactiveClick: false, miniProgressBar: false, thumbnailEnabled: true },
   }

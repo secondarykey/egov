@@ -7,25 +7,15 @@ import (
 	"sync"
 )
 
-type VROffsetXYZ struct {
-	X float64 `json:"x"`
-	Y float64 `json:"y"`
-	Z float64 `json:"z"`
-}
-
-type VROffsets struct {
-	Left   VROffsetXYZ `json:"left"`
-	Right  VROffsetXYZ `json:"right"`
-	Top    VROffsetXYZ `json:"top"`
-	Bottom VROffsetXYZ `json:"bottom"`
-}
-
 type VRSettings struct {
-	Offsets         VROffsets `json:"offsets"`
-	FOV             float64   `json:"fov"`
-	DragSensitivity float64   `json:"dragSensitivity"`
-	ScrollSpeed     float64   `json:"scrollSpeed"`
-	DefaultStart    string    `json:"defaultStart"`
+	// InitialPitch/InitialYaw は視聴開始時の頭の向き（度）。
+	// 目線の高さ合わせはカメラの平行移動ではなく回転で行う。
+	InitialPitch    float64 `json:"initialPitch"`
+	InitialYaw      float64 `json:"initialYaw"`
+	FOV             float64 `json:"fov"`
+	DragSensitivity float64 `json:"dragSensitivity"`
+	ScrollSpeed     float64 `json:"scrollSpeed"`
+	DefaultStart    string  `json:"defaultStart"`
 }
 
 type PlaybackSettings struct {
@@ -93,18 +83,13 @@ func SaveSettings(s *Settings) error {
 }
 
 func defaultSettings() *Settings {
-	offset := VROffsetXYZ{X: 0, Y: 0, Z: 0.1}
 	return &Settings{
 		App: AppSettings{
 			SingleInstance: false,
 		},
 		VR: VRSettings{
-			Offsets: VROffsets{
-				Left:   offset,
-				Right:  offset,
-				Top:    offset,
-				Bottom: offset,
-			},
+			InitialPitch:    0,
+			InitialYaw:      0,
 			FOV:             75,
 			DragSensitivity: 0.004,
 			ScrollSpeed:     0.05,

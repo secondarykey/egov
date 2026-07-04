@@ -5,9 +5,10 @@
   },
   "vr": {
     "selectViewpoint": "Select Viewpoint",
-    "xOffset": "X Offset",
-    "yOffset": "Y Offset",
-    "zOffset": "Z Offset",
+    "pitch": "Pitch (Up/Down)",
+    "yaw": "Yaw (Left/Right)",
+    "fov": "Field of View",
+    "saveView": "Save current view as default",
     "resetToZero": "Reset to 0",
     "clickToClose": "Click to close",
     "changeViewpoint": "Change Viewpoint",

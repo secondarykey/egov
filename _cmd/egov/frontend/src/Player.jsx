@@ -58,6 +58,18 @@ const fmt = (s) => {
   return `${m}:${sec.toString().padStart(2, '0')}`
 }
 
+const deg2rad = (d) => (d * Math.PI) / 180
+const rad2deg = (r) => (r * 180) / Math.PI
+
+// headGroup（首）の向きを設定する。ワールドY軸ヨー → ローカルX軸ピッチの順。
+const WORLD_Y = new THREE.Vector3(0, 1, 0)
+const applyHeadRotation = (group, yaw, pitch) => {
+  if (!group) return
+  group.rotation.set(0, 0, 0)
+  group.rotateOnWorldAxis(WORLD_Y, yaw)
+  group.rotateX(pitch)
+}
+
 // 再生位置表示。timeupdate（約4回/秒）による再レンダーを
 // このコンポーネント内に閉じ込め、Player 全体の再レンダーを避ける。
 const TimeDisplay = memo(function TimeDisplay({ video, duration, visible }) {
@@ -361,7 +373,10 @@ export default function Player() {
   const thumbCanvasRef  = useRef(null)
   const thumbEnabledRef = useRef(true)
   const vrStartRef      = useRef('left')
-  const vrOffsetsRef    = useRef({ left: { x: 0, y: 0, z: 0.1 }, right: { x: 0, y: 0, z: 0.1 }, top: { x: 0, y: 0, z: 0.1 }, bottom: { x: 0, y: 0, z: 0.1 } })
+  const vrYawRef        = useRef(0)   // 現在の頭の向き（ラジアン、セッション中保持）
+  const vrPitchRef      = useRef(0)
+  const vrInitYawRef    = useRef(0)   // 保存済みの既定の向き（ラジアン）
+  const vrInitPitchRef  = useRef(0)
   const headGroupRef    = useRef(null)
   const rendererRef     = useRef(null)
   const requestRenderRef = useRef(null)   // 単発レンダーを要求（操作・状態変化時）
@@ -405,7 +420,7 @@ export default function Player() {
   const [seekFeedback,  setSeekFeedback]  = useState(null)
   const [thumbEnabled, setThumbEnabled] = useState(true)
   const [language,     setLanguage]     = useState('en')
-  const [vrOffsets,      setVrOffsets]      = useState({ left: { x: 0, y: 0, z: 0.1 }, right: { x: 0, y: 0, z: 0.1 }, top: { x: 0, y: 0, z: 0.1 }, bottom: { x: 0, y: 0, z: 0.1 } })
+  const [vrView,         setVrView]         = useState({ pitch: 0, yaw: 0, fov: 75 })   // オーバーレイ表示用（度）
   const [availableLangs, setAvailableLangs] = useState([])
   const [serverUrl,      setServerUrl]      = useState('')
   const [settingsOpen,   setSettingsOpen]   = useState(false)
@@ -634,9 +649,9 @@ export default function Player() {
     }
 
     if (mode === 'vr') {
-      const off = vrOffsetsRef.current[vrStart] ?? { x: 0, y: 0 }
-      camera.position.set(off.x, off.y, off.z ?? 0.1)
-      headGroup.rotation.set(0, 0, 0)
+      camera.position.set(0, 0, 0.1)
+      // セッション中の頭の向きを維持して復帰する
+      applyHeadRotation(headGroup, vrYawRef.current, vrPitchRef.current)
       camera.fov     = vrFovRef.current
       controls.enabled = false
       camera.updateProjectionMatrix()
@@ -691,16 +706,6 @@ export default function Player() {
     if (!canvas) return
 
     let startX = 0, startY = 0, active = false
-    let yaw = 0, pitch = 0
-    const worldY = new THREE.Vector3(0, 1, 0)
-
-    const applyRotation = () => {
-      const group = headGroupRef.current
-      if (!group) return
-      group.rotation.set(0, 0, 0)
-      group.rotateOnWorldAxis(worldY, yaw)
-      group.rotateX(pitch)
-    }
 
     const onPointerDown = (e) => {
       if (e.button !== 2) return
@@ -711,10 +716,12 @@ export default function Player() {
     const onPointerMove = (e) => {
       if (!active) return
       const sensitivity = vrSensitivityRef.current
-      yaw   -= (e.clientX - startX) * sensitivity
-      pitch  = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch - (e.clientY - startY) * sensitivity))
+      // 向きは ref に保持し、モード切替やスライダー調整と整合させる
+      vrYawRef.current  -= (e.clientX - startX) * sensitivity
+      vrPitchRef.current = Math.max(-Math.PI / 2, Math.min(Math.PI / 2,
+        vrPitchRef.current - (e.clientY - startY) * sensitivity))
       startX = e.clientX; startY = e.clientY
-      applyRotation()
+      applyHeadRotation(headGroupRef.current, vrYawRef.current, vrPitchRef.current)
       requestRenderRef.current?.()
     }
     const onPointerUp = () => { active = false }
@@ -730,10 +737,43 @@ export default function Player() {
     }
   }, [mode])
 
-  // VRオフセットの永続化: 保存済みのVR設定（fov等）を取得してオフセットだけ差し替える
-  const persistVROffsets = async (offsets) => {
+  // 現在の頭の向きとFOVを既定として保存する。
+  // 他のVR設定（感度等）は保存済みの値を維持する。
+  const persistVRView = async () => {
+    const fov = cameraRef.current?.fov ?? vrFovRef.current
+    vrInitPitchRef.current = vrPitchRef.current
+    vrInitYawRef.current   = vrYawRef.current
+    vrFovRef.current       = fov
     const s = await GetSettings()
-    UpdateVRSettings({ ...s.vr, offsets })
+    UpdateVRSettings({
+      ...s.vr,
+      initialPitch: rad2deg(vrPitchRef.current),
+      initialYaw:   rad2deg(vrYawRef.current),
+      fov,
+    })
+  }
+
+  // VR視点オーバーレイを開く。スライダーへ現在の向きを反映する。
+  const openVrOverlay = () => {
+    setVrView({
+      pitch: rad2deg(vrPitchRef.current),
+      yaw:   rad2deg(vrYawRef.current),
+      fov:   cameraRef.current?.fov ?? vrFovRef.current,
+    })
+    setStartOpen(true)
+  }
+
+  // オーバーレイのスライダー変更を即時反映する
+  const applyVrView = (next) => {
+    setVrView(next)
+    vrPitchRef.current = deg2rad(next.pitch)
+    vrYawRef.current   = deg2rad(next.yaw)
+    applyHeadRotation(headGroupRef.current, vrYawRef.current, vrPitchRef.current)
+    if (cameraRef.current && cameraRef.current.fov !== next.fov) {
+      cameraRef.current.fov = next.fov
+      cameraRef.current.updateProjectionMatrix()
+    }
+    requestRenderRef.current?.()
   }
 
   // 範囲の解除・初期化は SeekBarArea 側の effect が行う
@@ -792,10 +832,13 @@ export default function Player() {
       vrFovRef.current         = s.vr?.fov || 75
       vrSensitivityRef.current = s.vr?.dragSensitivity || 0.004
       vrScrollSpeedRef.current = s.vr?.scrollSpeed || 0.05
-      if (s.vr?.offsets) {
-        setVrOffsets(s.vr.offsets)
-        vrOffsetsRef.current = s.vr.offsets
-      }
+      const initPitch = deg2rad(s.vr?.initialPitch ?? 0)
+      const initYaw   = deg2rad(s.vr?.initialYaw ?? 0)
+      vrInitPitchRef.current = initPitch
+      vrInitYawRef.current   = initYaw
+      vrPitchRef.current     = initPitch
+      vrYawRef.current       = initYaw
+      setVrView({ pitch: s.vr?.initialPitch ?? 0, yaw: s.vr?.initialYaw ?? 0, fov: s.vr?.fov || 75 })
       const start = s.vr?.defaultStart || 'left'
       setVrStart(start)
       vrStartRef.current = start
@@ -929,7 +972,10 @@ export default function Player() {
     if (!camera || !controls) return
 
     if (mode === 'vr') {
-      if (headGroupRef.current) headGroupRef.current.rotation.set(0, 0, 0)
+      // 保存済みの既定の向きに戻す
+      vrPitchRef.current = vrInitPitchRef.current
+      vrYawRef.current   = vrInitYawRef.current
+      applyHeadRotation(headGroupRef.current, vrYawRef.current, vrPitchRef.current)
       camera.fov = vrFovRef.current
       camera.updateProjectionMatrix()
     } else if (mode === 'fit') {
@@ -1413,30 +1459,27 @@ export default function Player() {
             sx={{ width: 340, mt: 2 }}
             onClick={e => e.stopPropagation()}
           >
-            {[{ axis: 'x', label: t('vr.xOffset') }, { axis: 'y', label: t('vr.yOffset') }, { axis: 'z', label: t('vr.zOffset') }].map(({ axis, label }) => (
-              <Box key={axis} sx={{ mb: 1 }}>
+            {[
+              { key: 'pitch', label: t('vr.pitch'), min: -90,  max: 90,  step: 0.5, reset: 0 },
+              { key: 'yaw',   label: t('vr.yaw'),   min: -180, max: 180, step: 0.5, reset: 0 },
+              { key: 'fov',   label: t('vr.fov'),   min: 20,   max: 100, step: 1,   reset: 75 },
+            ].map(({ key, label, min, max, step, reset }) => (
+              <Box key={key} sx={{ mb: 1 }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
                   <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)' }}>
                     {label}
                   </Typography>
                   <Stack direction="row" alignItems="center" spacing={0.5}>
                     <Typography variant="caption" sx={{ color: 'white', fontFamily: 'monospace' }}>
-                      {(vrOffsets[vrStart]?.[axis] ?? 0).toFixed(3)}
+                      {`${(vrView[key] ?? 0).toFixed(1)}°`}
                     </Typography>
                     <Tooltip title={t('vr.resetToZero')} placement="top">
                       <IconButton
                         size="small"
                         sx={{ color: 'rgba(255,255,255,0.4)', width: 18, height: 18, '&:hover': { color: 'white' } }}
                         onClick={() => {
-                          const next = { ...vrOffsets, [vrStart]: { ...vrOffsets[vrStart], [axis]: 0 } }
-                          setVrOffsets(next)
-                          vrOffsetsRef.current = next
-                          persistVROffsets(next)
-                          if (cameraRef.current) {
-                            cameraRef.current.position[axis] = 0
-                            controlsRef.current?.update()
-                            requestRenderRef.current?.()
-                          }
+                          applyVrView({ ...vrView, [key]: reset })
+                          persistVRView()
                         }}
                       >
                         <RestartAltIcon sx={{ fontSize: 14 }} />
@@ -1445,19 +1488,10 @@ export default function Player() {
                   </Stack>
                 </Stack>
                 <Slider
-                  min={-1} max={1} step={0.005}
-                  value={vrOffsets[vrStart]?.[axis] ?? 0}
-                  onChange={(_, v) => {
-                    const next = { ...vrOffsets, [vrStart]: { ...vrOffsets[vrStart], [axis]: v } }
-                    setVrOffsets(next)
-                    vrOffsetsRef.current = next
-                    if (cameraRef.current && controlsRef.current) {
-                      cameraRef.current.position[axis] = v
-                      controlsRef.current.update()
-                      requestRenderRef.current?.()
-                    }
-                  }}
-                  onChangeCommitted={() => persistVROffsets(vrOffsetsRef.current)}
+                  min={min} max={max} step={step}
+                  value={vrView[key] ?? 0}
+                  onChange={(_, v) => applyVrView({ ...vrView, [key]: v })}
+                  onChangeCommitted={() => persistVRView()}
                   sx={{
                     color: '#4fc3f7',
                     '& .MuiSlider-thumb': { width: 16, height: 16 },
@@ -1465,6 +1499,19 @@ export default function Player() {
                 />
               </Box>
             ))}
+            <Button
+              fullWidth
+              size="small"
+              sx={{
+                mt: 0.5, color: 'white',
+                bgcolor: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.25)',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.18)' },
+              }}
+              onClick={() => persistVRView()}
+            >
+              {t('vr.saveView')}
+            </Button>
           </Box>
           <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.35)', mt: 1 }}>
             {t('vr.clickToClose')}
@@ -1568,7 +1615,7 @@ export default function Player() {
             <Tooltip title={t('vr.changeViewpoint')} placement="bottom">
               <IconButton
                 sx={{ color: 'white', width: 28, height: 28 }}
-                onClick={() => setStartOpen(true)}
+                onClick={openVrOverlay}
               >
                 <GridViewIcon fontSize="small" />
               </IconButton>
