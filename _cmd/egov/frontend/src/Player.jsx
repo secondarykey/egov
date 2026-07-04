@@ -1573,8 +1573,6 @@ export default function Player() {
           zIndex: 10,
           opacity: showUI ? 1 : 0,
           pointerEvents: showUI ? 'auto' : 'none',
-          cursor: 'grab',
-          '&:active': { cursor: 'grabbing' },
         }}
         style={{ '--wails-draggable': 'drag' }}
       >
