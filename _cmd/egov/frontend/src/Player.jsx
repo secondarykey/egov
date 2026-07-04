@@ -398,6 +398,7 @@ export default function Player() {
   const clickTimerRef           = useRef(null)
   const holdTimerRef            = useRef(null)
   const wasHoldRef              = useRef(false)
+  const lastPointerDownTimeRef  = useRef(0)
   const isMouseHeldRef          = useRef(false)
   const seekZoneTimerRef        = useRef(null)
   const seekZoneRef             = useRef(null)
@@ -1063,25 +1064,34 @@ export default function Player() {
     stopZoneSeek()
   }
 
-  // mousedown を一定時間（clickTimeoutMs）保持し続けたらホールドと判定:
-  // ダブルクリックには依存せず、押しっぱなしでシークオーバーレイを表示する
+  // ダブルクリック: 即座に単純な早送り/巻き戻しを実行（コントローラーは出さない）
+  // シングルクリックでも一定時間（800ms）保持し続けたらコントローラー（オーバーレイ）を表示する
   const handleCanvasMouseDown = (e) => {
     if (e.button !== 0) return
     const pos = { x: e.clientX, y: e.clientY }
-    clearTimeout(holdTimerRef.current)
-    holdTimerRef.current = setTimeout(() => {
-      // 中央25%はデッドゾーン（再生/停止の誤操作防止）
-      const cx = window.innerWidth / 2
-      const deadZone = window.innerWidth * 0.125
-      if (pos.x > cx - deadZone && pos.x < cx + deadZone) return
+    const now = Date.now()
+    const isDouble = e.detail >= 2 || (now - lastPointerDownTimeRef.current) <= clickTimeoutMsRef.current
+    lastPointerDownTimeRef.current = isDouble ? 0 : now
+
+    // 中央25%はデッドゾーン（再生/停止の誤操作防止）
+    const cx = window.innerWidth / 2
+    const deadZone = window.innerWidth * 0.125
+    const inDeadZone = pos.x > cx - deadZone && pos.x < cx + deadZone
+    if (inDeadZone) return
+
+    if (isDouble) {
       clearTimeout(clickTimerRef.current)
       clickTimerRef.current = null
+      doZoneSeek(doubleClickSeekRef.current, pos.x > cx)
+    }
+
+    clearTimeout(holdTimerRef.current)
+    holdTimerRef.current = setTimeout(() => {
       wasHoldRef.current = true
       isMouseHeldRef.current = true
       seekOverlayRef.current = pos
-      doZoneSeek(doubleClickSeekRef.current, pos.x > cx)
       setSeekOverlay(pos)
-    }, clickTimeoutMsRef.current)
+    }, 800)
   }
 
   const handleCanvasMouseUp = () => {
@@ -1102,6 +1112,11 @@ export default function Player() {
     justFocusedRef.current = false
     const video = videoRef.current
     if (!video?.src) return
+    if (e.detail > 1) {
+      clearTimeout(clickTimerRef.current)
+      clickTimerRef.current = null
+      return
+    }
     clearTimeout(clickTimerRef.current)
     const willPlay = video.paused
     clickTimerRef.current = setTimeout(() => {
