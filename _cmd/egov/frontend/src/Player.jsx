@@ -396,12 +396,12 @@ export default function Player() {
   const renderOnceRef    = useRef(null)   // 即時レンダー（スナップショット用）
   const feedbackKeyRef      = useRef(0)
   const clickTimerRef           = useRef(null)
-  const lastPointerDownTimeRef  = useRef(0)
+  const holdTimerRef            = useRef(null)
+  const wasHoldRef              = useRef(false)
   const isMouseHeldRef          = useRef(false)
   const seekZoneTimerRef        = useRef(null)
   const seekZoneRef             = useRef(null)
   const seekOverlayRef          = useRef(null)
-  const overlayShowTimerRef     = useRef(null)
   const fastSeekSecsRef         = useRef(60)
   const seekFeedbackKeyRef  = useRef(0)
   const clickTimeoutMsRef   = useRef(300)
@@ -1057,39 +1057,43 @@ export default function Player() {
   }
 
   const hideSeekOverlay = () => {
-    clearTimeout(overlayShowTimerRef.current)
     isMouseHeldRef.current = false
     seekOverlayRef.current = null
     setSeekOverlay(null)
     stopZoneSeek()
   }
 
-  // mousedown でダブルクリックを検出:
-  // 即シーク → 500ms ホールドでオーバーレイ表示
+  // mousedown を一定時間（clickTimeoutMs）保持し続けたらホールドと判定:
+  // ダブルクリックには依存せず、押しっぱなしでシークオーバーレイを表示する
   const handleCanvasMouseDown = (e) => {
     if (e.button !== 0) return
-    const now = Date.now()
-    const isDouble = e.detail >= 2 || (now - lastPointerDownTimeRef.current) <= clickTimeoutMsRef.current
-    lastPointerDownTimeRef.current = isDouble ? 0 : now
-    if (isDouble) {
+    const pos = { x: e.clientX, y: e.clientY }
+    clearTimeout(holdTimerRef.current)
+    holdTimerRef.current = setTimeout(() => {
       // 中央25%はデッドゾーン（再生/停止の誤操作防止）
       const cx = window.innerWidth / 2
       const deadZone = window.innerWidth * 0.125
-      if (e.clientX > cx - deadZone && e.clientX < cx + deadZone) return
+      if (pos.x > cx - deadZone && pos.x < cx + deadZone) return
       clearTimeout(clickTimerRef.current)
       clickTimerRef.current = null
+      wasHoldRef.current = true
       isMouseHeldRef.current = true
-      const pos = { x: e.clientX, y: e.clientY }
       seekOverlayRef.current = pos
-      doZoneSeek(doubleClickSeekRef.current, e.clientX > cx)
-      overlayShowTimerRef.current = setTimeout(() => setSeekOverlay(pos), 800)
-    }
+      doZoneSeek(doubleClickSeekRef.current, pos.x > cx)
+      setSeekOverlay(pos)
+    }, clickTimeoutMsRef.current)
   }
 
-  const handleCanvasMouseUp = () => { hideSeekOverlay() }
+  const handleCanvasMouseUp = () => {
+    clearTimeout(holdTimerRef.current)
+    if (isMouseHeldRef.current) hideSeekOverlay()
+  }
 
-  // click.detail > 1 はダブルクリックの2回目: タイマーをキャンセルして終了
   const handleCanvasClick = (e) => {
+    if (wasHoldRef.current) {
+      wasHoldRef.current = false
+      return
+    }
     if (justFocusedRef.current && !acceptInactiveRef.current) {
       justFocusedRef.current = false
       clearTimeout(focusTimerRef.current)
@@ -1098,11 +1102,6 @@ export default function Player() {
     justFocusedRef.current = false
     const video = videoRef.current
     if (!video?.src) return
-    if (e.detail > 1) {
-      clearTimeout(clickTimerRef.current)
-      clickTimerRef.current = null
-      return
-    }
     clearTimeout(clickTimerRef.current)
     const willPlay = video.paused
     clickTimerRef.current = setTimeout(() => {
@@ -1111,12 +1110,6 @@ export default function Player() {
       feedbackKeyRef.current++
       setClickFeedback({ type: willPlay ? 'play' : 'pause', key: feedbackKeyRef.current })
     }, clickTimeoutMsRef.current)
-  }
-
-  // dblclick: play/pause タイマーのキャンセルのみ（シークは mousedown で実施済み）
-  const handleCanvasDblClick = () => {
-    clearTimeout(clickTimerRef.current)
-    clickTimerRef.current = null
   }
 
   const handleSnapshot = () => {
@@ -1244,7 +1237,6 @@ export default function Player() {
               }),
         }}
         onClick={handleCanvasClick}
-        onDoubleClick={handleCanvasDblClick}
         onMouseDown={handleCanvasMouseDown}
         onMouseUp={handleCanvasMouseUp}
         onMouseLeave={handleCanvasMouseUp}
