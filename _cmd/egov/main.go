@@ -6,7 +6,6 @@ import (
 	"embed"
 	_ "embed"
 	"encoding/hex"
-	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -52,10 +51,10 @@ func main() {
 		slog.Warn("locales distribute error", "err", err)
 	}
 
+	// LoadSettings はエラー時もデフォルト設定を返すため、そのまま使用できる。
 	settings, err := egov.LoadSettings()
 	if err != nil {
-		slog.Warn("settings load error", "err", err)
-		settings = &egov.Settings{}
+		slog.Warn("settings load error (using defaults)", "err", err)
 	}
 
 	// シングルインスタンスモード: 既存プロセスにファイルを送って終了
@@ -156,9 +155,16 @@ func main() {
 
 	api := egov.NewApi(initialFile, fileServerPort, secret, settings, version)
 
+	// Webview のユーザーデータは固定パスに置く。
+	// 起動ごとの一時ディレクトリだと %TEMP% に溜まり続け、キャッシュも効かない。
+	webviewDir := filepath.Join(os.TempDir(), "egov-webview")
+	if dir, err := egov.SettingsDir(); err == nil {
+		webviewDir = filepath.Join(dir, "webview")
+	}
+
 	app := application.New(application.Options{
 		Name:        "egov",
-		Description: "A demo of using raw HTML & CSS",
+		Description: "Split-screen VR video player",
 		Services: []application.Service{
 			application.NewService(api),
 		},
@@ -169,7 +175,7 @@ func main() {
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
 		Windows: application.WindowsOptions{
-			WebviewUserDataPath: filepath.Join(os.TempDir(), "egov-"+secret),
+			WebviewUserDataPath: webviewDir,
 		},
 	})
 
@@ -283,8 +289,7 @@ func main() {
 			mu.Lock()
 			allowed[path] = struct{}{}
 			mu.Unlock()
-			fileUrl := fmt.Sprintf("http://127.0.0.1:%d/localfile?token=%s&path=%s",
-				fileServerPort, secret, url.QueryEscape(path))
+			fileUrl := egov.LocalFileURL(fileServerPort, secret, path)
 			win.Show()
 			win.Focus()
 			app.Event.Emit("open-file", fileUrl)

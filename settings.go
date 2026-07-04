@@ -4,27 +4,22 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
-type VROffsetXYZ struct {
-	X float64 `json:"x"`
-	Y float64 `json:"y"`
-	Z float64 `json:"z"`
-}
-
-type VROffsets struct {
-	Left   VROffsetXYZ `json:"left"`
-	Right  VROffsetXYZ `json:"right"`
-	Top    VROffsetXYZ `json:"top"`
-	Bottom VROffsetXYZ `json:"bottom"`
-}
-
 type VRSettings struct {
-	Offsets         VROffsets `json:"offsets"`
-	FOV             float64   `json:"fov"`
-	DragSensitivity float64   `json:"dragSensitivity"`
-	ScrollSpeed     float64   `json:"scrollSpeed"`
-	DefaultStart    string    `json:"defaultStart"`
+	// InitialPitch/InitialYaw は視聴開始時の頭の向き（度）。
+	InitialPitch float64 `json:"initialPitch"`
+	InitialYaw   float64 `json:"initialYaw"`
+	// PositionX/Y/Z は視点の平行移動（球半径に対する比率 -1..1）。
+	// 実装上は球体側を逆方向に動かす。X:右+ Y:上+ Z:前+
+	PositionX       float64 `json:"positionX"`
+	PositionY       float64 `json:"positionY"`
+	PositionZ       float64 `json:"positionZ"`
+	FOV             float64 `json:"fov"`
+	DragSensitivity float64 `json:"dragSensitivity"`
+	ScrollSpeed     float64 `json:"scrollSpeed"`
+	DefaultStart    string  `json:"defaultStart"`
 }
 
 type PlaybackSettings struct {
@@ -66,7 +61,13 @@ type Settings struct {
 	Window   WindowSettings   `json:"window"`
 }
 
+// settingsMu serializes writes to settings.json. Wails のバインディング呼び出しは
+// それぞれ別 goroutine で実行されるため、並行保存によるファイル破損を防ぐ。
+var settingsMu sync.Mutex
+
 func SaveSettings(s *Settings) error {
+	settingsMu.Lock()
+	defer settingsMu.Unlock()
 	dir, err := settingsDir()
 	if err != nil {
 		return err
@@ -75,22 +76,24 @@ func SaveSettings(s *Settings) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "settings.json"), data, 0644)
+	// 一時ファイルに書いてから rename することで、クラッシュ時に
+	// settings.json が中途半端な内容になるのを防ぐ。
+	path := filepath.Join(dir, "settings.json")
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 func defaultSettings() *Settings {
-	offset := VROffsetXYZ{X: 0, Y: 0, Z: 0.1}
 	return &Settings{
 		App: AppSettings{
 			SingleInstance: false,
 		},
 		VR: VRSettings{
-			Offsets: VROffsets{
-				Left:   offset,
-				Right:  offset,
-				Top:    offset,
-				Bottom: offset,
-			},
+			InitialPitch:    0,
+			InitialYaw:      0,
 			FOV:             75,
 			DragSensitivity: 0.004,
 			ScrollSpeed:     0.05,
@@ -113,26 +116,34 @@ func defaultSettings() *Settings {
 	}
 }
 
+// LoadSettings loads settings.json. エラー時も nil ではなくデフォルト設定を返すため、
+// 呼び出し側はエラーをログするだけでそのまま使える（ゼロ値設定で動くことはない）。
 func LoadSettings() (*Settings, error) {
+	s := defaultSettings()
 	dir, err := settingsDir()
 	if err != nil {
-		return nil, err
+		return s, err
 	}
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, err
+		return s, err
 	}
-	s := defaultSettings()
 	data, err := os.ReadFile(filepath.Join(dir, "settings.json"))
 	if os.IsNotExist(err) {
 		return s, nil
 	}
 	if err != nil {
-		return nil, err
+		return s, err
 	}
 	if err := json.Unmarshal(data, s); err != nil {
-		return nil, err
+		// 部分的に上書きされた可能性があるため、新しいデフォルトを返す
+		return defaultSettings(), err
 	}
 	return s, nil
+}
+
+// SettingsDir returns the per-user settings directory ($HOME/.egov).
+func SettingsDir() (string, error) {
+	return settingsDir()
 }
 
 func settingsDir() (string, error) {

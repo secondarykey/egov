@@ -5,7 +5,7 @@ go 1.26.1
 require (
 	egov v0.0.0-00010101000000-000000000000
 	github.com/Microsoft/go-winio v0.6.2
-	github.com/wailsapp/wails/v3 v3.0.0-alpha.98
+	github.com/wailsapp/wails/v3 v3.0.0-alpha2.113
 )
 
 require (
@@ -32,7 +32,7 @@ require (
 	github.com/pjbgf/sha1cd v0.6.0 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/skeema/knownhosts v1.3.2 // indirect
-	github.com/wailsapp/wails/webview2 v1.0.24 // indirect
+	github.com/wailsapp/wails/webview2 v1.0.28 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/net v0.55.0 // indirect

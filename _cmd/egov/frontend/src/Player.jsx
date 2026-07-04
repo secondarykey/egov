@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import {
@@ -38,7 +38,7 @@ import SettingsIcon       from '@mui/icons-material/Settings'
 import ReportProblemIcon from '@mui/icons-material/ReportProblem'
 import RotateRightIcon   from '@mui/icons-material/RotateRight'
 import { Events, Window } from '@wailsio/runtime'
-import { GetInitialFile, GetServerURL, GetSettings, Quit, UpdateAlwaysOnTop, UpdatePlaybackSettings } from '../bindings/egov/api'
+import { GetInitialFile, GetServerURL, GetSettings, Quit, UpdateAlwaysOnTop, UpdatePlaybackSettings, UpdateVRSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
 import { loadLanguages } from './languages'
 import SettingsDialog from './SettingsDialog'
@@ -51,6 +51,321 @@ const VR_START = {
   bottom: { repeat: [1,   0.5], offset: [0,   0  ] },
 }
 
+const fmt = (s) => {
+  if (!isFinite(s)) return '0:00'
+  const m   = Math.floor(s / 60)
+  const sec = Math.floor(s % 60)
+  return `${m}:${sec.toString().padStart(2, '0')}`
+}
+
+const deg2rad = (d) => (d * Math.PI) / 180
+const rad2deg = (r) => (r * 180) / Math.PI
+
+// VR投影球の半径
+const VR_RADIUS = 500
+
+// headGroup（首）の向きを設定する。ワールドY軸ヨー → ローカルX軸ピッチの順。
+const WORLD_Y = new THREE.Vector3(0, 1, 0)
+const applyHeadRotation = (group, yaw, pitch) => {
+  if (!group) return
+  group.rotation.set(0, 0, 0)
+  group.rotateOnWorldAxis(WORLD_Y, yaw)
+  group.rotateX(pitch)
+}
+
+// 視点の平行移動。カメラではなく球体を逆方向に動かすことで
+// 「自分が動く」のと等価な見え方にする（OrbitControls と干渉しない）。
+// pos は球半径に対する比率 { x: 右+, y: 上+, z: 前+ }
+const applySpherePosition = (sphere, pos) => {
+  if (!sphere) return
+  sphere.position.set(-pos.x * VR_RADIUS, -pos.y * VR_RADIUS, pos.z * VR_RADIUS)
+}
+
+// 再生位置表示。timeupdate（約4回/秒）による再レンダーを
+// このコンポーネント内に閉じ込め、Player 全体の再レンダーを避ける。
+const TimeDisplay = memo(function TimeDisplay({ video, duration, visible }) {
+  const [time, setTime] = useState(0)
+  useEffect(() => {
+    if (!video || !visible) return
+    setTime(video.currentTime)
+    const onTimeUpdate = () => setTime(video.currentTime)
+    video.addEventListener('timeupdate', onTimeUpdate)
+    return () => video.removeEventListener('timeupdate', onTimeUpdate)
+  }, [video, visible])
+  return (
+    <Typography sx={{ fontFamily: 'monospace', whiteSpace: 'nowrap', minWidth: 90, fontSize: '0.95rem' }}>
+      {fmt(time)} / {fmt(duration)}
+    </Typography>
+  )
+})
+
+// UI非表示時のミニプログレスバー。表示中のみマウントされる前提。
+const MiniProgressBar = memo(function MiniProgressBar({ video, duration, activeColor }) {
+  const [time, setTime] = useState(() => video?.currentTime ?? 0)
+  useEffect(() => {
+    if (!video) return
+    setTime(video.currentTime)
+    const onTimeUpdate = () => setTime(video.currentTime)
+    video.addEventListener('timeupdate', onTimeUpdate)
+    return () => video.removeEventListener('timeupdate', onTimeUpdate)
+  }, [video])
+  return (
+    <Box sx={{
+      position: 'absolute', bottom: 0, left: 0, right: 0,
+      height: 3, zIndex: 5, pointerEvents: 'none',
+    }}>
+      <Box sx={{
+        height: '100%',
+        width: `${duration ? (time / duration) * 100 : 0}%`,
+        bgcolor: activeColor,
+        opacity: 0.7,
+      }} />
+    </Box>
+  )
+})
+
+// シークバー＋サムネイルプレビュー＋範囲ループ。
+// ホバー中のサムネイル更新（mousemove 毎）と再生位置の追従という
+// 高頻度 state 更新を Player 全体から切り離す。
+const SeekBarArea = memo(function SeekBarArea({
+  video, thumbVideoRef, thumbCanvasRef, thumbEnabledRef,
+  modeRef, vrStartRef, duration, activeColor, rangeLoop, visible,
+}) {
+  const [currentTime, setCurrentTime] = useState(0)
+  const [thumbInfo,   setThumbInfo]   = useState(null)
+  const [rangePoint1, setRangePoint1] = useState(null)
+  const [rangePoint2, setRangePoint2] = useState(null)
+  const seekBarRef     = useRef(null)
+  const seekDragging   = useRef(false)
+  const thumbSeekTimer = useRef(null)
+
+  // 範囲ループの on/off に応じて範囲を初期化・解除する
+  useEffect(() => {
+    if (rangeLoop) {
+      if (duration > 0) {
+        setRangePoint1(p => p ?? 0)
+        setRangePoint2(p => p ?? duration)
+      }
+    } else {
+      setRangePoint1(null)
+      setRangePoint2(null)
+    }
+  }, [rangeLoop, duration])
+
+  // 再生位置の追従と範囲ループの実施。
+  // 非表示中は state 更新を省略するが、範囲ループの巻き戻しは常に行う。
+  useEffect(() => {
+    if (!video) return
+    const onTimeUpdate = () => {
+      if (rangeLoop && rangePoint1 !== null && rangePoint2 !== null) {
+        const start = Math.min(rangePoint1, rangePoint2)
+        const end   = Math.max(rangePoint1, rangePoint2)
+        if (video.currentTime >= end) video.currentTime = start
+      }
+      if (!visible || seekDragging.current) return
+      setCurrentTime(video.currentTime)
+    }
+    // 表示された瞬間に省略していた更新を取り戻す
+    if (visible && !seekDragging.current) setCurrentTime(video.currentTime)
+    video.addEventListener('timeupdate', onTimeUpdate)
+    return () => video.removeEventListener('timeupdate', onTimeUpdate)
+  }, [video, visible, rangeLoop, rangePoint1, rangePoint2])
+
+  // サムネイル取得: thumbVideoがseekされたらcanvasに描画してdataUrlを更新
+  useEffect(() => {
+    const thumbVideo = thumbVideoRef.current
+    const canvas     = thumbCanvasRef.current
+    if (!thumbVideo || !canvas) return
+    const onSeeked = () => {
+      const vw = thumbVideo.videoWidth
+      const vh = thumbVideo.videoHeight
+      const ctx = canvas.getContext('2d')
+
+      let srcX = 0, srcY = 0, srcW = vw, srcH = vh
+      if (modeRef.current === 'vr' && vw && vh) {
+        const { repeat, offset } = VR_START[vrStartRef.current]
+        srcX = offset[0] * vw
+        srcW = repeat[0] * vw
+        // Three.js UV の Y は下起点なので反転
+        srcY = (1 - offset[1] - repeat[1]) * vh
+        srcH = repeat[1] * vh
+      }
+
+      // アスペクト比を維持して long-side = 160 に収める
+      const srcAspect = srcW / srcH
+      const dstW = srcAspect >= 1 ? 160 : Math.round(160 * srcAspect)
+      const dstH = srcAspect >= 1 ? Math.round(160 / srcAspect) : 160
+      canvas.width  = dstW
+      canvas.height = dstH
+      ctx.drawImage(thumbVideo, srcX, srcY, srcW, srcH, 0, 0, dstW, dstH)
+
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
+      setThumbInfo(prev => prev ? { ...prev, dataUrl, w: dstW, h: dstH } : null)
+    }
+    thumbVideo.addEventListener('seeked', onSeeked)
+    return () => thumbVideo.removeEventListener('seeked', onSeeked)
+  }, [])
+
+  const handleSeekBarMouseMove = (e) => {
+    if (!seekBarRef.current || !duration || !thumbEnabledRef.current) return
+    const rect   = seekBarRef.current.getBoundingClientRect()
+    const localX = e.clientX - rect.left
+    const ratio  = Math.max(0, Math.min(1, localX / rect.width))
+    const time   = ratio * duration
+    setThumbInfo(prev => ({ localX, time, dataUrl: prev?.dataUrl ?? null, w: prev?.w ?? 160, h: prev?.h ?? 90 }))
+    clearTimeout(thumbSeekTimer.current)
+    thumbSeekTimer.current = setTimeout(() => {
+      if (thumbVideoRef.current) thumbVideoRef.current.currentTime = time
+    }, 80)
+  }
+
+  const handleSeekBarMouseLeave = () => {
+    clearTimeout(thumbSeekTimer.current)
+    setThumbInfo(null)
+  }
+
+  const handleMarkerPointerDown = (setPoint, otherPoint, e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const bar = seekBarRef.current
+    if (!bar || !duration) return
+    const onMove = (me) => {
+      const rect    = bar.getBoundingClientRect()
+      const ratio   = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width))
+      const newTime = ratio * duration
+      setPoint(newTime)
+      if (otherPoint !== null) {
+        const rangeStart = Math.min(newTime, otherPoint)
+        if (video && video.currentTime < rangeStart) video.currentTime = rangeStart
+      }
+      if (thumbEnabledRef.current) {
+        const localX = me.clientX - rect.left
+        setThumbInfo(prev => ({ localX, time: newTime, dataUrl: prev?.dataUrl ?? null, w: prev?.w ?? 160, h: prev?.h ?? 90 }))
+        clearTimeout(thumbSeekTimer.current)
+        thumbSeekTimer.current = setTimeout(() => {
+          if (thumbVideoRef.current) thumbVideoRef.current.currentTime = newTime
+        }, 80)
+      }
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup',   onUp)
+      clearTimeout(thumbSeekTimer.current)
+      setThumbInfo(null)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup',   onUp)
+  }
+
+  return (
+    <Box
+      ref={seekBarRef}
+      sx={{ position: 'relative', flex: 1 }}
+      onMouseMove={handleSeekBarMouseMove}
+      onMouseLeave={handleSeekBarMouseLeave}
+    >
+      {rangeLoop && rangePoint1 !== null && rangePoint2 !== null && duration > 0 && (
+        <Box sx={{
+          position: 'absolute', pointerEvents: 'none', zIndex: 1,
+          left: `${(Math.min(rangePoint1, rangePoint2) / duration) * 100}%`,
+          width: `${(Math.abs(rangePoint2 - rangePoint1) / duration) * 100}%`,
+          top: '50%', transform: 'translateY(-50%)',
+          height: 14, bgcolor: `${activeColor}50`, borderRadius: 0.5,
+        }} />
+      )}
+      {rangeLoop && duration > 0 && [
+        { point: rangePoint1, setPoint: setRangePoint1 },
+        { point: rangePoint2, setPoint: setRangePoint2 },
+      ].map(({ point, setPoint }, i) => {
+        if (point === null) return null
+        const other  = i === 0 ? rangePoint2 : rangePoint1
+        const isLeft = other === null || point <= other
+        return (
+          <Box
+            key={i}
+            sx={{
+              position: 'absolute', zIndex: 3, cursor: 'ew-resize',
+              left: `${(point / duration) * 100}%`,
+              top: 0, height: 'calc(100% + 20px)', width: 16,
+              transform: 'translateX(-50%)',
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+            }}
+            onPointerDown={(e) => handleMarkerPointerDown(setPoint, other, e)}
+          >
+            <Box sx={{ flex: 1, width: 2, bgcolor: activeColor }} />
+            <Box sx={{ position: 'relative', width: 16, height: 16, flexShrink: 0 }}>
+              <Box sx={{
+                width: '100%', height: '100%',
+                bgcolor: activeColor,
+                clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
+              }} />
+              <Typography sx={{
+                position: 'absolute', bottom: 0, pointerEvents: 'none',
+                ...(isLeft ? { right: '100%', pr: '4px' } : { left: '100%', pl: '4px' }),
+                fontSize: '0.65rem', color: activeColor, fontFamily: 'monospace',
+                whiteSpace: 'nowrap', userSelect: 'none', lineHeight: 1,
+              }}>
+                {fmt(point)}
+              </Typography>
+            </Box>
+          </Box>
+        )
+      })}
+      {thumbInfo?.dataUrl && (
+        <Box sx={{
+          position: 'absolute',
+          bottom: 'calc(100% + 6px)',
+          left: `clamp(${thumbInfo.w / 2}px, ${thumbInfo.localX}px, calc(100% - ${thumbInfo.w / 2}px))`,
+          transform: 'translateX(-50%)',
+          pointerEvents: 'none',
+          bgcolor: 'rgba(0,0,0,0.85)',
+          borderRadius: 1,
+          overflow: 'hidden',
+          border: '1px solid rgba(255,255,255,0.15)',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+        }}>
+          <Box component="img" src={thumbInfo.dataUrl}
+            sx={{ width: thumbInfo.w, height: thumbInfo.h, display: 'block' }} />
+          <Typography variant="caption" sx={{
+            display: 'block', textAlign: 'center',
+            color: 'rgba(255,255,255,0.9)', py: 0.25, fontFamily: 'monospace',
+          }}>
+            {fmt(thumbInfo.time)}
+          </Typography>
+        </Box>
+      )}
+      <Slider
+        size="small"
+        min={0} max={duration || 0} step={0.1}
+        value={currentTime}
+        onMouseDown={() => { seekDragging.current = true }}
+        onChange={(_, v) => setCurrentTime(v)}
+        onChangeCommitted={(_, v) => {
+          let target = v
+          if (rangeLoop && rangePoint1 !== null && rangePoint2 !== null) {
+            const start = Math.min(rangePoint1, rangePoint2)
+            if (v < start) target = start
+          }
+          if (video) video.currentTime = target
+          seekDragging.current = false
+        }}
+        sx={{
+          py: 0.5,
+          '& .MuiSlider-track': { height: 14, border: 'none', bgcolor: activeColor, borderRadius: 0.5 },
+          '& .MuiSlider-rail':  { height: 14, bgcolor: 'rgba(255,255,255,0.25)', borderRadius: 0.5 },
+          '& .MuiSlider-thumb': {
+            width: 22, height: 22, bgcolor: activeColor,
+            borderRadius: 0,
+            clipPath: 'polygon(30% 0, 85% 50%, 30% 100%)',
+            '&:hover, &.Mui-focusVisible': { boxShadow: 'none' },
+            '&::before': { boxShadow: 'none' },
+          },
+        }}
+      />
+    </Box>
+  )
+})
+
 export default function Player() {
   const { t } = useTranslation()
   const mountRef     = useRef(null)
@@ -62,28 +377,32 @@ export default function Player() {
   const textureRef   = useRef(null)
   const fitCameraRef = useRef(null)
   const modeRef      = useRef('fit')
-  const seekDragging = useRef(false)
+  const objectUrlRef = useRef(null)   // loadFile で作成した Object URL（解放用）
   const dragCounter  = useRef(0)
   const hideTimer    = useRef(null)
   const thumbVideoRef   = useRef(null)
   const thumbCanvasRef  = useRef(null)
-  const seekBarRef      = useRef(null)
-  const thumbSeekTimer  = useRef(null)
   const thumbEnabledRef = useRef(true)
   const vrStartRef      = useRef('left')
-  const vrOffsetsRef    = useRef({ left: { x: 0, y: 0, z: 0.1 }, right: { x: 0, y: 0, z: 0.1 }, top: { x: 0, y: 0, z: 0.1 }, bottom: { x: 0, y: 0, z: 0.1 } })
+  const vrYawRef        = useRef(0)   // 現在の頭の向き（ラジアン、セッション中保持）
+  const vrPitchRef      = useRef(0)
+  const vrInitYawRef    = useRef(0)   // 保存済みの既定の向き（ラジアン）
+  const vrInitPitchRef  = useRef(0)
+  const vrPosRef        = useRef({ x: 0, y: 0, z: 0 })   // 現在の視点位置（半径比）
+  const vrInitPosRef    = useRef({ x: 0, y: 0, z: 0 })   // 保存済みの既定位置
   const headGroupRef    = useRef(null)
   const rendererRef     = useRef(null)
   const requestRenderRef = useRef(null)   // 単発レンダーを要求（操作・状態変化時）
   const renderOnceRef    = useRef(null)   // 即時レンダー（スナップショット用）
   const feedbackKeyRef      = useRef(0)
   const clickTimerRef           = useRef(null)
+  const holdTimerRef            = useRef(null)
+  const wasHoldRef              = useRef(false)
   const lastPointerDownTimeRef  = useRef(0)
   const isMouseHeldRef          = useRef(false)
   const seekZoneTimerRef        = useRef(null)
   const seekZoneRef             = useRef(null)
   const seekOverlayRef          = useRef(null)
-  const overlayShowTimerRef     = useRef(null)
   const fastSeekSecsRef         = useRef(60)
   const seekFeedbackKeyRef  = useRef(0)
   const clickTimeoutMsRef   = useRef(300)
@@ -91,30 +410,32 @@ export default function Player() {
   const justFocusedRef      = useRef(false)
   const focusTimerRef       = useRef(null)
   const acceptInactiveRef   = useRef(false)
-  const miniProgressRef     = useRef(false)
-  const showUIRef           = useRef(false)
-  const rangeLoopRef        = useRef(false)
   const detectedFpsRef    = useRef(0)
+  const vrFovRef            = useRef(75)
+  const vrSensitivityRef    = useRef(0.004)
+  const vrScrollSpeedRef    = useRef(0.05)
+  const uiHideDelayRef      = useRef(1500)
+  const uiHideLeaveDelayRef = useRef(800)
   const [miniProgress, setMiniProgress] = useState(false)
 
   const [paused,      setPaused]      = useState(true)
-  const [currentTime, setCurrentTime] = useState(0)
   const [duration,    setDuration]    = useState(0)
+  const [videoEl,     setVideoEl]     = useState(null)   // 子コンポーネントが timeupdate を購読するため
   const [volume,      setVolume]      = useState(0.5)
   const [muted,       setMuted]       = useState(false)
   const [fileName,    setFileName]    = useState('')
   const [dragging,    setDragging]    = useState(false)
   const [showUI,      setShowUI]      = useState(false)
+  const [resizeCursor, setResizeCursor] = useState(null)   // Wails3リサイズ判定領域内で明示すべきカーソル種別
   const [mode,        setMode]        = useState('fit')
   const [vrStart,     setVrStart]     = useState('left')
   const [startOpen,   setStartOpen]   = useState(false)
   const [menuAnchor,  setMenuAnchor]  = useState(null)
-  const [thumbInfo,    setThumbInfo]    = useState(null)
   const [clickFeedback, setClickFeedback] = useState(null)
   const [seekFeedback,  setSeekFeedback]  = useState(null)
   const [thumbEnabled, setThumbEnabled] = useState(true)
   const [language,     setLanguage]     = useState('en')
-  const [vrOffsets,      setVrOffsets]      = useState({ left: { x: 0, y: 0, z: 0.1 }, right: { x: 0, y: 0, z: 0.1 }, top: { x: 0, y: 0, z: 0.1 }, bottom: { x: 0, y: 0, z: 0.1 } })
+  const [vrView,         setVrView]         = useState({ pitch: 0, yaw: 0, fov: 75, posX: 0, posY: 0, posZ: 0 })   // オーバーレイ表示用（度・半径比）
   const [availableLangs, setAvailableLangs] = useState([])
   const [serverUrl,      setServerUrl]      = useState('')
   const [settingsOpen,   setSettingsOpen]   = useState(false)
@@ -126,8 +447,6 @@ export default function Player() {
   const [seekOverlay,    setSeekOverlay]    = useState(null)   // { x, y } or null
   const [seekZoneActive, setSeekZoneActive] = useState(null)   // { seconds, forward } or null
   const [rangeLoop,      setRangeLoop]      = useState(false)
-  const [rangePoint1,    setRangePoint1]    = useState(null)
-  const [rangePoint2,    setRangePoint2]    = useState(null)
   const [rotation,       setRotation]       = useState(0)
 
   // Three.js セットアップ
@@ -158,13 +477,14 @@ export default function Player() {
     video.crossOrigin = 'anonymous'
     video.volume      = 0.5
     videoRef.current  = video
+    setVideoEl(video)
 
     const texture = new THREE.VideoTexture(video)
     texture.colorSpace = THREE.SRGBColorSpace
     textureRef.current = texture
 
     // VR: 半球内側
-    const sGeo = new THREE.SphereGeometry(500, 60, 40, 0, Math.PI)
+    const sGeo = new THREE.SphereGeometry(VR_RADIUS, 60, 40, 0, Math.PI)
     sGeo.scale(-1, 1, 1)
     const sphere = new THREE.Mesh(sGeo, new THREE.MeshBasicMaterial({ map: texture }))
     sphere.rotation.y = -Math.PI / 2
@@ -221,7 +541,7 @@ export default function Player() {
     const onWheel = (e) => {
       if (modeRef.current !== 'vr') return
       e.preventDefault()
-      camera.fov = Math.max(20, Math.min(100, camera.fov + e.deltaY * 0.05))
+      camera.fov = Math.max(20, Math.min(100, camera.fov + e.deltaY * vrScrollSpeedRef.current))
       camera.updateProjectionMatrix()
       requestRender()
     }
@@ -244,13 +564,6 @@ export default function Player() {
         if (modeRef.current === 'fit') fitCamera()
       }
       requestRender()
-    })
-    video.addEventListener('timeupdate', () => {
-      if (seekDragging.current) return
-      // currentTime が表示に使われない場合（UI非表示・ミニバー無効・範囲ループ無効）は
-      // 再レンダーを避けるため state 更新を省略する。
-      if (!showUIRef.current && !miniProgressRef.current && !rangeLoopRef.current) return
-      setCurrentTime(video.currentTime)
     })
     video.addEventListener('error', () => {
       if (!video.src || video.src === location.href) return
@@ -328,6 +641,7 @@ export default function Player() {
       renderer.dispose()
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement)
       video.src = ''
+      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
     }
   }, [])
 
@@ -350,10 +664,11 @@ export default function Player() {
     }
 
     if (mode === 'vr') {
-      const off = vrOffsetsRef.current[vrStart] ?? { x: 0, y: 0 }
-      camera.position.set(off.x, off.y, off.z ?? 0.1)
-      headGroup.rotation.set(0, 0, 0)
-      camera.fov     = 75
+      camera.position.set(0, 0, 0.1)
+      // セッション中の頭の向き・視点位置を維持して復帰する
+      applyHeadRotation(headGroup, vrYawRef.current, vrPitchRef.current)
+      applySpherePosition(sphereRef.current, vrPosRef.current)
+      camera.fov     = vrFovRef.current
       controls.enabled = false
       camera.updateProjectionMatrix()
       planeRef.current.rotation.z = 0
@@ -407,17 +722,6 @@ export default function Player() {
     if (!canvas) return
 
     let startX = 0, startY = 0, active = false
-    let yaw = 0, pitch = 0
-    const sensitivity = 0.004
-    const worldY = new THREE.Vector3(0, 1, 0)
-
-    const applyRotation = () => {
-      const group = headGroupRef.current
-      if (!group) return
-      group.rotation.set(0, 0, 0)
-      group.rotateOnWorldAxis(worldY, yaw)
-      group.rotateX(pitch)
-    }
 
     const onPointerDown = (e) => {
       if (e.button !== 2) return
@@ -427,10 +731,13 @@ export default function Player() {
     }
     const onPointerMove = (e) => {
       if (!active) return
-      yaw   -= (e.clientX - startX) * sensitivity
-      pitch  = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch - (e.clientY - startY) * sensitivity))
+      const sensitivity = vrSensitivityRef.current
+      // 向きは ref に保持し、モード切替やスライダー調整と整合させる
+      vrYawRef.current  -= (e.clientX - startX) * sensitivity
+      vrPitchRef.current = Math.max(-Math.PI / 2, Math.min(Math.PI / 2,
+        vrPitchRef.current - (e.clientY - startY) * sensitivity))
       startX = e.clientX; startY = e.clientY
-      applyRotation()
+      applyHeadRotation(headGroupRef.current, vrYawRef.current, vrPitchRef.current)
       requestRenderRef.current?.()
     }
     const onPointerUp = () => { active = false }
@@ -446,51 +753,64 @@ export default function Player() {
     }
   }, [mode])
 
-  // サムネイル取得: thumbVideoがseekされたらcanvasに描画してdataUrlを更新
-  useEffect(() => {
-    const thumbVideo = thumbVideoRef.current
-    const canvas     = thumbCanvasRef.current
-    if (!thumbVideo || !canvas) return
-    const onSeeked = () => {
-      const vw = thumbVideo.videoWidth
-      const vh = thumbVideo.videoHeight
-      const ctx = canvas.getContext('2d')
-
-      let srcX = 0, srcY = 0, srcW = vw, srcH = vh
-      if (modeRef.current === 'vr' && vw && vh) {
-        const { repeat, offset } = VR_START[vrStartRef.current]
-        srcX = offset[0] * vw
-        srcW = repeat[0] * vw
-        // Three.js UV の Y は下起点なので反転
-        srcY = (1 - offset[1] - repeat[1]) * vh
-        srcH = repeat[1] * vh
-      }
-
-      // アスペクト比を維持して long-side = 160 に収める
-      const srcAspect = srcW / srcH
-      const dstW = srcAspect >= 1 ? 160 : Math.round(160 * srcAspect)
-      const dstH = srcAspect >= 1 ? Math.round(160 / srcAspect) : 160
-      canvas.width  = dstW
-      canvas.height = dstH
-      ctx.drawImage(thumbVideo, srcX, srcY, srcW, srcH, 0, 0, dstW, dstH)
-
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
-      setThumbInfo(prev => prev ? { ...prev, dataUrl, w: dstW, h: dstH } : null)
-    }
-    thumbVideo.addEventListener('seeked', onSeeked)
-    return () => thumbVideo.removeEventListener('seeked', onSeeked)
-  }, [])
-
-  const resetRangeLoop = () => {
-    setRangeLoop(false)
-    setRangePoint1(null)
-    setRangePoint2(null)
+  // 現在の頭の向き・視点位置・FOVを既定として保存する。
+  // 他のVR設定（感度等）は保存済みの値を維持する。
+  const persistVRView = async () => {
+    const fov = cameraRef.current?.fov ?? vrFovRef.current
+    vrInitPitchRef.current = vrPitchRef.current
+    vrInitYawRef.current   = vrYawRef.current
+    vrInitPosRef.current   = { ...vrPosRef.current }
+    vrFovRef.current       = fov
+    const s = await GetSettings()
+    UpdateVRSettings({
+      ...s.vr,
+      initialPitch: rad2deg(vrPitchRef.current),
+      initialYaw:   rad2deg(vrYawRef.current),
+      positionX:    vrPosRef.current.x,
+      positionY:    vrPosRef.current.y,
+      positionZ:    vrPosRef.current.z,
+      fov,
+    })
   }
+
+  // VR視点オーバーレイを開く。スライダーへ現在の向き・位置を反映する。
+  const openVrOverlay = () => {
+    setVrView({
+      pitch: rad2deg(vrPitchRef.current),
+      yaw:   rad2deg(vrYawRef.current),
+      fov:   cameraRef.current?.fov ?? vrFovRef.current,
+      posX:  vrPosRef.current.x,
+      posY:  vrPosRef.current.y,
+      posZ:  vrPosRef.current.z,
+    })
+    setStartOpen(true)
+  }
+
+  // オーバーレイのスライダー変更を即時反映する
+  const applyVrView = (next) => {
+    setVrView(next)
+    vrPitchRef.current = deg2rad(next.pitch)
+    vrYawRef.current   = deg2rad(next.yaw)
+    vrPosRef.current   = { x: next.posX, y: next.posY, z: next.posZ }
+    applyHeadRotation(headGroupRef.current, vrYawRef.current, vrPitchRef.current)
+    applySpherePosition(sphereRef.current, vrPosRef.current)
+    if (cameraRef.current && cameraRef.current.fov !== next.fov) {
+      cameraRef.current.fov = next.fov
+      cameraRef.current.updateProjectionMatrix()
+    }
+    requestRenderRef.current?.()
+  }
+
+  // 範囲の解除・初期化は SeekBarArea 側の effect が行う
+  const resetRangeLoop = () => setRangeLoop(false)
 
   const loadFile = (file) => {
     if (!file || !file.type.startsWith('video/')) return
     const video = videoRef.current
     const url   = URL.createObjectURL(file)
+    // 前のファイルの Object URL を解放（Blob 参照のリーク防止）
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
+    objectUrlRef.current = url
     setVideoError(null)
     video.src = url
     if (thumbEnabledRef.current && thumbVideoRef.current) thumbVideoRef.current.src = url
@@ -503,6 +823,10 @@ export default function Player() {
   const loadFilePath = (fileUrl) => {
     if (!fileUrl) return
     const video = videoRef.current
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current)
+      objectUrlRef.current = null
+    }
     setVideoError(null)
     video.src = fileUrl
     if (thumbEnabledRef.current && thumbVideoRef.current) thumbVideoRef.current.src = fileUrl
@@ -527,7 +851,29 @@ export default function Player() {
       clickTimeoutMsRef.current  = s.controls?.clickTimeoutMs ?? 300
       doubleClickSeekRef.current = s.controls?.doubleClickSeekSecs ?? 10
       fastSeekSecsRef.current    = s.controls?.fastSeekSecs ?? 60
-      miniProgressRef.current = s.app?.miniProgressBar ?? false
+      uiHideDelayRef.current      = s.controls?.uiHideDelayMs ?? 1500
+      uiHideLeaveDelayRef.current = s.controls?.uiHideOnLeaveDelayMs ?? 800
+      // VR設定と起動時モードを反映
+      vrFovRef.current         = s.vr?.fov || 75
+      vrSensitivityRef.current = s.vr?.dragSensitivity || 0.004
+      vrScrollSpeedRef.current = s.vr?.scrollSpeed || 0.05
+      const initPitch = deg2rad(s.vr?.initialPitch ?? 0)
+      const initYaw   = deg2rad(s.vr?.initialYaw ?? 0)
+      const initPos   = { x: s.vr?.positionX ?? 0, y: s.vr?.positionY ?? 0, z: s.vr?.positionZ ?? 0 }
+      vrInitPitchRef.current = initPitch
+      vrInitYawRef.current   = initYaw
+      vrInitPosRef.current   = { ...initPos }
+      vrPitchRef.current     = initPitch
+      vrYawRef.current       = initYaw
+      vrPosRef.current       = { ...initPos }
+      setVrView({
+        pitch: s.vr?.initialPitch ?? 0, yaw: s.vr?.initialYaw ?? 0, fov: s.vr?.fov || 75,
+        posX: initPos.x, posY: initPos.y, posZ: initPos.z,
+      })
+      const start = s.vr?.defaultStart || 'left'
+      setVrStart(start)
+      vrStartRef.current = start
+      setMode(p.defaultMode || 'fit')
       setMiniProgress(s.app?.miniProgressBar ?? false)
       setServerUrl(url)
       if (videoRef.current) {
@@ -569,8 +915,8 @@ export default function Player() {
         frameSeeking = true
         const fps = detectedFpsRef.current > 1 ? detectedFpsRef.current : 30
         const step = 1 / fps
+        // シークで timeupdate が発火し、SeekBarArea 等が追従する
         video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? step : -step)))
-        setCurrentTime(video.currentTime)
       } else {
         if (e.repeat) return
         doZoneSeek(5, forward)
@@ -582,14 +928,6 @@ export default function Player() {
       video?.removeEventListener('seeked', onSeeked)
     }
   }, [])
-
-  // currentTime の表示要否を timeupdate ハンドラへ伝えるための ref 同期。
-  // UI を表示した瞬間は省略していた更新を取り戻すため最新位置に同期する。
-  useEffect(() => {
-    showUIRef.current = showUI
-    if (showUI && videoRef.current) setCurrentTime(videoRef.current.currentTime)
-  }, [showUI])
-  useEffect(() => { rangeLoopRef.current = rangeLoop }, [rangeLoop])
 
   const handleFileChange = (e) => loadFile(e.target.files[0])
 
@@ -607,14 +945,38 @@ export default function Player() {
     loadFile(e.dataTransfer.files[0])
   }
 
+  // Wails3ランタイム（drag.js）のリサイズ判定と同じ境界でカーソル種別を計算する。
+  // 自前オーバーレイ（タイトルバー/ドロップ領域）が独自の cursor を指定していると
+  // document.body 側のリサイズカーソルが隠れてしまうため、明示的に上書きする。
+  const computeResizeCursor = (e) => {
+    const edge = 6
+    const corner = 16
+    const left   = e.clientX < edge
+    const right  = e.clientX > window.innerWidth  - edge
+    const top    = e.clientY < edge
+    const bottom = e.clientY > window.innerHeight - edge
+    const leftC   = e.clientX < corner
+    const rightC  = e.clientX > window.innerWidth  - corner
+    const topC    = e.clientY < corner
+    const bottomC = e.clientY > window.innerHeight - corner
+    if (rightC && bottomC) return 'nwse-resize'
+    if (leftC  && bottomC) return 'nesw-resize'
+    if (leftC  && topC)    return 'nwse-resize'
+    if (topC   && rightC)  return 'nesw-resize'
+    if (left || right) return 'ew-resize'
+    if (top || bottom)  return 'ns-resize'
+    return null
+  }
+
   const handleMouseMove = (e) => {
+    setResizeCursor(computeResizeCursor(e))
     const inZone = e.clientY <= 80 || e.clientY >= window.innerHeight - 160 || e.clientX >= window.innerWidth - 80
     if (inZone) {
       clearTimeout(hideTimer.current)
       setShowUI(true)
     } else if (showUI) {
       clearTimeout(hideTimer.current)
-      hideTimer.current = setTimeout(() => setShowUI(false), 1500)
+      hideTimer.current = setTimeout(() => setShowUI(false), uiHideDelayRef.current)
     }
     // シークオーバーレイのゾーン検出（seekOverlay state が設定された後＝800ms経過後のみ）
     if (seekOverlay && isMouseHeldRef.current) {
@@ -638,26 +1000,9 @@ export default function Player() {
 
   const handleMouseLeave = () => {
     clearTimeout(hideTimer.current)
-    hideTimer.current = setTimeout(() => setShowUI(false), 800)
+    hideTimer.current = setTimeout(() => setShowUI(false), uiHideLeaveDelayRef.current)
     if (seekOverlayRef.current) hideSeekOverlay()
-  }
-
-  const handleSeekBarMouseMove = (e) => {
-    if (!seekBarRef.current || !duration || !thumbEnabledRef.current) return
-    const rect   = seekBarRef.current.getBoundingClientRect()
-    const localX = e.clientX - rect.left
-    const ratio  = Math.max(0, Math.min(1, localX / rect.width))
-    const time   = ratio * duration
-    setThumbInfo(prev => ({ localX, time, dataUrl: prev?.dataUrl ?? null, w: prev?.w ?? 160, h: prev?.h ?? 90 }))
-    clearTimeout(thumbSeekTimer.current)
-    thumbSeekTimer.current = setTimeout(() => {
-      if (thumbVideoRef.current) thumbVideoRef.current.currentTime = time
-    }, 80)
-  }
-
-  const handleSeekBarMouseLeave = () => {
-    clearTimeout(thumbSeekTimer.current)
-    setThumbInfo(null)
+    setResizeCursor(null)
   }
 
   const handlePlayPause = () => {
@@ -670,6 +1015,10 @@ export default function Player() {
   const handleVolumeChange = (_, v) => {
     setVolume(v)
     if (videoRef.current) videoRef.current.volume = v
+  }
+
+  // ドラッグ中の毎ティック保存を避け、確定時のみディスクへ書き込む
+  const handleVolumeCommitted = (_, v) => {
     UpdatePlaybackSettings(v, muted, thumbEnabledRef.current, language)
   }
 
@@ -679,8 +1028,13 @@ export default function Player() {
     if (!camera || !controls) return
 
     if (mode === 'vr') {
-      if (headGroupRef.current) headGroupRef.current.rotation.set(0, 0, 0)
-      camera.fov = 75
+      // 保存済みの既定の向き・位置に戻す
+      vrPitchRef.current = vrInitPitchRef.current
+      vrYawRef.current   = vrInitYawRef.current
+      vrPosRef.current   = { ...vrInitPosRef.current }
+      applyHeadRotation(headGroupRef.current, vrYawRef.current, vrPitchRef.current)
+      applySpherePosition(sphereRef.current, vrPosRef.current)
+      camera.fov = vrFovRef.current
       camera.updateProjectionMatrix()
     } else if (mode === 'fit') {
       const video = videoRef.current
@@ -704,7 +1058,6 @@ export default function Player() {
     const video = videoRef.current
     if (!video?.src) return
     video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? seconds : -seconds)))
-    setCurrentTime(video.currentTime)
     seekFeedbackKeyRef.current++
     setSeekFeedback({ forward, seconds, key: seekFeedbackKeyRef.current, overlayPos: seekOverlayRef.current ?? null })
   }
@@ -731,39 +1084,52 @@ export default function Player() {
   }
 
   const hideSeekOverlay = () => {
-    clearTimeout(overlayShowTimerRef.current)
     isMouseHeldRef.current = false
     seekOverlayRef.current = null
     setSeekOverlay(null)
     stopZoneSeek()
   }
 
-  // mousedown でダブルクリックを検出:
-  // 即シーク → 500ms ホールドでオーバーレイ表示
+  // ダブルクリック: 即座に単純な早送り/巻き戻しを実行（コントローラーは出さない）
+  // シングルクリックでも一定時間（800ms）保持し続けたらコントローラー（オーバーレイ）を表示する
   const handleCanvasMouseDown = (e) => {
     if (e.button !== 0) return
+    const pos = { x: e.clientX, y: e.clientY }
     const now = Date.now()
     const isDouble = e.detail >= 2 || (now - lastPointerDownTimeRef.current) <= clickTimeoutMsRef.current
     lastPointerDownTimeRef.current = isDouble ? 0 : now
+
+    // 中央25%はデッドゾーン（再生/停止の誤操作防止）
+    const cx = window.innerWidth / 2
+    const deadZone = window.innerWidth * 0.125
+    const inDeadZone = pos.x > cx - deadZone && pos.x < cx + deadZone
+    if (inDeadZone) return
+
     if (isDouble) {
-      // 中央25%はデッドゾーン（再生/停止の誤操作防止）
-      const cx = window.innerWidth / 2
-      const deadZone = window.innerWidth * 0.125
-      if (e.clientX > cx - deadZone && e.clientX < cx + deadZone) return
       clearTimeout(clickTimerRef.current)
       clickTimerRef.current = null
-      isMouseHeldRef.current = true
-      const pos = { x: e.clientX, y: e.clientY }
-      seekOverlayRef.current = pos
-      doZoneSeek(doubleClickSeekRef.current, e.clientX > cx)
-      overlayShowTimerRef.current = setTimeout(() => setSeekOverlay(pos), 800)
+      doZoneSeek(doubleClickSeekRef.current, pos.x > cx)
     }
+
+    clearTimeout(holdTimerRef.current)
+    holdTimerRef.current = setTimeout(() => {
+      wasHoldRef.current = true
+      isMouseHeldRef.current = true
+      seekOverlayRef.current = pos
+      setSeekOverlay(pos)
+    }, 400)
   }
 
-  const handleCanvasMouseUp = () => { hideSeekOverlay() }
+  const handleCanvasMouseUp = () => {
+    clearTimeout(holdTimerRef.current)
+    if (isMouseHeldRef.current) hideSeekOverlay()
+  }
 
-  // click.detail > 1 はダブルクリックの2回目: タイマーをキャンセルして終了
   const handleCanvasClick = (e) => {
+    if (wasHoldRef.current) {
+      wasHoldRef.current = false
+      return
+    }
     if (justFocusedRef.current && !acceptInactiveRef.current) {
       justFocusedRef.current = false
       clearTimeout(focusTimerRef.current)
@@ -787,22 +1153,46 @@ export default function Player() {
     }, clickTimeoutMsRef.current)
   }
 
-  // dblclick: play/pause タイマーのキャンセルのみ（シークは mousedown で実施済み）
-  const handleCanvasDblClick = () => {
-    clearTimeout(clickTimerRef.current)
-    clickTimerRef.current = null
-  }
-
   const handleSnapshot = () => {
-    const canvas = rendererRef.current?.domElement
-    if (!canvas) return
-    // preserveDrawingBuffer を切ったため、読み出し直前に同フレームで再描画する
-    renderOnceRef.current?.()
-    const url = canvas.toDataURL('image/png')
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `egov_${Date.now()}.png`
-    a.click()
+    const video = videoRef.current
+    if (!video?.videoWidth) return
+    const vw = video.videoWidth, vh = video.videoHeight
+    const m = modeRef.current
+    const rot = rotation
+
+    let sx = 0, sy = 0, sw = vw, sh = vh
+    if (m === 'vr') {
+      const cfg = VR_START[vrStartRef.current] ?? VR_START.left
+      sw = vw * cfg.repeat[0]
+      sh = vh * cfg.repeat[1]
+      sx = vw * cfg.offset[0]
+      sy = vh * (1 - cfg.offset[1] - cfg.repeat[1])
+    }
+
+    const rotated = rot % 180 !== 0
+    const dw = rotated ? sh : sw
+    const dh = rotated ? sw : sh
+
+    const c = document.createElement('canvas')
+    c.width = dw; c.height = dh
+    const ctx = c.getContext('2d')
+    if (rot) {
+      ctx.translate(dw / 2, dh / 2)
+      ctx.rotate((rot * Math.PI) / 180)
+      ctx.translate(-sw / 2, -sh / 2)
+    }
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh)
+
+    // toDataURL の巨大な base64 文字列を避け、Blob 経由で保存する
+    c.toBlob((blob) => {
+      if (!blob) return
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = `egov_${Date.now()}.png`
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000)
+    }, 'image/png')
   }
 
   const handleLoopToggle = () => {
@@ -811,61 +1201,7 @@ export default function Player() {
     if (videoRef.current) videoRef.current.loop = next
   }
 
-  const handleRangeLoopToggle = () => {
-    const next = !rangeLoop
-    setRangeLoop(next)
-    if (next && rangePoint1 === null && duration > 0) {
-      setRangePoint1(0)
-      setRangePoint2(duration)
-    }
-    if (!next) {
-      setRangePoint1(null)
-      setRangePoint2(null)
-    }
-  }
-
-  const handleMarkerPointerDown = (setPoint, otherPoint, e) => {
-    e.preventDefault()
-    e.stopPropagation()
-    const bar = seekBarRef.current
-    if (!bar || !duration) return
-    const onMove = (me) => {
-      const rect    = bar.getBoundingClientRect()
-      const ratio   = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width))
-      const newTime = ratio * duration
-      setPoint(newTime)
-      if (otherPoint !== null) {
-        const rangeStart = Math.min(newTime, otherPoint)
-        const video = videoRef.current
-        if (video && video.currentTime < rangeStart) video.currentTime = rangeStart
-      }
-      if (thumbEnabledRef.current) {
-        const localX = me.clientX - rect.left
-        setThumbInfo(prev => ({ localX, time: newTime, dataUrl: prev?.dataUrl ?? null, w: prev?.w ?? 160, h: prev?.h ?? 90 }))
-        clearTimeout(thumbSeekTimer.current)
-        thumbSeekTimer.current = setTimeout(() => {
-          if (thumbVideoRef.current) thumbVideoRef.current.currentTime = newTime
-        }, 80)
-      }
-    }
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup',   onUp)
-      clearTimeout(thumbSeekTimer.current)
-      setThumbInfo(null)
-    }
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup',   onUp)
-  }
-
-  useEffect(() => {
-    if (!rangeLoop || rangePoint1 === null || rangePoint2 === null) return
-    const start = Math.min(rangePoint1, rangePoint2)
-    const end   = Math.max(rangePoint1, rangePoint2)
-    if (currentTime >= end) {
-      if (videoRef.current) videoRef.current.currentTime = start
-    }
-  }, [currentTime, rangeLoop, rangePoint1, rangePoint2])
+  const handleRangeLoopToggle = () => setRangeLoop(r => !r)
 
   const handleFullscreenToggle = () => {
     if (fullscreen) {
@@ -893,13 +1229,6 @@ export default function Player() {
     setActiveColor(color)
   }
 
-  const fmt = (s) => {
-    if (!isFinite(s)) return '0:00'
-    const m   = Math.floor(s / 60)
-    const sec = Math.floor(s % 60)
-    return `${m}:${sec.toString().padStart(2, '0')}`
-  }
-
   const barStyle = {
     background:     'rgba(0,0,0,0.6)',
     backdropFilter: 'blur(6px)',
@@ -920,9 +1249,8 @@ export default function Player() {
       data-file-drop-target
       style={{
         position: 'relative',
-        width: 'calc(100vw - 10px)',
-        height: 'calc(100vh - 10px)',
-        margin: '5px',
+        width: '100vw',
+        height: '100vh',
         background: '#000',
       }}
       onMouseMove={handleMouseMove}
@@ -939,8 +1267,8 @@ export default function Player() {
             ? {
                 position: 'absolute',
                 top: '50%', left: '50%',
-                width: 'calc(100vh - 10px)',
-                height: 'calc(100vw - 10px)',
+                width: '100vh',
+                height: '100vw',
                 transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
               }
             : {
@@ -949,7 +1277,6 @@ export default function Player() {
               }),
         }}
         onClick={handleCanvasClick}
-        onDoubleClick={handleCanvasDblClick}
         onMouseDown={handleCanvasMouseDown}
         onMouseUp={handleCanvasMouseUp}
         onMouseLeave={handleCanvasMouseUp}
@@ -1116,10 +1443,12 @@ export default function Player() {
             position: 'absolute', inset: 0, zIndex: 5,
             display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', gap: 1.5,
+            gap: 1.5,
             color: 'rgba(255,255,255,0.25)',
             transition: 'color 0.2s',
             '&:hover': { color: 'rgba(255,255,255,0.55)' },
+            // 画面端付近（Wails3のリサイズ判定領域）ではリサイズカーソルを優先表示
+            cursor: resizeCursor || 'pointer',
           }}
         >
           <Stack direction="row" alignItems="center" spacing={1}>
@@ -1143,7 +1472,7 @@ export default function Player() {
       )}
 
       <input id="file-input" type="file" accept="video/*" style={{ display: 'none' }} onChange={handleFileChange} />
-      <video ref={thumbVideoRef} muted preload="auto" crossOrigin="anonymous" style={{ display: 'none' }} />
+      <video ref={thumbVideoRef} muted preload="metadata" crossOrigin="anonymous" style={{ display: 'none' }} />
       <canvas ref={thumbCanvasRef} style={{ display: 'none' }} />
 
       {/* VR始点選択オーバーレイ */}
@@ -1192,32 +1521,36 @@ export default function Player() {
             ))}
           </Box>
           <Box
-            sx={{ width: 340, mt: 2 }}
+            sx={{
+              width: 520, mt: 2,
+              display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 3,
+            }}
             onClick={e => e.stopPropagation()}
           >
-            {[{ axis: 'x', label: t('vr.xOffset') }, { axis: 'y', label: t('vr.yOffset') }, { axis: 'z', label: t('vr.zOffset') }].map(({ axis, label }) => (
-              <Box key={axis} sx={{ mb: 1 }}>
+            {[
+              { key: 'pitch', label: t('vr.pitch'), min: -90,  max: 90,  step: 0.5,   reset: 0,  format: v => `${v.toFixed(1)}°` },
+              { key: 'posY',  label: t('vr.posY'),  min: -0.9, max: 0.9, step: 0.005, reset: 0,  format: v => `${(v * 100).toFixed(1)}%` },
+              { key: 'yaw',   label: t('vr.yaw'),   min: -180, max: 180, step: 0.5,   reset: 0,  format: v => `${v.toFixed(1)}°` },
+              { key: 'posX',  label: t('vr.posX'),  min: -0.9, max: 0.9, step: 0.005, reset: 0,  format: v => `${(v * 100).toFixed(1)}%` },
+              { key: 'fov',   label: t('vr.fov'),   min: 20,   max: 100, step: 1,     reset: 75, format: v => `${v.toFixed(0)}°` },
+              { key: 'posZ',  label: t('vr.posZ'),  min: -0.9, max: 0.9, step: 0.005, reset: 0,  format: v => `${(v * 100).toFixed(1)}%` },
+            ].map(({ key, label, min, max, step, reset, format }) => (
+              <Box key={key} sx={{ mb: 1 }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
                   <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)' }}>
                     {label}
                   </Typography>
                   <Stack direction="row" alignItems="center" spacing={0.5}>
                     <Typography variant="caption" sx={{ color: 'white', fontFamily: 'monospace' }}>
-                      {(vrOffsets[vrStart]?.[axis] ?? 0).toFixed(3)}
+                      {format(vrView[key] ?? 0)}
                     </Typography>
                     <Tooltip title={t('vr.resetToZero')} placement="top">
                       <IconButton
                         size="small"
                         sx={{ color: 'rgba(255,255,255,0.4)', width: 18, height: 18, '&:hover': { color: 'white' } }}
                         onClick={() => {
-                          const next = { ...vrOffsets, [vrStart]: { ...vrOffsets[vrStart], [axis]: 0 } }
-                          setVrOffsets(next)
-                          vrOffsetsRef.current = next
-                          if (cameraRef.current) {
-                            cameraRef.current.position[axis] = 0
-                            controlsRef.current?.update()
-                            requestRenderRef.current?.()
-                          }
+                          applyVrView({ ...vrView, [key]: reset })
+                          persistVRView()
                         }}
                       >
                         <RestartAltIcon sx={{ fontSize: 14 }} />
@@ -1226,18 +1559,10 @@ export default function Player() {
                   </Stack>
                 </Stack>
                 <Slider
-                  min={-1} max={1} step={0.005}
-                  value={vrOffsets[vrStart]?.[axis] ?? 0}
-                  onChange={(_, v) => {
-                    const next = { ...vrOffsets, [vrStart]: { ...vrOffsets[vrStart], [axis]: v } }
-                    setVrOffsets(next)
-                    vrOffsetsRef.current = next
-                    if (cameraRef.current && controlsRef.current) {
-                      cameraRef.current.position[axis] = v
-                      controlsRef.current.update()
-                      requestRenderRef.current?.()
-                    }
-                  }}
+                  min={min} max={max} step={step}
+                  value={vrView[key] ?? 0}
+                  onChange={(_, v) => applyVrView({ ...vrView, [key]: v })}
+                  onChangeCommitted={() => persistVRView()}
                   sx={{
                     color: '#4fc3f7',
                     '& .MuiSlider-thumb': { width: 16, height: 16 },
@@ -1245,6 +1570,19 @@ export default function Player() {
                 />
               </Box>
             ))}
+            <Button
+              fullWidth
+              size="small"
+              sx={{
+                mt: 0.5, gridColumn: '1 / -1', color: 'white',
+                bgcolor: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.25)',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.18)' },
+              }}
+              onClick={() => persistVRView()}
+            >
+              {t('vr.saveView')}
+            </Button>
           </Box>
           <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.35)', mt: 1 }}>
             {t('vr.clickToClose')}
@@ -1263,8 +1601,9 @@ export default function Player() {
           zIndex: 10,
           opacity: showUI ? 1 : 0,
           pointerEvents: showUI ? 'auto' : 'none',
-          cursor: 'grab',
-          '&:active': { cursor: 'grabbing' },
+          // 最上部（Wails3のリサイズ判定領域）ではリサイズカーソルを優先表示
+          cursor: resizeCursor || 'grab',
+          '&:active': { cursor: resizeCursor || 'grabbing' },
         }}
         style={{ '--wails-draggable': 'drag' }}
       >
@@ -1303,6 +1642,7 @@ export default function Player() {
                 color: 'rgba(255,255,255,0.5)',
                 borderColor: 'rgba(255,255,255,0.2)',
                 py: 0.5, p: 0.5,
+                minWidth: '60px',
               },
               '& .Mui-selected': {
                 color: 'white !important',
@@ -1324,7 +1664,7 @@ export default function Player() {
 
         {/* 回転（VRモード以外） */}
         {mode !== 'vr' && (
-          <Box style={{ '--wails-draggable': 'no-drag' }} sx={{ ml: 0.5 }}>
+          <Box style={{ '--wails-draggable': 'no-drag' }} sx={{ ml: 2 }}>
             <Tooltip title={`${t('controls.rotate', 'Rotate')} ${(rotation + 90) % 360}°`} placement="bottom">
               <IconButton
                 sx={{ color: rotation ? activeColor : 'white', width: 28, height: 28 }}
@@ -1344,11 +1684,11 @@ export default function Player() {
 
         {/* VRモード時: 始点変更ボタン */}
         {mode === 'vr' && (
-          <Box style={{ '--wails-draggable': 'no-drag' }} sx={{ ml: 0.5 }}>
+          <Box style={{ '--wails-draggable': 'no-drag' }} sx={{ ml: 2 }}>
             <Tooltip title={t('vr.changeViewpoint')} placement="bottom">
               <IconButton
                 sx={{ color: 'white', width: 28, height: 28 }}
-                onClick={() => setStartOpen(true)}
+                onClick={openVrOverlay}
               >
                 <GridViewIcon fontSize="small" />
               </IconButton>
@@ -1390,17 +1730,7 @@ export default function Player() {
 
       {/* ミニプログレスバー */}
       {miniProgress && !showUI && duration > 0 && (
-        <Box sx={{
-          position: 'absolute', bottom: 0, left: 0, right: 0,
-          height: 3, zIndex: 5, pointerEvents: 'none',
-        }}>
-          <Box sx={{
-            height: '100%',
-            width: `${(currentTime / duration) * 100}%`,
-            bgcolor: activeColor,
-            opacity: 0.7,
-          }} />
-        </Box>
+        <MiniProgressBar video={videoEl} duration={duration} activeColor={activeColor} />
       )}
 
       {/* コントロールバー */}
@@ -1412,111 +1742,18 @@ export default function Player() {
         pointerEvents: showUI ? 'auto' : 'none',
       }}>
         <Stack direction="row" alignItems="center" spacing={1}>
-          <Box
-            ref={seekBarRef}
-            sx={{ position: 'relative', flex: 1 }}
-            onMouseMove={handleSeekBarMouseMove}
-            onMouseLeave={handleSeekBarMouseLeave}
-          >
-            {rangeLoop && rangePoint1 !== null && rangePoint2 !== null && duration > 0 && (
-              <Box sx={{
-                position: 'absolute', pointerEvents: 'none', zIndex: 1,
-                left: `${(Math.min(rangePoint1, rangePoint2) / duration) * 100}%`,
-                width: `${(Math.abs(rangePoint2 - rangePoint1) / duration) * 100}%`,
-                top: '50%', transform: 'translateY(-50%)',
-                height: 14, bgcolor: `${activeColor}50`, borderRadius: 0.5,
-              }} />
-            )}
-            {rangeLoop && duration > 0 && [
-              { point: rangePoint1, setPoint: setRangePoint1 },
-              { point: rangePoint2, setPoint: setRangePoint2 },
-            ].map(({ point, setPoint }, i) => {
-              if (point === null) return null
-              const other  = i === 0 ? rangePoint2 : rangePoint1
-              const isLeft = other === null || point <= other
-              return (
-                <Box
-                  key={i}
-                  sx={{
-                    position: 'absolute', zIndex: 3, cursor: 'ew-resize',
-                    left: `${(point / duration) * 100}%`,
-                    top: 0, height: 'calc(100% + 20px)', width: 16,
-                    transform: 'translateX(-50%)',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center',
-                  }}
-                  onPointerDown={(e) => handleMarkerPointerDown(setPoint, other, e)}
-                >
-                  <Box sx={{ flex: 1, width: 2, bgcolor: activeColor }} />
-                  <Box sx={{ position: 'relative', width: 16, height: 16, flexShrink: 0 }}>
-                    <Box sx={{
-                      width: '100%', height: '100%',
-                      bgcolor: activeColor,
-                      clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
-                    }} />
-                    <Typography sx={{
-                      position: 'absolute', bottom: 0, pointerEvents: 'none',
-                      ...(isLeft ? { right: '100%', pr: '4px' } : { left: '100%', pl: '4px' }),
-                      fontSize: '0.65rem', color: activeColor, fontFamily: 'monospace',
-                      whiteSpace: 'nowrap', userSelect: 'none', lineHeight: 1,
-                    }}>
-                      {fmt(point)}
-                    </Typography>
-                  </Box>
-                </Box>
-              )
-            })}
-            {thumbInfo?.dataUrl && (
-              <Box sx={{
-                position: 'absolute',
-                bottom: 'calc(100% + 6px)',
-                left: `clamp(${thumbInfo.w / 2}px, ${thumbInfo.localX}px, calc(100% - ${thumbInfo.w / 2}px))`,
-                transform: 'translateX(-50%)',
-                pointerEvents: 'none',
-                bgcolor: 'rgba(0,0,0,0.85)',
-                borderRadius: 1,
-                overflow: 'hidden',
-                border: '1px solid rgba(255,255,255,0.15)',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-              }}>
-                <Box component="img" src={thumbInfo.dataUrl}
-                  sx={{ width: thumbInfo.w, height: thumbInfo.h, display: 'block' }} />
-                <Typography variant="caption" sx={{
-                  display: 'block', textAlign: 'center',
-                  color: 'rgba(255,255,255,0.9)', py: 0.25, fontFamily: 'monospace',
-                }}>
-                  {fmt(thumbInfo.time)}
-                </Typography>
-              </Box>
-            )}
-            <Slider
-            size="small"
-            min={0} max={duration || 0} step={0.1}
-            value={currentTime}
-            onMouseDown={() => { seekDragging.current = true }}
-            onChange={(_, v) => setCurrentTime(v)}
-            onChangeCommitted={(_, v) => {
-              let target = v
-              if (rangeLoop && rangePoint1 !== null && rangePoint2 !== null) {
-                const start = Math.min(rangePoint1, rangePoint2)
-                if (v < start) target = start
-              }
-              videoRef.current.currentTime = target
-              seekDragging.current = false
-            }}
-            sx={{
-              py: 0.5,
-              '& .MuiSlider-track': { height: 14, border: 'none', bgcolor: activeColor, borderRadius: 0.5 },
-              '& .MuiSlider-rail':  { height: 14, bgcolor: 'rgba(255,255,255,0.25)', borderRadius: 0.5 },
-              '& .MuiSlider-thumb': {
-                width: 22, height: 22, bgcolor: activeColor,
-                borderRadius: 0,
-                clipPath: 'polygon(30% 0, 85% 50%, 30% 100%)',
-                '&:hover, &.Mui-focusVisible': { boxShadow: 'none' },
-                '&::before': { boxShadow: 'none' },
-              },
-            }}
+          <SeekBarArea
+            video={videoEl}
+            thumbVideoRef={thumbVideoRef}
+            thumbCanvasRef={thumbCanvasRef}
+            thumbEnabledRef={thumbEnabledRef}
+            modeRef={modeRef}
+            vrStartRef={vrStartRef}
+            duration={duration}
+            activeColor={activeColor}
+            rangeLoop={rangeLoop}
+            visible={showUI}
           />
-          </Box>
           <Tooltip title={loop ? t('controls.loopOn') : t('controls.loopOff')} placement="top">
             <IconButton onClick={handleLoopToggle} sx={{ color: loop ? activeColor : 'rgba(255,255,255,0.3)', width: 28, height: 28 }}>
               <RepeatIcon fontSize="small" />
@@ -1535,9 +1772,7 @@ export default function Player() {
           <IconButton onClick={handlePlayPause} sx={{ color: 'white', width: 28, height: 28 }}>
             {paused ? <PlayArrowIcon /> : <PauseIcon />}
           </IconButton>
-          <Typography sx={{ fontFamily: 'monospace', whiteSpace: 'nowrap', minWidth: 90, fontSize: '0.95rem' }}>
-            {fmt(currentTime)} / {fmt(duration)}
-          </Typography>
+          <TimeDisplay video={videoEl} duration={duration} visible={showUI} />
           <IconButton onClick={handleMuteToggle} sx={{ color: muted ? 'rgba(255,255,255,0.3)' : 'white', width: 28, height: 28, ml: '20px !important' }}>
             {muted ? <VolumeOffIcon /> : <VolumeUpIcon />}
           </IconButton>
@@ -1546,6 +1781,7 @@ export default function Player() {
             min={0} max={1} step={0.01}
             value={volume}
             onChange={handleVolumeChange}
+            onChangeCommitted={handleVolumeCommitted}
             valueLabelDisplay="auto"
             valueLabelFormat={v => `${Math.round(v * 100)}%`}
             sx={{
@@ -1615,14 +1851,12 @@ export default function Player() {
         acceptInactiveClick={acceptInactiveRef.current}
         onAcceptInactiveClickChange={(next) => { acceptInactiveRef.current = next }}
         miniProgressBar={miniProgress}
-        onMiniProgressBarChange={(next) => { miniProgressRef.current = next; setMiniProgress(next) }}
+        onMiniProgressBarChange={(next) => setMiniProgress(next)}
         thumbEnabled={thumbEnabled}
         onThumbEnabledChange={(next) => {
           setThumbEnabled(next)
           thumbEnabledRef.current = next
           if (!next) {
-            clearTimeout(thumbSeekTimer.current)
-            setThumbInfo(null)
             if (thumbVideoRef.current) thumbVideoRef.current.src = ''
           } else if (videoRef.current?.src) {
             if (thumbVideoRef.current) thumbVideoRef.current.src = videoRef.current.src

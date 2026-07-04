@@ -98,7 +98,7 @@ Window position/size restoration uses a **two-phase approach**:
 
 ### Frameless Window Resize Handles
 
-Frameless ウィンドウではコンテンツがウィンドウ端に密着するとリサイズハンドル（5px）が塞がれる。Three.js canvas のような全面要素は `calc(100vw - 10px)` × `calc(100vh - 10px)` + `margin: 5px` でリサイズ領域を確保すること。
+`@wailsio/runtime/dist/drag.js` のリサイズハンドル判定は `window.outerWidth/outerHeight` とマウス座標の比較のみで行われ、DOM要素のマージンには依存しない。そのため Three.js canvas 等の全面要素にマージンは不要で、`100vw`/`100vh` で映像を100%表示にしてもリサイズは機能する（以前は `calc(100vw - 10px)` + `margin: 5px` としていたが撤去済み）。
 
 ### Runtime Import
 
