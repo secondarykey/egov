@@ -38,7 +38,7 @@ import SettingsIcon       from '@mui/icons-material/Settings'
 import ReportProblemIcon from '@mui/icons-material/ReportProblem'
 import RotateRightIcon   from '@mui/icons-material/RotateRight'
 import { Events, Window } from '@wailsio/runtime'
-import { GetInitialFile, GetServerURL, GetSettings, Quit, UpdateAlwaysOnTop, UpdatePlaybackSettings } from '../bindings/egov/api'
+import { GetInitialFile, GetServerURL, GetSettings, Quit, UpdateAlwaysOnTop, UpdatePlaybackSettings, UpdateVRSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
 import { loadLanguages } from './languages'
 import SettingsDialog from './SettingsDialog'
@@ -95,6 +95,11 @@ export default function Player() {
   const showUIRef           = useRef(false)
   const rangeLoopRef        = useRef(false)
   const detectedFpsRef    = useRef(0)
+  const vrFovRef            = useRef(75)
+  const vrSensitivityRef    = useRef(0.004)
+  const vrScrollSpeedRef    = useRef(0.05)
+  const uiHideDelayRef      = useRef(1500)
+  const uiHideLeaveDelayRef = useRef(800)
   const [miniProgress, setMiniProgress] = useState(false)
 
   const [paused,      setPaused]      = useState(true)
@@ -221,7 +226,7 @@ export default function Player() {
     const onWheel = (e) => {
       if (modeRef.current !== 'vr') return
       e.preventDefault()
-      camera.fov = Math.max(20, Math.min(100, camera.fov + e.deltaY * 0.05))
+      camera.fov = Math.max(20, Math.min(100, camera.fov + e.deltaY * vrScrollSpeedRef.current))
       camera.updateProjectionMatrix()
       requestRender()
     }
@@ -353,7 +358,7 @@ export default function Player() {
       const off = vrOffsetsRef.current[vrStart] ?? { x: 0, y: 0 }
       camera.position.set(off.x, off.y, off.z ?? 0.1)
       headGroup.rotation.set(0, 0, 0)
-      camera.fov     = 75
+      camera.fov     = vrFovRef.current
       controls.enabled = false
       camera.updateProjectionMatrix()
       planeRef.current.rotation.z = 0
@@ -408,7 +413,6 @@ export default function Player() {
 
     let startX = 0, startY = 0, active = false
     let yaw = 0, pitch = 0
-    const sensitivity = 0.004
     const worldY = new THREE.Vector3(0, 1, 0)
 
     const applyRotation = () => {
@@ -427,6 +431,7 @@ export default function Player() {
     }
     const onPointerMove = (e) => {
       if (!active) return
+      const sensitivity = vrSensitivityRef.current
       yaw   -= (e.clientX - startX) * sensitivity
       pitch  = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch - (e.clientY - startY) * sensitivity))
       startX = e.clientX; startY = e.clientY
@@ -481,6 +486,12 @@ export default function Player() {
     return () => thumbVideo.removeEventListener('seeked', onSeeked)
   }, [])
 
+  // VRオフセットの永続化: 保存済みのVR設定（fov等）を取得してオフセットだけ差し替える
+  const persistVROffsets = async (offsets) => {
+    const s = await GetSettings()
+    UpdateVRSettings({ ...s.vr, offsets })
+  }
+
   const resetRangeLoop = () => {
     setRangeLoop(false)
     setRangePoint1(null)
@@ -527,6 +538,20 @@ export default function Player() {
       clickTimeoutMsRef.current  = s.controls?.clickTimeoutMs ?? 300
       doubleClickSeekRef.current = s.controls?.doubleClickSeekSecs ?? 10
       fastSeekSecsRef.current    = s.controls?.fastSeekSecs ?? 60
+      uiHideDelayRef.current      = s.controls?.uiHideDelayMs ?? 1500
+      uiHideLeaveDelayRef.current = s.controls?.uiHideOnLeaveDelayMs ?? 800
+      // VR設定と起動時モードを反映
+      vrFovRef.current         = s.vr?.fov || 75
+      vrSensitivityRef.current = s.vr?.dragSensitivity || 0.004
+      vrScrollSpeedRef.current = s.vr?.scrollSpeed || 0.05
+      if (s.vr?.offsets) {
+        setVrOffsets(s.vr.offsets)
+        vrOffsetsRef.current = s.vr.offsets
+      }
+      const start = s.vr?.defaultStart || 'left'
+      setVrStart(start)
+      vrStartRef.current = start
+      setMode(p.defaultMode || 'fit')
       miniProgressRef.current = s.app?.miniProgressBar ?? false
       setMiniProgress(s.app?.miniProgressBar ?? false)
       setServerUrl(url)
@@ -614,7 +639,7 @@ export default function Player() {
       setShowUI(true)
     } else if (showUI) {
       clearTimeout(hideTimer.current)
-      hideTimer.current = setTimeout(() => setShowUI(false), 1500)
+      hideTimer.current = setTimeout(() => setShowUI(false), uiHideDelayRef.current)
     }
     // シークオーバーレイのゾーン検出（seekOverlay state が設定された後＝800ms経過後のみ）
     if (seekOverlay && isMouseHeldRef.current) {
@@ -638,7 +663,7 @@ export default function Player() {
 
   const handleMouseLeave = () => {
     clearTimeout(hideTimer.current)
-    hideTimer.current = setTimeout(() => setShowUI(false), 800)
+    hideTimer.current = setTimeout(() => setShowUI(false), uiHideLeaveDelayRef.current)
     if (seekOverlayRef.current) hideSeekOverlay()
   }
 
@@ -680,7 +705,7 @@ export default function Player() {
 
     if (mode === 'vr') {
       if (headGroupRef.current) headGroupRef.current.rotation.set(0, 0, 0)
-      camera.fov = 75
+      camera.fov = vrFovRef.current
       camera.updateProjectionMatrix()
     } else if (mode === 'fit') {
       const video = videoRef.current
@@ -1237,6 +1262,7 @@ export default function Player() {
                           const next = { ...vrOffsets, [vrStart]: { ...vrOffsets[vrStart], [axis]: 0 } }
                           setVrOffsets(next)
                           vrOffsetsRef.current = next
+                          persistVROffsets(next)
                           if (cameraRef.current) {
                             cameraRef.current.position[axis] = 0
                             controlsRef.current?.update()
@@ -1262,6 +1288,7 @@ export default function Player() {
                       requestRenderRef.current?.()
                     }
                   }}
+                  onChangeCommitted={() => persistVROffsets(vrOffsetsRef.current)}
                   sx={{
                     color: '#4fc3f7',
                     '& .MuiSlider-thumb': { width: 16, height: 16 },
