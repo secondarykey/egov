@@ -427,6 +427,7 @@ export default function Player() {
   const [dragging,    setDragging]    = useState(false)
   const [showUI,      setShowUI]      = useState(false)
   const [nearTopResizeEdge, setNearTopResizeEdge] = useState(false)
+  const [nearAnyResizeEdge, setNearAnyResizeEdge] = useState(false)
   const [mode,        setMode]        = useState('fit')
   const [vrStart,     setVrStart]     = useState('left')
   const [startOpen,   setStartOpen]   = useState(false)
@@ -1418,11 +1419,22 @@ export default function Player() {
             position: 'absolute', inset: 0, zIndex: 5,
             display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', gap: 1.5,
+            gap: 1.5,
             color: 'rgba(255,255,255,0.25)',
             transition: 'color 0.2s',
             '&:hover': { color: 'rgba(255,255,255,0.55)' },
+            // 画面端5px（Wails3のリサイズ判定領域）は cursor を明示せず、
+            // ランタイムが document.body に設定するリサイズカーソルを継承させる
+            ...(nearAnyResizeEdge ? {} : { cursor: 'pointer' }),
           }}
+          onMouseMove={e => {
+            const edge = 6
+            setNearAnyResizeEdge(
+              e.clientX < edge || e.clientX > window.innerWidth - edge ||
+              e.clientY < edge || e.clientY > window.innerHeight - edge
+            )
+          }}
+          onMouseLeave={() => setNearAnyResizeEdge(false)}
         >
           <Stack direction="row" alignItems="center" spacing={1}>
             <VideoFileIcon sx={{ fontSize: 64 }} />
