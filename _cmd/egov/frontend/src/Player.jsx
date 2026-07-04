@@ -1091,7 +1091,7 @@ export default function Player() {
       isMouseHeldRef.current = true
       seekOverlayRef.current = pos
       setSeekOverlay(pos)
-    }, 800)
+    }, 400)
   }
 
   const handleCanvasMouseUp = () => {
