@@ -426,8 +426,7 @@ export default function Player() {
   const [fileName,    setFileName]    = useState('')
   const [dragging,    setDragging]    = useState(false)
   const [showUI,      setShowUI]      = useState(false)
-  const [nearTopResizeEdge, setNearTopResizeEdge] = useState(false)
-  const [nearAnyResizeEdge, setNearAnyResizeEdge] = useState(false)
+  const [resizeCursor, setResizeCursor] = useState(null)   // Wails3リサイズ判定領域内で明示すべきカーソル種別
   const [mode,        setMode]        = useState('fit')
   const [vrStart,     setVrStart]     = useState('left')
   const [startOpen,   setStartOpen]   = useState(false)
@@ -946,7 +945,31 @@ export default function Player() {
     loadFile(e.dataTransfer.files[0])
   }
 
+  // Wails3ランタイム（drag.js）のリサイズ判定と同じ境界でカーソル種別を計算する。
+  // 自前オーバーレイ（タイトルバー/ドロップ領域）が独自の cursor を指定していると
+  // document.body 側のリサイズカーソルが隠れてしまうため、明示的に上書きする。
+  const computeResizeCursor = (e) => {
+    const edge = 6
+    const corner = 16
+    const left   = e.clientX < edge
+    const right  = e.clientX > window.innerWidth  - edge
+    const top    = e.clientY < edge
+    const bottom = e.clientY > window.innerHeight - edge
+    const leftC   = e.clientX < corner
+    const rightC  = e.clientX > window.innerWidth  - corner
+    const topC    = e.clientY < corner
+    const bottomC = e.clientY > window.innerHeight - corner
+    if (rightC && bottomC) return 'nwse-resize'
+    if (leftC  && bottomC) return 'nesw-resize'
+    if (leftC  && topC)    return 'nwse-resize'
+    if (topC   && rightC)  return 'nesw-resize'
+    if (left || right) return 'ew-resize'
+    if (top || bottom)  return 'ns-resize'
+    return null
+  }
+
   const handleMouseMove = (e) => {
+    setResizeCursor(computeResizeCursor(e))
     const inZone = e.clientY <= 80 || e.clientY >= window.innerHeight - 160 || e.clientX >= window.innerWidth - 80
     if (inZone) {
       clearTimeout(hideTimer.current)
@@ -979,6 +1002,7 @@ export default function Player() {
     clearTimeout(hideTimer.current)
     hideTimer.current = setTimeout(() => setShowUI(false), uiHideLeaveDelayRef.current)
     if (seekOverlayRef.current) hideSeekOverlay()
+    setResizeCursor(null)
   }
 
   const handlePlayPause = () => {
@@ -1423,18 +1447,9 @@ export default function Player() {
             color: 'rgba(255,255,255,0.25)',
             transition: 'color 0.2s',
             '&:hover': { color: 'rgba(255,255,255,0.55)' },
-            // 画面端5px（Wails3のリサイズ判定領域）は cursor を明示せず、
-            // ランタイムが document.body に設定するリサイズカーソルを継承させる
-            ...(nearAnyResizeEdge ? {} : { cursor: 'pointer' }),
+            // 画面端付近（Wails3のリサイズ判定領域）ではリサイズカーソルを優先表示
+            cursor: resizeCursor || 'pointer',
           }}
-          onMouseMove={e => {
-            const edge = 6
-            setNearAnyResizeEdge(
-              e.clientX < edge || e.clientX > window.innerWidth - edge ||
-              e.clientY < edge || e.clientY > window.innerHeight - edge
-            )
-          }}
-          onMouseLeave={() => setNearAnyResizeEdge(false)}
         >
           <Stack direction="row" alignItems="center" spacing={1}>
             <VideoFileIcon sx={{ fontSize: 64 }} />
@@ -1586,13 +1601,11 @@ export default function Player() {
           zIndex: 10,
           opacity: showUI ? 1 : 0,
           pointerEvents: showUI ? 'auto' : 'none',
-          // 最上部5px（Wails3のリサイズ判定領域）は cursor を明示せず、
-          // ランタイムが document.body に設定するリサイズカーソルを継承させる
-          ...(nearTopResizeEdge ? {} : { cursor: 'grab', '&:active': { cursor: 'grabbing' } }),
+          // 最上部（Wails3のリサイズ判定領域）ではリサイズカーソルを優先表示
+          cursor: resizeCursor || 'grab',
+          '&:active': { cursor: resizeCursor || 'grabbing' },
         }}
         style={{ '--wails-draggable': 'drag' }}
-        onMouseMove={e => setNearTopResizeEdge(e.clientY < 6)}
-        onMouseLeave={() => setNearTopResizeEdge(false)}
       >
         {/* ハンバーガーメニュー */}
         <Box style={{ '--wails-draggable': 'no-drag' }}>
