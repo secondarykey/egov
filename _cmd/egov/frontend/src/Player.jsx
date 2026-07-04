@@ -1607,7 +1607,7 @@ export default function Player() {
                 color: 'rgba(255,255,255,0.5)',
                 borderColor: 'rgba(255,255,255,0.2)',
                 py: 0.5, p: 0.5,
-                minWidth: '50px',
+                minWidth: '60px',
               },
               '& .Mui-selected': {
                 color: 'white !important',
@@ -1629,7 +1629,7 @@ export default function Player() {
 
         {/* 回転（VRモード以外） */}
         {mode !== 'vr' && (
-          <Box style={{ '--wails-draggable': 'no-drag' }} sx={{ ml: 0.5 }}>
+          <Box style={{ '--wails-draggable': 'no-drag' }} sx={{ ml: 2 }}>
             <Tooltip title={`${t('controls.rotate', 'Rotate')} ${(rotation + 90) % 360}°`} placement="bottom">
               <IconButton
                 sx={{ color: rotation ? activeColor : 'white', width: 28, height: 28 }}
@@ -1649,7 +1649,7 @@ export default function Player() {
 
         {/* VRモード時: 始点変更ボタン */}
         {mode === 'vr' && (
-          <Box style={{ '--wails-draggable': 'no-drag' }} sx={{ ml: 0.5 }}>
+          <Box style={{ '--wails-draggable': 'no-drag' }} sx={{ ml: 2 }}>
             <Tooltip title={t('vr.changeViewpoint')} placement="bottom">
               <IconButton
                 sx={{ color: 'white', width: 28, height: 28 }}
