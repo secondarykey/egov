@@ -61,6 +61,9 @@ const fmt = (s) => {
 const deg2rad = (d) => (d * Math.PI) / 180
 const rad2deg = (r) => (r * 180) / Math.PI
 
+// VR投影球の半径
+const VR_RADIUS = 500
+
 // headGroup（首）の向きを設定する。ワールドY軸ヨー → ローカルX軸ピッチの順。
 const WORLD_Y = new THREE.Vector3(0, 1, 0)
 const applyHeadRotation = (group, yaw, pitch) => {
@@ -68,6 +71,14 @@ const applyHeadRotation = (group, yaw, pitch) => {
   group.rotation.set(0, 0, 0)
   group.rotateOnWorldAxis(WORLD_Y, yaw)
   group.rotateX(pitch)
+}
+
+// 視点の平行移動。カメラではなく球体を逆方向に動かすことで
+// 「自分が動く」のと等価な見え方にする（OrbitControls と干渉しない）。
+// pos は球半径に対する比率 { x: 右+, y: 上+, z: 前+ }
+const applySpherePosition = (sphere, pos) => {
+  if (!sphere) return
+  sphere.position.set(-pos.x * VR_RADIUS, -pos.y * VR_RADIUS, pos.z * VR_RADIUS)
 }
 
 // 再生位置表示。timeupdate（約4回/秒）による再レンダーを
@@ -377,6 +388,8 @@ export default function Player() {
   const vrPitchRef      = useRef(0)
   const vrInitYawRef    = useRef(0)   // 保存済みの既定の向き（ラジアン）
   const vrInitPitchRef  = useRef(0)
+  const vrPosRef        = useRef({ x: 0, y: 0, z: 0 })   // 現在の視点位置（半径比）
+  const vrInitPosRef    = useRef({ x: 0, y: 0, z: 0 })   // 保存済みの既定位置
   const headGroupRef    = useRef(null)
   const rendererRef     = useRef(null)
   const requestRenderRef = useRef(null)   // 単発レンダーを要求（操作・状態変化時）
@@ -420,7 +433,7 @@ export default function Player() {
   const [seekFeedback,  setSeekFeedback]  = useState(null)
   const [thumbEnabled, setThumbEnabled] = useState(true)
   const [language,     setLanguage]     = useState('en')
-  const [vrView,         setVrView]         = useState({ pitch: 0, yaw: 0, fov: 75 })   // オーバーレイ表示用（度）
+  const [vrView,         setVrView]         = useState({ pitch: 0, yaw: 0, fov: 75, posX: 0, posY: 0, posZ: 0 })   // オーバーレイ表示用（度・半径比）
   const [availableLangs, setAvailableLangs] = useState([])
   const [serverUrl,      setServerUrl]      = useState('')
   const [settingsOpen,   setSettingsOpen]   = useState(false)
@@ -469,7 +482,7 @@ export default function Player() {
     textureRef.current = texture
 
     // VR: 半球内側
-    const sGeo = new THREE.SphereGeometry(500, 60, 40, 0, Math.PI)
+    const sGeo = new THREE.SphereGeometry(VR_RADIUS, 60, 40, 0, Math.PI)
     sGeo.scale(-1, 1, 1)
     const sphere = new THREE.Mesh(sGeo, new THREE.MeshBasicMaterial({ map: texture }))
     sphere.rotation.y = -Math.PI / 2
@@ -650,8 +663,9 @@ export default function Player() {
 
     if (mode === 'vr') {
       camera.position.set(0, 0, 0.1)
-      // セッション中の頭の向きを維持して復帰する
+      // セッション中の頭の向き・視点位置を維持して復帰する
       applyHeadRotation(headGroup, vrYawRef.current, vrPitchRef.current)
+      applySpherePosition(sphereRef.current, vrPosRef.current)
       camera.fov     = vrFovRef.current
       controls.enabled = false
       camera.updateProjectionMatrix()
@@ -737,28 +751,35 @@ export default function Player() {
     }
   }, [mode])
 
-  // 現在の頭の向きとFOVを既定として保存する。
+  // 現在の頭の向き・視点位置・FOVを既定として保存する。
   // 他のVR設定（感度等）は保存済みの値を維持する。
   const persistVRView = async () => {
     const fov = cameraRef.current?.fov ?? vrFovRef.current
     vrInitPitchRef.current = vrPitchRef.current
     vrInitYawRef.current   = vrYawRef.current
+    vrInitPosRef.current   = { ...vrPosRef.current }
     vrFovRef.current       = fov
     const s = await GetSettings()
     UpdateVRSettings({
       ...s.vr,
       initialPitch: rad2deg(vrPitchRef.current),
       initialYaw:   rad2deg(vrYawRef.current),
+      positionX:    vrPosRef.current.x,
+      positionY:    vrPosRef.current.y,
+      positionZ:    vrPosRef.current.z,
       fov,
     })
   }
 
-  // VR視点オーバーレイを開く。スライダーへ現在の向きを反映する。
+  // VR視点オーバーレイを開く。スライダーへ現在の向き・位置を反映する。
   const openVrOverlay = () => {
     setVrView({
       pitch: rad2deg(vrPitchRef.current),
       yaw:   rad2deg(vrYawRef.current),
       fov:   cameraRef.current?.fov ?? vrFovRef.current,
+      posX:  vrPosRef.current.x,
+      posY:  vrPosRef.current.y,
+      posZ:  vrPosRef.current.z,
     })
     setStartOpen(true)
   }
@@ -768,7 +789,9 @@ export default function Player() {
     setVrView(next)
     vrPitchRef.current = deg2rad(next.pitch)
     vrYawRef.current   = deg2rad(next.yaw)
+    vrPosRef.current   = { x: next.posX, y: next.posY, z: next.posZ }
     applyHeadRotation(headGroupRef.current, vrYawRef.current, vrPitchRef.current)
+    applySpherePosition(sphereRef.current, vrPosRef.current)
     if (cameraRef.current && cameraRef.current.fov !== next.fov) {
       cameraRef.current.fov = next.fov
       cameraRef.current.updateProjectionMatrix()
@@ -834,11 +857,17 @@ export default function Player() {
       vrScrollSpeedRef.current = s.vr?.scrollSpeed || 0.05
       const initPitch = deg2rad(s.vr?.initialPitch ?? 0)
       const initYaw   = deg2rad(s.vr?.initialYaw ?? 0)
+      const initPos   = { x: s.vr?.positionX ?? 0, y: s.vr?.positionY ?? 0, z: s.vr?.positionZ ?? 0 }
       vrInitPitchRef.current = initPitch
       vrInitYawRef.current   = initYaw
+      vrInitPosRef.current   = { ...initPos }
       vrPitchRef.current     = initPitch
       vrYawRef.current       = initYaw
-      setVrView({ pitch: s.vr?.initialPitch ?? 0, yaw: s.vr?.initialYaw ?? 0, fov: s.vr?.fov || 75 })
+      vrPosRef.current       = { ...initPos }
+      setVrView({
+        pitch: s.vr?.initialPitch ?? 0, yaw: s.vr?.initialYaw ?? 0, fov: s.vr?.fov || 75,
+        posX: initPos.x, posY: initPos.y, posZ: initPos.z,
+      })
       const start = s.vr?.defaultStart || 'left'
       setVrStart(start)
       vrStartRef.current = start
@@ -972,10 +1001,12 @@ export default function Player() {
     if (!camera || !controls) return
 
     if (mode === 'vr') {
-      // 保存済みの既定の向きに戻す
+      // 保存済みの既定の向き・位置に戻す
       vrPitchRef.current = vrInitPitchRef.current
       vrYawRef.current   = vrInitYawRef.current
+      vrPosRef.current   = { ...vrInitPosRef.current }
       applyHeadRotation(headGroupRef.current, vrYawRef.current, vrPitchRef.current)
+      applySpherePosition(sphereRef.current, vrPosRef.current)
       camera.fov = vrFovRef.current
       camera.updateProjectionMatrix()
     } else if (mode === 'fit') {
@@ -1456,14 +1487,20 @@ export default function Player() {
             ))}
           </Box>
           <Box
-            sx={{ width: 340, mt: 2 }}
+            sx={{
+              width: 520, mt: 2,
+              display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 3,
+            }}
             onClick={e => e.stopPropagation()}
           >
             {[
-              { key: 'pitch', label: t('vr.pitch'), min: -90,  max: 90,  step: 0.5, reset: 0 },
-              { key: 'yaw',   label: t('vr.yaw'),   min: -180, max: 180, step: 0.5, reset: 0 },
-              { key: 'fov',   label: t('vr.fov'),   min: 20,   max: 100, step: 1,   reset: 75 },
-            ].map(({ key, label, min, max, step, reset }) => (
+              { key: 'pitch', label: t('vr.pitch'), min: -90,  max: 90,  step: 0.5,   reset: 0,  format: v => `${v.toFixed(1)}°` },
+              { key: 'posY',  label: t('vr.posY'),  min: -0.9, max: 0.9, step: 0.005, reset: 0,  format: v => `${(v * 100).toFixed(1)}%` },
+              { key: 'yaw',   label: t('vr.yaw'),   min: -180, max: 180, step: 0.5,   reset: 0,  format: v => `${v.toFixed(1)}°` },
+              { key: 'posX',  label: t('vr.posX'),  min: -0.9, max: 0.9, step: 0.005, reset: 0,  format: v => `${(v * 100).toFixed(1)}%` },
+              { key: 'fov',   label: t('vr.fov'),   min: 20,   max: 100, step: 1,     reset: 75, format: v => `${v.toFixed(0)}°` },
+              { key: 'posZ',  label: t('vr.posZ'),  min: -0.9, max: 0.9, step: 0.005, reset: 0,  format: v => `${(v * 100).toFixed(1)}%` },
+            ].map(({ key, label, min, max, step, reset, format }) => (
               <Box key={key} sx={{ mb: 1 }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
                   <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)' }}>
@@ -1471,7 +1508,7 @@ export default function Player() {
                   </Typography>
                   <Stack direction="row" alignItems="center" spacing={0.5}>
                     <Typography variant="caption" sx={{ color: 'white', fontFamily: 'monospace' }}>
-                      {`${(vrView[key] ?? 0).toFixed(1)}°`}
+                      {format(vrView[key] ?? 0)}
                     </Typography>
                     <Tooltip title={t('vr.resetToZero')} placement="top">
                       <IconButton
@@ -1503,7 +1540,7 @@ export default function Player() {
               fullWidth
               size="small"
               sx={{
-                mt: 0.5, color: 'white',
+                mt: 0.5, gridColumn: '1 / -1', color: 'white',
                 bgcolor: 'rgba(255,255,255,0.08)',
                 border: '1px solid rgba(255,255,255,0.25)',
                 '&:hover': { bgcolor: 'rgba(255,255,255,0.18)' },

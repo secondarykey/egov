@@ -9,9 +9,13 @@ import (
 
 type VRSettings struct {
 	// InitialPitch/InitialYaw は視聴開始時の頭の向き（度）。
-	// 目線の高さ合わせはカメラの平行移動ではなく回転で行う。
-	InitialPitch    float64 `json:"initialPitch"`
-	InitialYaw      float64 `json:"initialYaw"`
+	InitialPitch float64 `json:"initialPitch"`
+	InitialYaw   float64 `json:"initialYaw"`
+	// PositionX/Y/Z は視点の平行移動（球半径に対する比率 -1..1）。
+	// 実装上は球体側を逆方向に動かす。X:右+ Y:上+ Z:前+
+	PositionX       float64 `json:"positionX"`
+	PositionY       float64 `json:"positionY"`
+	PositionZ       float64 `json:"positionZ"`
 	FOV             float64 `json:"fov"`
 	DragSensitivity float64 `json:"dragSensitivity"`
 	ScrollSpeed     float64 `json:"scrollSpeed"`
