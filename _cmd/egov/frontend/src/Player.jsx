@@ -1607,6 +1607,7 @@ export default function Player() {
                 color: 'rgba(255,255,255,0.5)',
                 borderColor: 'rgba(255,255,255,0.2)',
                 py: 0.5, p: 0.5,
+                minWidth: '50px',
               },
               '& .Mui-selected': {
                 color: 'white !important',
