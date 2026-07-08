@@ -260,7 +260,7 @@ const SeekBarArea = memo(function SeekBarArea({
   return (
     <Box
       ref={seekBarRef}
-      sx={{ position: 'relative', flex: 1 }}
+      sx={{ position: 'relative', flex: 1, height: 28, display: 'flex', alignItems: 'center' }}
       onMouseMove={handleSeekBarMouseMove}
       onMouseLeave={handleSeekBarMouseLeave}
     >
@@ -270,7 +270,7 @@ const SeekBarArea = memo(function SeekBarArea({
           left: `${(Math.min(rangePoint1, rangePoint2) / duration) * 100}%`,
           width: `${(Math.abs(rangePoint2 - rangePoint1) / duration) * 100}%`,
           top: '50%', transform: 'translateY(-50%)',
-          height: 14, bgcolor: `${activeColor}50`, borderRadius: 0.5,
+          height: 26, bgcolor: `${activeColor}50`, borderRadius: 0.5,
         }} />
       )}
       {rangeLoop && duration > 0 && [
@@ -350,13 +350,13 @@ const SeekBarArea = memo(function SeekBarArea({
           seekDragging.current = false
         }}
         sx={{
-          py: 0.5,
-          '& .MuiSlider-track': { height: 14, border: 'none', bgcolor: activeColor, borderRadius: 0.5 },
-          '& .MuiSlider-rail':  { height: 14, bgcolor: 'rgba(255,255,255,0.25)', borderRadius: 0.5 },
+          py: 0,
+          '& .MuiSlider-track': { height: 26, border: 'none', bgcolor: activeColor, borderRadius: 0.5 },
+          '& .MuiSlider-rail':  { height: 26, bgcolor: 'rgba(255,255,255,0.25)', borderRadius: 0.5 },
           '& .MuiSlider-thumb': {
-            width: 22, height: 22, bgcolor: activeColor,
+            width: 24, height: 24, bgcolor: activeColor,
             borderRadius: 0,
-            clipPath: 'polygon(30% 0, 85% 50%, 30% 100%)',
+            clipPath: 'polygon(50% 0, 100% 50%, 50% 100%)',
             '&:hover, &.Mui-focusVisible': { boxShadow: 'none' },
             '&::before': { boxShadow: 'none' },
           },
@@ -1451,7 +1451,7 @@ export default function Player() {
             cursor: resizeCursor || 'pointer',
           }}
         >
-          <Stack direction="row" alignItems="center" spacing={1}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <VideoFileIcon sx={{ fontSize: 64 }} />
             <ArrowForwardIcon sx={{ fontSize: 64 }} />
             <MonitorIcon sx={{ fontSize: 64 }} />
@@ -1536,11 +1536,11 @@ export default function Player() {
               { key: 'posZ',  label: t('vr.posZ'),  min: -0.9, max: 0.9, step: 0.005, reset: 0,  format: v => `${(v * 100).toFixed(1)}%` },
             ].map(({ key, label, min, max, step, reset, format }) => (
               <Box key={key} sx={{ mb: 1 }}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
+                <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
                   <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)' }}>
                     {label}
                   </Typography>
-                  <Stack direction="row" alignItems="center" spacing={0.5}>
+                  <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
                     <Typography variant="caption" sx={{ color: 'white', fontFamily: 'monospace' }}>
                       {format(vrView[key] ?? 0)}
                     </Typography>
@@ -1737,11 +1737,11 @@ export default function Player() {
       <Box sx={{
         ...barStyle,
         position: 'absolute', bottom: 0, left: 0, right: 0,
-        px: 2, pt: 2, pb: 2,
+        px: 2, pt: 2, pb: 1,
         opacity: showUI ? 1 : 0,
         pointerEvents: showUI ? 'auto' : 'none',
       }}>
-        <Stack direction="row" alignItems="center" spacing={1}>
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <SeekBarArea
             video={videoEl}
             thumbVideoRef={thumbVideoRef}
@@ -1768,9 +1768,9 @@ export default function Player() {
         <Collapse in={rangeLoop}>
           <Box sx={{ mt: 0.25, height: 16 }} />
         </Collapse>
-        <Stack direction="row" sx={{ alignItems: 'anchor-center', mt: 1 }} spacing={1}>
-          <IconButton onClick={handlePlayPause} sx={{ color: 'white', width: 28, height: 28 }}>
-            {paused ? <PlayArrowIcon /> : <PauseIcon />}
+        <Stack direction="row" sx={{ alignItems: 'center', mt: 1 }} spacing={1}>
+          <IconButton onClick={handlePlayPause} sx={{ color: 'white', width: 36, height: 36 }}>
+            {paused ? <PlayArrowIcon sx={{ fontSize: 28 }} /> : <PauseIcon sx={{ fontSize: 28 }} />}
           </IconButton>
           <TimeDisplay video={videoEl} duration={duration} visible={showUI} />
           <IconButton onClick={handleMuteToggle} sx={{ color: muted ? 'rgba(255,255,255,0.3)' : 'white', width: 28, height: 28, ml: '20px !important' }}>

@@ -20,8 +20,13 @@ type API struct {
 	secret         string
 	settings       *Settings
 	version        string
-	quitFunc       func()
 }
+
+// QuitRequested is signaled each time the frontend calls API.Quit(). main
+// listens on this channel to save window state and exit. A channel (rather
+// than a stored func) is used because the wails3 bindings generator warns
+// about any func-typed declaration in this package.
+var QuitRequested = make(chan struct{}, 1)
 
 func NewApi(initialFile string, fileServerPort int, secret string, settings *Settings, version string) *API {
 	return &API{initialFile: initialFile, fileServerPort: fileServerPort, secret: secret, settings: settings, version: version}
@@ -118,15 +123,11 @@ func (a *API) UpdateActiveColor(color string) {
 	}
 }
 
-// SetQuitFunc sets the function called by Quit() to save state and exit.
-func (a *API) SetQuitFunc(f func()) {
-	a.quitFunc = f
-}
-
-// Quit saves the window state and exits the application.
+// Quit signals QuitRequested so main can save the window state and exit.
 func (a *API) Quit() {
-	if a.quitFunc != nil {
-		a.quitFunc()
+	select {
+	case QuitRequested <- struct{}{}:
+	default:
 	}
 }
 

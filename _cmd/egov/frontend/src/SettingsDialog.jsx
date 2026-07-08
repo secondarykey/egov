@@ -28,7 +28,7 @@ function TabPanel({ value, index, children }) {
 
 function Row({ label, children }) {
   return (
-    <Stack direction="row" alignItems="center" sx={{ mb: 2.5 }}>
+    <Stack direction="row" sx={{ alignItems: 'center', mb: 2.5 }}>
       <Typography variant="body2" sx={{ color: 'text.secondary', width: 180, flexShrink: 0 }}>
         {label}
       </Typography>
@@ -40,7 +40,7 @@ function Row({ label, children }) {
 function SliderRow({ label, value, onChange, min, max, step, format }) {
   return (
     <Row label={label}>
-      <Stack direction="row" alignItems="center" spacing={1.5}>
+      <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
         <Slider min={min} max={max} step={step} value={value} onChange={(_, v) => onChange(v)} size="small" />
         <Typography variant="body2" sx={{ minWidth: 64, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
           {format ? format(value) : value}
@@ -176,7 +176,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             </FormControl>
           </Row>
           <Row label={t('settings.playback.activeColor')}>
-            <Stack direction="row" alignItems="center" spacing={1.5}>
+            <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
               <Box
                 component="input"
                 type="color"

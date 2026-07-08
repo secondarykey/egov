@@ -271,9 +271,10 @@ func main() {
 		})
 	}
 
-	// フロントエンドから API.Quit() 経由で呼ばれる。
+	// フロントエンドから API.Quit() 経由で egov.QuitRequested に通知される。
 	// ウィンドウ破棄前に Position()/Size() を取得して保存する。
-	api.SetQuitFunc(func() {
+	go func() {
+		<-egov.QuitRequested
 		x, y := win.Position()
 		w, h := win.Size()
 		settings.Window = egov.WindowSettings{X: x, Y: y, Width: w, Height: h}
@@ -281,7 +282,7 @@ func main() {
 			slog.Error("settings save error", "err", err)
 		}
 		app.Quit()
-	})
+	}()
 
 	// IPC経由で受信したファイルパスをホワイトリストに追加してフロントエンドへ転送
 	go func() {
