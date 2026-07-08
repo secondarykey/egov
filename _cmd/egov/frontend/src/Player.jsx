@@ -1737,7 +1737,7 @@ export default function Player() {
       <Box sx={{
         ...barStyle,
         position: 'absolute', bottom: 0, left: 0, right: 0,
-        px: 2, pt: 2, pb: 2,
+        px: 2, pt: 2, pb: 1,
         opacity: showUI ? 1 : 0,
         pointerEvents: showUI ? 'auto' : 'none',
       }}>
