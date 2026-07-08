@@ -20,7 +20,7 @@ type API struct {
 	secret         string
 	settings       *Settings
 	version        string
-	quitFunc       func()
+	quitFunc       func() `json:"-"`
 }
 
 func NewApi(initialFile string, fileServerPort int, secret string, settings *Settings, version string) *API {
