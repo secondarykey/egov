@@ -356,7 +356,7 @@ const SeekBarArea = memo(function SeekBarArea({
           '& .MuiSlider-thumb': {
             width: 24, height: 24, bgcolor: activeColor,
             borderRadius: 0,
-            clipPath: 'polygon(30% 0, 85% 50%, 30% 100%)',
+            clipPath: 'polygon(50% 0, 100% 50%, 50% 100%)',
             '&:hover, &.Mui-focusVisible': { boxShadow: 'none' },
             '&::before': { boxShadow: 'none' },
           },
