@@ -260,7 +260,7 @@ const SeekBarArea = memo(function SeekBarArea({
   return (
     <Box
       ref={seekBarRef}
-      sx={{ position: 'relative', flex: 1 }}
+      sx={{ position: 'relative', flex: 1, height: 28, display: 'flex', alignItems: 'center' }}
       onMouseMove={handleSeekBarMouseMove}
       onMouseLeave={handleSeekBarMouseLeave}
     >
