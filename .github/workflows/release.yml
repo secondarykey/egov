@@ -61,8 +61,15 @@ jobs:
           node -v
           npm -v
 
+      - name: Determine Wails3 CLI version
+        working-directory: ./_cmd/egov
+        shell: bash
+        run: |
+          WAILS_VERSION=$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v3)
+          echo "WAILS_VERSION=$WAILS_VERSION" >> $GITHUB_ENV
+
       - name: Install Wails CLI
-        run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS_VERSION }}
 
       - name: Wails doctor
         run: |
