@@ -270,7 +270,7 @@ const SeekBarArea = memo(function SeekBarArea({
           left: `${(Math.min(rangePoint1, rangePoint2) / duration) * 100}%`,
           width: `${(Math.abs(rangePoint2 - rangePoint1) / duration) * 100}%`,
           top: '50%', transform: 'translateY(-50%)',
-          height: 14, bgcolor: `${activeColor}50`, borderRadius: 0.5,
+          height: 20, bgcolor: `${activeColor}50`, borderRadius: 0.5,
         }} />
       )}
       {rangeLoop && duration > 0 && [
@@ -351,8 +351,8 @@ const SeekBarArea = memo(function SeekBarArea({
         }}
         sx={{
           py: 0.5,
-          '& .MuiSlider-track': { height: 14, border: 'none', bgcolor: activeColor, borderRadius: 0.5 },
-          '& .MuiSlider-rail':  { height: 14, bgcolor: 'rgba(255,255,255,0.25)', borderRadius: 0.5 },
+          '& .MuiSlider-track': { height: 20, border: 'none', bgcolor: activeColor, borderRadius: 0.5 },
+          '& .MuiSlider-rail':  { height: 20, bgcolor: 'rgba(255,255,255,0.25)', borderRadius: 0.5 },
           '& .MuiSlider-thumb': {
             width: 22, height: 22, bgcolor: activeColor,
             borderRadius: 0,
