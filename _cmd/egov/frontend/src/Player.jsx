@@ -1768,9 +1768,9 @@ export default function Player() {
         <Collapse in={rangeLoop}>
           <Box sx={{ mt: 0.25, height: 16 }} />
         </Collapse>
-        <Stack direction="row" sx={{ alignItems: 'center', mt: 2 }} spacing={1}>
-          <IconButton onClick={handlePlayPause} sx={{ color: 'white', width: 28, height: 28 }}>
-            {paused ? <PlayArrowIcon /> : <PauseIcon />}
+        <Stack direction="row" sx={{ alignItems: 'center', mt: 1 }} spacing={1}>
+          <IconButton onClick={handlePlayPause} sx={{ color: 'white', width: 36, height: 36 }}>
+            {paused ? <PlayArrowIcon sx={{ fontSize: 28 }} /> : <PauseIcon sx={{ fontSize: 28 }} />}
           </IconButton>
           <TimeDisplay video={videoEl} duration={duration} visible={showUI} />
           <IconButton onClick={handleMuteToggle} sx={{ color: muted ? 'rgba(255,255,255,0.3)' : 'white', width: 28, height: 28, ml: '20px !important' }}>
