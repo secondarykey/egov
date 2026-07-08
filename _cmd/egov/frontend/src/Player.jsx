@@ -1768,7 +1768,7 @@ export default function Player() {
         <Collapse in={rangeLoop}>
           <Box sx={{ mt: 0.25, height: 16 }} />
         </Collapse>
-        <Stack direction="row" sx={{ alignItems: 'anchor-center', mt: 2 }} spacing={1}>
+        <Stack direction="row" sx={{ alignItems: 'center', mt: 2 }} spacing={1}>
           <IconButton onClick={handlePlayPause} sx={{ color: 'white', width: 28, height: 28 }}>
             {paused ? <PlayArrowIcon /> : <PauseIcon />}
           </IconButton>
