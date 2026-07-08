@@ -1451,7 +1451,7 @@ export default function Player() {
             cursor: resizeCursor || 'pointer',
           }}
         >
-          <Stack direction="row" alignItems="center" spacing={1}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <VideoFileIcon sx={{ fontSize: 64 }} />
             <ArrowForwardIcon sx={{ fontSize: 64 }} />
             <MonitorIcon sx={{ fontSize: 64 }} />
@@ -1536,11 +1536,11 @@ export default function Player() {
               { key: 'posZ',  label: t('vr.posZ'),  min: -0.9, max: 0.9, step: 0.005, reset: 0,  format: v => `${(v * 100).toFixed(1)}%` },
             ].map(({ key, label, min, max, step, reset, format }) => (
               <Box key={key} sx={{ mb: 1 }}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
+                <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
                   <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)' }}>
                     {label}
                   </Typography>
-                  <Stack direction="row" alignItems="center" spacing={0.5}>
+                  <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
                     <Typography variant="caption" sx={{ color: 'white', fontFamily: 'monospace' }}>
                       {format(vrView[key] ?? 0)}
                     </Typography>
@@ -1741,7 +1741,7 @@ export default function Player() {
         opacity: showUI ? 1 : 0,
         pointerEvents: showUI ? 'auto' : 'none',
       }}>
-        <Stack direction="row" alignItems="center" spacing={1}>
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <SeekBarArea
             video={videoEl}
             thumbVideoRef={thumbVideoRef}
