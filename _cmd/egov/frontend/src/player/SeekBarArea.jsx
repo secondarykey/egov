@@ -16,6 +16,9 @@ const SeekBarArea = memo(function SeekBarArea({
   const seekBarRef     = useRef(null)
   const seekDragging   = useRef(false)
   const thumbSeekTimer = useRef(null)
+  // 範囲マーカーのピック（フォーカス）中フラグ。ピック中はホバーより
+  // マーカー位置のサムネイル表示を優先する。
+  const markerPickedRef = useRef(false)
 
   // 範囲ループの on/off に応じて範囲を初期化・解除する
   useEffect(() => {
@@ -27,6 +30,9 @@ const SeekBarArea = memo(function SeekBarArea({
     } else {
       setRangePoint1(null)
       setRangePoint2(null)
+      // ピック中にオフにされるとマーカーごと消え blur が発火しないため後始末
+      markerPickedRef.current = false
+      setThumbInfo(null)
     }
   }, [rangeLoop, duration])
 
@@ -84,12 +90,8 @@ const SeekBarArea = memo(function SeekBarArea({
     return () => thumbVideo.removeEventListener('seeked', onSeeked)
   }, [])
 
-  const handleSeekBarMouseMove = (e) => {
-    if (!seekBarRef.current || !duration || !thumbEnabledRef.current) return
-    const rect   = seekBarRef.current.getBoundingClientRect()
-    const localX = e.clientX - rect.left
-    const ratio  = Math.max(0, Math.min(1, localX / rect.width))
-    const time   = ratio * duration
+  // 指定位置（px）と秒数でサムネイルを表示し、遅延付きでプレビュー動画をシークする
+  const showThumbAt = (localX, time) => {
     setThumbInfo(prev => ({ localX, time, dataUrl: prev?.dataUrl ?? null, w: prev?.w ?? 160, h: prev?.h ?? 90 }))
     clearTimeout(thumbSeekTimer.current)
     thumbSeekTimer.current = setTimeout(() => {
@@ -97,7 +99,24 @@ const SeekBarArea = memo(function SeekBarArea({
     }, 80)
   }
 
+  // マーカーの秒数位置にサムネイルを表示する（ピック中・キー移動時）
+  const showThumbAtTime = (time) => {
+    const bar = seekBarRef.current
+    if (!bar || !duration || !thumbEnabledRef.current) return
+    showThumbAt((time / duration) * bar.getBoundingClientRect().width, time)
+  }
+
+  const handleSeekBarMouseMove = (e) => {
+    if (markerPickedRef.current) return
+    if (!seekBarRef.current || !duration || !thumbEnabledRef.current) return
+    const rect   = seekBarRef.current.getBoundingClientRect()
+    const localX = e.clientX - rect.left
+    const ratio  = Math.max(0, Math.min(1, localX / rect.width))
+    showThumbAt(localX, ratio * duration)
+  }
+
   const handleSeekBarMouseLeave = () => {
+    if (markerPickedRef.current) return
     clearTimeout(thumbSeekTimer.current)
     setThumbInfo(null)
   }
@@ -121,6 +140,7 @@ const SeekBarArea = memo(function SeekBarArea({
     const newTime = Math.max(0, Math.min(duration, point + delta))
     setPoint(newTime)
     clampCurrentTimeToRange(newTime, otherPoint)
+    showThumbAtTime(newTime)
   }
 
   const handleMarkerPointerDown = (setPoint, otherPoint, e) => {
@@ -136,20 +156,13 @@ const SeekBarArea = memo(function SeekBarArea({
       const newTime = ratio * duration
       setPoint(newTime)
       clampCurrentTimeToRange(newTime, otherPoint)
-      if (thumbEnabledRef.current) {
-        const localX = me.clientX - rect.left
-        setThumbInfo(prev => ({ localX, time: newTime, dataUrl: prev?.dataUrl ?? null, w: prev?.w ?? 160, h: prev?.h ?? 90 }))
-        clearTimeout(thumbSeekTimer.current)
-        thumbSeekTimer.current = setTimeout(() => {
-          if (thumbVideoRef.current) thumbVideoRef.current.currentTime = newTime
-        }, 80)
-      }
+      // ドラッグ中はマーカー位置（＝マウス位置）にサムネイルを追従させる
+      showThumbAtTime(newTime)
     }
     const onUp = () => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup',   onUp)
-      clearTimeout(thumbSeekTimer.current)
-      setThumbInfo(null)
+      // ピック状態は続くのでサムネイルは消さず、保留中のシークも完了させる
     }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup',   onUp)
@@ -194,6 +207,12 @@ const SeekBarArea = memo(function SeekBarArea({
             }}
             onPointerDown={(e) => handleMarkerPointerDown(setPoint, other, e)}
             onKeyDown={(e) => handleMarkerKeyDown(setPoint, point, other, e)}
+            onFocus={() => { markerPickedRef.current = true; showThumbAtTime(point) }}
+            onBlur={() => {
+              markerPickedRef.current = false
+              clearTimeout(thumbSeekTimer.current)
+              setThumbInfo(null)
+            }}
           >
             <Box sx={{ flex: 1, width: 2, bgcolor: activeColor }} />
             <Box sx={{ position: 'relative', width: 16, height: 16, flexShrink: 0 }}>
