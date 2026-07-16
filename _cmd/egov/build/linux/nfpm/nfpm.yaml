@@ -10,7 +10,7 @@ version: "0.3.1"
 section: "default"
 priority: "extra"
 maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
-description: "Media Player"
+description: "EgoV - MediaPlayer"
 vendor: "secondarykey"
 homepage: "https://wails.io"
 license: "MIT"
