@@ -88,6 +88,15 @@ jobs:
 
           git checkout -b $BRANCH
           git add .
+
+          # 手元で先にバージョンアップ＋アセット再生成済みの場合は差分がない。
+          # その場合はPR作成をスキップし、後続のTagステップだけ実行させる
+          # （タグが打たれれば release.yml は動く）。
+          if git diff --cached --quiet; then
+            echo "No changes to commit. Skipping PR (Tag step will still run)."
+            exit 0
+          fi
+
           git commit -m "chore: version ${{env.NEW_VERSION}}"
           git push origin $BRANCH
 
@@ -104,5 +113,10 @@ jobs:
       - name: Tag
         run: |
           NEW_TAG="v${{env.NEW_VERSION}}"
+          # 既にタグが存在する場合はスキップ（再実行時の冪等性）
+          if git rev-parse "$NEW_TAG" >/dev/null 2>&1; then
+            echo "Tag $NEW_TAG already exists. Skipping."
+            exit 0
+          fi
           git tag $NEW_TAG
           git push origin $NEW_TAG
