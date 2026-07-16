@@ -258,6 +258,15 @@ export default function Player() {
   // 範囲の解除・初期化は SeekBarArea 側の effect が行う
   const resetRangeLoop = () => setRangeLoop(false)
 
+  // play() は自動再生ポリシー等で拒否されることがある。
+  // 拒否時は楽観的に false にした paused 状態を停止へ戻す。
+  const safePlay = (video) => {
+    video.play().catch((err) => {
+      console.warn('video.play() rejected:', err)
+      setPaused(true)
+    })
+  }
+
   const loadFile = (file) => {
     if (!file || !file.type.startsWith('video/')) return
     const video = videoRef.current
@@ -268,7 +277,7 @@ export default function Player() {
     setVideoError(null)
     video.src = url
     if (thumbEnabledRef.current && thumbVideoRef.current) thumbVideoRef.current.src = url
-    video.play()
+    safePlay(video)
     setPaused(false)
     setFileName(file.name)
     resetRangeLoop()
@@ -284,7 +293,7 @@ export default function Player() {
     setVideoError(null)
     video.src = fileUrl
     if (thumbEnabledRef.current && thumbVideoRef.current) thumbVideoRef.current.src = fileUrl
-    video.play()
+    safePlay(video)
     setPaused(false)
     const filePath = new URL(fileUrl).searchParams.get('path') ?? ''
     setFileName(filePath.split(/[\\/]/).pop())
@@ -294,7 +303,7 @@ export default function Player() {
   useEffect(() => {
     // 設定値は Go 側で正規化済み（LoadSettings が不正値をデフォルトへ補正して
     // 常に完全な Settings を返す）ため、フロントエンドでのフォールバックは行わない
-    Promise.all([GetServerURL(), GetSettings()]).then(([url, s]) => {
+    const settingsReady = Promise.all([GetServerURL(), GetSettings()]).then(([url, s]) => {
       const p = s.playback
       setVolume(p.volume)
       setMuted(p.muted)
@@ -337,9 +346,13 @@ export default function Player() {
       }
       loadLanguages(url, p.language).then(langs => setAvailableLangs(langs))
     })
-    GetInitialFile().then(loadFilePath)
+    // 音量・ミュート設定の適用と並走させると、反映前に再生が始まり
+    // 一瞬音が出ることがあるため、ファイルの読み込みは設定適用後に行う
+    settingsReady.then(() => GetInitialFile()).then(loadFilePath)
 
-    const unsub = Events.On('open-file', (event) => loadFilePath(event.data))
+    const unsub = Events.On('open-file', (event) => {
+      settingsReady.then(() => loadFilePath(event.data))
+    })
     return () => unsub()
   }, [])
 
@@ -463,7 +476,7 @@ export default function Player() {
   const handlePlayPause = () => {
     const video = videoRef.current
     if (!video.src) return
-    if (video.paused) { video.play(); setPaused(false) }
+    if (video.paused) { safePlay(video); setPaused(false) }
     else              { video.pause(); setPaused(true) }
   }
 
