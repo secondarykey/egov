@@ -72,7 +72,9 @@
     "controls": {
       "clickTimeout": "Click Timeout",
       "doubleClickSeek": "Double-click Seek",
+      "dragSeek": "Drag Seek (>>)",
       "fastSeek": "Fast Seek (>>>)",
+      "arrowSeek": "Arrow Key Seek",
       "uiHideDelay": "UI Hide Delay",
       "uiHideOnLeave": "UI Hide on Leave"
     },

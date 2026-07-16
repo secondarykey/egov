@@ -50,7 +50,7 @@ function SliderRow({ label, value, onChange, min, max, step, format }) {
   )
 }
 
-export default function SettingsDialog({ open, onClose, availableLangs, onLanguageChange, activeColor: activeColorProp, onActiveColorChange, acceptInactiveClick: acceptInactiveProp, onAcceptInactiveClickChange, miniProgressBar: miniProgressProp, onMiniProgressBarChange, thumbEnabled: thumbEnabledProp, onThumbEnabledChange }) {
+export default function SettingsDialog({ open, onClose, availableLangs, onLanguageChange, activeColor: activeColorProp, onActiveColorChange, acceptInactiveClick: acceptInactiveProp, onAcceptInactiveClickChange, miniProgressBar: miniProgressProp, onMiniProgressBarChange, thumbEnabled: thumbEnabledProp, onThumbEnabledChange, onControlsChange }) {
   const { t } = useTranslation()
   const [tab, setTab] = useState(0)
   const [version, setVersion] = useState('')
@@ -64,7 +64,8 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
   const [playback, setPlayback] = useState({ defaultMode: 'normal', language: 'en', activeColor: '#4fc3f7', thumbnailEnabled: true })
   const [vr, setVr] = useState({ initialPitch: 0, initialYaw: 0, positionX: 0, positionY: 0, positionZ: 0, fov: 75, dragSensitivity: 0.004, scrollSpeed: 0.05, defaultStart: 'left' })
   const [controls, setControls] = useState({
-    clickTimeoutMs: 300, doubleClickSeekSecs: 10, fastSeekSecs: 60,
+    clickTimeoutMs: 300, doubleClickSeekSecs: 10, dragSeekSecs: 10,
+    fastSeekSecs: 60, arrowSeekSecs: 5,
     uiHideDelayMs: 1500, uiHideOnLeaveDelayMs: 800,
   })
   const [origLanguage, setOrigLanguage] = useState('en')
@@ -90,6 +91,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
       UpdateControlSettings(controls),
       UpdateAppSettings(appSettings),
     ])
+    onControlsChange?.(controls)
     if (playback.language !== origLanguage) {
       onLanguageChange?.(playback.language)
     }
@@ -235,9 +237,19 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             min={1} max={60} step={1}
             format={v => `${v} s`}
           />
+          <SliderRow label={t('settings.controls.dragSeek')}
+            value={controls.dragSeekSecs ?? 10} onChange={setC('dragSeekSecs')}
+            min={1} max={60} step={1}
+            format={v => `${v} s`}
+          />
           <SliderRow label={t('settings.controls.fastSeek')}
             value={controls.fastSeekSecs ?? 60} onChange={setC('fastSeekSecs')}
             min={10} max={300} step={10}
+            format={v => `${v} s`}
+          />
+          <SliderRow label={t('settings.controls.arrowSeek')}
+            value={controls.arrowSeekSecs ?? 5} onChange={setC('arrowSeekSecs')}
+            min={1} max={60} step={1}
             format={v => `${v} s`}
           />
           <SliderRow label={t('settings.controls.uiHideDelay')}

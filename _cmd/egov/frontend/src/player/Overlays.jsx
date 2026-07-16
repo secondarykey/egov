@@ -60,13 +60,13 @@ export function SeekFeedback({ feedback, onDone }) {
 
 // 長押しシークのゾーンコントローラー表示。
 // overlay: { x, y }、active: { seconds, forward } | null
-export function SeekZoneOverlay({ overlay, active, activeColor, fastSeekSecs, doubleClickSeekSecs }) {
+export function SeekZoneOverlay({ overlay, active, activeColor, fastSeekSecs, dragSeekSecs }) {
   const zones = [
-    { label: '<<<', sub: `${fastSeekSecs}s`,        seconds: fastSeekSecs,        forward: false },
-    { label: '<<',  sub: `${doubleClickSeekSecs}s`, seconds: doubleClickSeekSecs, forward: false },
+    { label: '<<<', sub: `${fastSeekSecs}s`, seconds: fastSeekSecs, forward: false },
+    { label: '<<',  sub: `${dragSeekSecs}s`, seconds: dragSeekSecs, forward: false },
     { label: '·',   sub: '',                        seconds: 0, forward: false },
-    { label: '>>',  sub: `${doubleClickSeekSecs}s`, seconds: doubleClickSeekSecs, forward: true },
-    { label: '>>>',  sub: `${fastSeekSecs}s`,       seconds: fastSeekSecs,        forward: true },
+    { label: '>>',  sub: `${dragSeekSecs}s`, seconds: dragSeekSecs, forward: true },
+    { label: '>>>', sub: `${fastSeekSecs}s`, seconds: fastSeekSecs, forward: true },
   ]
   return (
     <Box sx={{

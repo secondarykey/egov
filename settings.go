@@ -32,9 +32,13 @@ type PlaybackSettings struct {
 }
 
 type ControlSettings struct {
-	ClickTimeoutMs       int `json:"clickTimeoutMs"`
-	DoubleClickSeekSecs  int `json:"doubleClickSeekSecs"`
-	FastSeekSecs         int `json:"fastSeekSecs"`
+	ClickTimeoutMs      int `json:"clickTimeoutMs"`
+	DoubleClickSeekSecs int `json:"doubleClickSeekSecs"`
+	// DragSeekSecs は長押しコントローラーの内側ゾーン（<< / >>）のシーク秒数。
+	DragSeekSecs int `json:"dragSeekSecs"`
+	FastSeekSecs int `json:"fastSeekSecs"`
+	// ArrowSeekSecs は再生中の ←/→ キーによるシーク秒数（一時停止中はコマ送り）。
+	ArrowSeekSecs        int `json:"arrowSeekSecs"`
 	UIHideDelayMs        int `json:"uiHideDelayMs"`
 	UIHideOnLeaveDelayMs int `json:"uiHideOnLeaveDelayMs"`
 }
@@ -109,7 +113,9 @@ func defaultSettings() *Settings {
 		Controls: ControlSettings{
 			ClickTimeoutMs:       300,
 			DoubleClickSeekSecs:  10,
+			DragSeekSecs:         10,
 			FastSeekSecs:         60,
+			ArrowSeekSecs:        5,
 			UIHideDelayMs:        1500,
 			UIHideOnLeaveDelayMs: 800,
 		},
@@ -155,8 +161,15 @@ func (s *Settings) normalize() {
 	if s.Controls.DoubleClickSeekSecs <= 0 {
 		s.Controls.DoubleClickSeekSecs = d.Controls.DoubleClickSeekSecs
 	}
+	if s.Controls.DragSeekSecs <= 0 {
+		// 旧設定からの移行: ドラッグシークは従来ダブルクリックと共用だった
+		s.Controls.DragSeekSecs = s.Controls.DoubleClickSeekSecs
+	}
 	if s.Controls.FastSeekSecs <= 0 {
 		s.Controls.FastSeekSecs = d.Controls.FastSeekSecs
+	}
+	if s.Controls.ArrowSeekSecs <= 0 {
+		s.Controls.ArrowSeekSecs = d.Controls.ArrowSeekSecs
 	}
 	if s.Controls.UIHideDelayMs <= 0 {
 		s.Controls.UIHideDelayMs = d.Controls.UIHideDelayMs

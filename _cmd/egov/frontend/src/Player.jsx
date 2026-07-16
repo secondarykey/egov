@@ -46,6 +46,8 @@ export default function Player() {
   const seekFeedbackKeyRef  = useRef(0)
   const clickTimeoutMsRef   = useRef(300)
   const doubleClickSeekRef  = useRef(10)
+  const dragSeekSecsRef     = useRef(10)
+  const arrowSeekSecsRef    = useRef(5)
   const justFocusedRef      = useRef(false)
   const focusTimerRef       = useRef(null)
   const acceptInactiveRef   = useRef(false)
@@ -300,6 +302,17 @@ export default function Player() {
     resetRangeLoop()
   }
 
+  // 操作系設定を ref に反映する。起動時と設定ダイアログ保存時の両方から呼ばれる。
+  const applyControlSettings = (c) => {
+    clickTimeoutMsRef.current   = c.clickTimeoutMs
+    doubleClickSeekRef.current  = c.doubleClickSeekSecs
+    dragSeekSecsRef.current     = c.dragSeekSecs
+    fastSeekSecsRef.current     = c.fastSeekSecs
+    arrowSeekSecsRef.current    = c.arrowSeekSecs
+    uiHideDelayRef.current      = c.uiHideDelayMs
+    uiHideLeaveDelayRef.current = c.uiHideOnLeaveDelayMs
+  }
+
   useEffect(() => {
     // 設定値は Go 側で正規化済み（LoadSettings が不正値をデフォルトへ補正して
     // 常に完全な Settings を返す）ため、フロントエンドでのフォールバックは行わない
@@ -313,11 +326,7 @@ export default function Player() {
       setActiveColor(p.activeColor)
       setAlwaysOnTop(s.app.alwaysOnTop)
       acceptInactiveRef.current  = s.app.acceptInactiveClick
-      clickTimeoutMsRef.current  = s.controls.clickTimeoutMs
-      doubleClickSeekRef.current = s.controls.doubleClickSeekSecs
-      fastSeekSecsRef.current    = s.controls.fastSeekSecs
-      uiHideDelayRef.current      = s.controls.uiHideDelayMs
-      uiHideLeaveDelayRef.current = s.controls.uiHideOnLeaveDelayMs
+      applyControlSettings(s.controls)
       // VR設定と起動時モードを反映
       vrFovRef.current         = s.vr.fov
       vrSensitivityRef.current = s.vr.dragSensitivity
@@ -387,7 +396,7 @@ export default function Player() {
         video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? step : -step)))
       } else {
         if (e.repeat) return
-        doZoneSeek(5, forward)
+        doZoneSeek(arrowSeekSecsRef.current, forward)
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -455,11 +464,11 @@ export default function Player() {
       } else if (dx > 75) {
         startZoneSeek(fastSeekSecsRef.current, true)
       } else if (dx > 20) {
-        startZoneSeek(doubleClickSeekRef.current, true)
+        startZoneSeek(dragSeekSecsRef.current, true)
       } else if (dx < -75) {
         startZoneSeek(fastSeekSecsRef.current, false)
       } else if (dx < -20) {
-        startZoneSeek(doubleClickSeekRef.current, false)
+        startZoneSeek(dragSeekSecsRef.current, false)
       } else {
         stopZoneSeek()
       }
@@ -766,7 +775,7 @@ export default function Player() {
           active={seekZoneActive}
           activeColor={activeColor}
           fastSeekSecs={fastSeekSecsRef.current}
-          doubleClickSeekSecs={doubleClickSeekRef.current}
+          dragSeekSecs={dragSeekSecsRef.current}
         />
       )}
 
@@ -883,6 +892,7 @@ export default function Player() {
         onAcceptInactiveClickChange={(next) => { acceptInactiveRef.current = next }}
         miniProgressBar={miniProgress}
         onMiniProgressBarChange={(next) => setMiniProgress(next)}
+        onControlsChange={applyControlSettings}
         thumbEnabled={thumbEnabled}
         onThumbEnabledChange={(next) => {
           setThumbEnabled(next)
