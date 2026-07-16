@@ -1,13 +1,13 @@
 [Desktop Entry]
 Version=1.0
-Name=My Product
-Comment=My Product Description
+Name=egov
+Comment=EgoV - MediaPlayer
 # The Exec line includes %u to pass the URL to the application
-Exec=/usr/local/bin/ %u
+Exec=/usr/local/bin/egov %u
 Terminal=false
 Type=Application
-Icon=
+Icon=egov
 Categories=Utility;
-StartupWMClass=
+StartupWMClass=egov
 
  
