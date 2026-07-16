@@ -41,6 +41,9 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
     headGroupRef.current = headGroup
 
     const renderer = new THREE.WebGLRenderer({ antialias: true })
+    // HiDPI: OSスケーリング環境（Windowsの125%〜200%等）でCSSピクセル解像度の
+    // まま描画すると動画がにじむため、デバイスピクセル比で内部バッファを確保する
+    renderer.setPixelRatio(window.devicePixelRatio)
     renderer.setSize(mount.clientWidth, mount.clientHeight)
     mount.appendChild(renderer.domElement)
     rendererRef.current = renderer
@@ -123,6 +126,8 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
     const onResize = () => {
       camera.aspect = mount.clientWidth / mount.clientHeight
       camera.updateProjectionMatrix()
+      // DPIの異なるモニタ間を移動するとデバイスピクセル比が変わるため毎回反映する
+      renderer.setPixelRatio(window.devicePixelRatio)
       renderer.setSize(mount.clientWidth, mount.clientHeight)
       if (modeRef.current === 'fit') fitCamera()
       requestRender()
