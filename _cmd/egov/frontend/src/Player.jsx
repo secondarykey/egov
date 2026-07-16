@@ -576,11 +576,8 @@ export default function Player() {
     const isDouble = e.detail >= 2 || (now - lastPointerDownTimeRef.current) <= clickTimeoutMsRef.current
     lastPointerDownTimeRef.current = isDouble ? 0 : now
 
-    // 中央25%はデッドゾーン（再生/停止の誤操作防止）
+    // 画面中央（x > cx で前方向）を境にダブルクリックシークの方向を決める
     const cx = window.innerWidth / 2
-    const deadZone = window.innerWidth * 0.125
-    const inDeadZone = pos.x > cx - deadZone && pos.x < cx + deadZone
-    if (inDeadZone) return
 
     if (isDouble) {
       clearTimeout(clickTimerRef.current)
