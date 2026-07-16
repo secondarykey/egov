@@ -6,7 +6,7 @@ import {
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import Draggable from 'react-draggable'
-import { GetSettings, GetVersion, UpdateActiveColor, UpdateAppSettings, UpdateControlSettings, UpdateDefaultMode, UpdateVRSettings } from '../bindings/egov/api'
+import { GetDefaultSettings, GetSettings, GetVersion, UpdateActiveColor, UpdateAppSettings, UpdateControlSettings, UpdateDefaultMode, UpdateVRSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
 
 function DraggablePaper(props) {
@@ -55,7 +55,12 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
   const [tab, setTab] = useState(0)
   const [version, setVersion] = useState('')
 
-  useEffect(() => { GetVersion().then(setVersion) }, [])
+  // defaults は「デフォルトに戻す」用。既定値の定義は Go 側 defaultSettings() に一元化されている。
+  const [defaults, setDefaults] = useState(null)
+  useEffect(() => {
+    GetVersion().then(setVersion)
+    GetDefaultSettings().then(setDefaults)
+  }, [])
   const [playback, setPlayback] = useState({ defaultMode: 'fit', language: 'en', activeColor: '#4fc3f7', thumbnailEnabled: true })
   const [vr, setVr] = useState({ initialPitch: 0, initialYaw: 0, positionX: 0, positionY: 0, positionZ: 0, fov: 75, dragSensitivity: 0.004, scrollSpeed: 0.05, defaultStart: 'left' })
   const [controls, setControls] = useState({
@@ -67,20 +72,11 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
 
   useEffect(() => {
     if (!open) return
+    // 設定値は Go 側で正規化済みのため、フォールバックなしでそのまま使える
     GetSettings().then(s => {
-      setPlayback({ defaultMode: s.playback.defaultMode, language: s.playback.language, activeColor: s.playback.activeColor || '#4fc3f7', thumbnailEnabled: thumbEnabledProp ?? s.playback.thumbnailEnabled ?? true })
+      setPlayback({ defaultMode: s.playback.defaultMode, language: s.playback.language, activeColor: s.playback.activeColor, thumbnailEnabled: thumbEnabledProp ?? s.playback.thumbnailEnabled })
       setOrigLanguage(s.playback.language)
-      setVr({
-        initialPitch: s.vr.initialPitch ?? 0,
-        initialYaw: s.vr.initialYaw ?? 0,
-        positionX: s.vr.positionX ?? 0,
-        positionY: s.vr.positionY ?? 0,
-        positionZ: s.vr.positionZ ?? 0,
-        fov: s.vr.fov,
-        dragSensitivity: s.vr.dragSensitivity,
-        scrollSpeed: s.vr.scrollSpeed,
-        defaultStart: s.vr.defaultStart,
-      })
+      setVr(s.vr)
       setControls(s.controls)
       setAppSettings(s.app)
     })
@@ -108,14 +104,6 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
       onMiniProgressBarChange?.(appSettings.miniProgressBar)
     }
     onClose()
-  }
-
-  const defaults = {
-    playback: { defaultMode: 'fit', activeColor: '#4fc3f7' },
-    vr: { initialPitch: 0, initialYaw: 0, positionX: 0, positionY: 0, positionZ: 0, fov: 75, dragSensitivity: 0.004, scrollSpeed: 0.05, defaultStart: 'left' },
-    controls: { clickTimeoutMs: 300, doubleClickSeekSecs: 10, fastSeekSecs: 60, uiHideDelayMs: 1500, uiHideOnLeaveDelayMs: 800 },
-    app: { singleInstance: false, acceptInactiveClick: false, miniProgressBar: false },
-    thumbnailEnabled: true,
   }
 
   const setV = (k) => (v) => setVr(s => ({ ...s, [k]: v }))
@@ -195,7 +183,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             </Stack>
           </Row>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => setPlayback(p => ({ ...p, ...defaults.playback }))}>
+            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => defaults && setPlayback(p => ({ ...p, defaultMode: defaults.playback.defaultMode, activeColor: defaults.playback.activeColor }))}>
               {t('settings.resetDefaults')}
             </Button>
           </Box>
@@ -229,7 +217,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             </FormControl>
           </Row>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => setVr(defaults.vr)}>
+            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => defaults && setVr(defaults.vr)}>
               {t('settings.resetDefaults')}
             </Button>
           </Box>
@@ -263,7 +251,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             format={v => `${v} ms`}
           />
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => setControls(defaults.controls)}>
+            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => defaults && setControls(defaults.controls)}>
               {t('settings.resetDefaults')}
             </Button>
           </Box>
@@ -318,7 +306,17 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             {t('settings.app.restartRequired')}
           </Typography>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => { setAppSettings(s => ({ ...s, ...defaults.app })); setPlayback(p => ({ ...p, thumbnailEnabled: defaults.thumbnailEnabled })) }}>
+            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => {
+              if (!defaults) return
+              // alwaysOnTop はタイトルバー側の状態と連動するためリセット対象外
+              setAppSettings(s => ({
+                ...s,
+                singleInstance:      defaults.app.singleInstance,
+                acceptInactiveClick: defaults.app.acceptInactiveClick,
+                miniProgressBar:     defaults.app.miniProgressBar,
+              }))
+              setPlayback(p => ({ ...p, thumbnailEnabled: defaults.playback.thumbnailEnabled }))
+            }}>
               {t('settings.resetDefaults')}
             </Button>
           </Box>

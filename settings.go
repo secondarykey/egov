@@ -116,6 +116,51 @@ func defaultSettings() *Settings {
 	}
 }
 
+// normalize replaces zero/invalid values with defaults. 手編集や破損した
+// settings.json に不正な値（0 の FOV、空のモード名等）が含まれていても、
+// 呼び出し側（フロントエンド含む）がガードなしで使えるようにする。
+// 既定値の定義は defaultSettings() に一元化されている。
+func (s *Settings) normalize() {
+	d := defaultSettings()
+	if s.VR.FOV <= 0 {
+		s.VR.FOV = d.VR.FOV
+	}
+	if s.VR.DragSensitivity <= 0 {
+		s.VR.DragSensitivity = d.VR.DragSensitivity
+	}
+	if s.VR.ScrollSpeed <= 0 {
+		s.VR.ScrollSpeed = d.VR.ScrollSpeed
+	}
+	switch s.VR.DefaultStart {
+	case "left", "right", "top", "bottom":
+	default:
+		s.VR.DefaultStart = d.VR.DefaultStart
+	}
+	switch s.Playback.DefaultMode {
+	case "fit", "normal", "vr":
+	default:
+		s.Playback.DefaultMode = d.Playback.DefaultMode
+	}
+	if s.Playback.ActiveColor == "" {
+		s.Playback.ActiveColor = d.Playback.ActiveColor
+	}
+	if s.Controls.ClickTimeoutMs <= 0 {
+		s.Controls.ClickTimeoutMs = d.Controls.ClickTimeoutMs
+	}
+	if s.Controls.DoubleClickSeekSecs <= 0 {
+		s.Controls.DoubleClickSeekSecs = d.Controls.DoubleClickSeekSecs
+	}
+	if s.Controls.FastSeekSecs <= 0 {
+		s.Controls.FastSeekSecs = d.Controls.FastSeekSecs
+	}
+	if s.Controls.UIHideDelayMs <= 0 {
+		s.Controls.UIHideDelayMs = d.Controls.UIHideDelayMs
+	}
+	if s.Controls.UIHideOnLeaveDelayMs <= 0 {
+		s.Controls.UIHideOnLeaveDelayMs = d.Controls.UIHideOnLeaveDelayMs
+	}
+}
+
 // LoadSettings loads settings.json. エラー時も nil ではなくデフォルト設定を返すため、
 // 呼び出し側はエラーをログするだけでそのまま使える（ゼロ値設定で動くことはない）。
 func LoadSettings() (*Settings, error) {
@@ -138,6 +183,7 @@ func LoadSettings() (*Settings, error) {
 		// 部分的に上書きされた可能性があるため、新しいデフォルトを返す
 		return defaultSettings(), err
 	}
+	s.normalize()
 	return s, nil
 }
 

@@ -292,6 +292,8 @@ export default function Player() {
   }
 
   useEffect(() => {
+    // 設定値は Go 側で正規化済み（LoadSettings が不正値をデフォルトへ補正して
+    // 常に完全な Settings を返す）ため、フロントエンドでのフォールバックは行わない
     Promise.all([GetServerURL(), GetSettings()]).then(([url, s]) => {
       const p = s.playback
       setVolume(p.volume)
@@ -299,21 +301,21 @@ export default function Player() {
       setThumbEnabled(p.thumbnailEnabled)
       thumbEnabledRef.current = p.thumbnailEnabled
       setLanguage(p.language)
-      setActiveColor(p.activeColor || '#4fc3f7')
-      setAlwaysOnTop(s.app?.alwaysOnTop ?? false)
-      acceptInactiveRef.current  = s.app?.acceptInactiveClick ?? false
-      clickTimeoutMsRef.current  = s.controls?.clickTimeoutMs ?? 300
-      doubleClickSeekRef.current = s.controls?.doubleClickSeekSecs ?? 10
-      fastSeekSecsRef.current    = s.controls?.fastSeekSecs ?? 60
-      uiHideDelayRef.current      = s.controls?.uiHideDelayMs ?? 1500
-      uiHideLeaveDelayRef.current = s.controls?.uiHideOnLeaveDelayMs ?? 800
+      setActiveColor(p.activeColor)
+      setAlwaysOnTop(s.app.alwaysOnTop)
+      acceptInactiveRef.current  = s.app.acceptInactiveClick
+      clickTimeoutMsRef.current  = s.controls.clickTimeoutMs
+      doubleClickSeekRef.current = s.controls.doubleClickSeekSecs
+      fastSeekSecsRef.current    = s.controls.fastSeekSecs
+      uiHideDelayRef.current      = s.controls.uiHideDelayMs
+      uiHideLeaveDelayRef.current = s.controls.uiHideOnLeaveDelayMs
       // VR設定と起動時モードを反映
-      vrFovRef.current         = s.vr?.fov || 75
-      vrSensitivityRef.current = s.vr?.dragSensitivity || 0.004
-      vrScrollSpeedRef.current = s.vr?.scrollSpeed || 0.05
-      const initPitch = deg2rad(s.vr?.initialPitch ?? 0)
-      const initYaw   = deg2rad(s.vr?.initialYaw ?? 0)
-      const initPos   = { x: s.vr?.positionX ?? 0, y: s.vr?.positionY ?? 0, z: s.vr?.positionZ ?? 0 }
+      vrFovRef.current         = s.vr.fov
+      vrSensitivityRef.current = s.vr.dragSensitivity
+      vrScrollSpeedRef.current = s.vr.scrollSpeed
+      const initPitch = deg2rad(s.vr.initialPitch)
+      const initYaw   = deg2rad(s.vr.initialYaw)
+      const initPos   = { x: s.vr.positionX, y: s.vr.positionY, z: s.vr.positionZ }
       vrInitPitchRef.current = initPitch
       vrInitYawRef.current   = initYaw
       vrInitPosRef.current   = { ...initPos }
@@ -321,14 +323,13 @@ export default function Player() {
       vrYawRef.current       = initYaw
       vrPosRef.current       = { ...initPos }
       setVrView({
-        pitch: s.vr?.initialPitch ?? 0, yaw: s.vr?.initialYaw ?? 0, fov: s.vr?.fov || 75,
+        pitch: s.vr.initialPitch, yaw: s.vr.initialYaw, fov: s.vr.fov,
         posX: initPos.x, posY: initPos.y, posZ: initPos.z,
       })
-      const start = s.vr?.defaultStart || 'left'
-      setVrStart(start)
-      vrStartRef.current = start
-      setMode(p.defaultMode || 'fit')
-      setMiniProgress(s.app?.miniProgressBar ?? false)
+      setVrStart(s.vr.defaultStart)
+      vrStartRef.current = s.vr.defaultStart
+      setMode(p.defaultMode)
+      setMiniProgress(s.app.miniProgressBar)
       setServerUrl(url)
       if (videoRef.current) {
         videoRef.current.volume = p.volume

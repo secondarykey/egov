@@ -50,6 +50,12 @@ func (a *API) GetSettings() Settings {
 	return *a.settings
 }
 
+// GetDefaultSettings returns the built-in default settings.
+// フロントエンドの「デフォルトに戻す」用。既定値の定義は defaultSettings() に一元化する。
+func (a *API) GetDefaultSettings() Settings {
+	return *defaultSettings()
+}
+
 // save persists settings to disk. 保存失敗は致命的ではない
 // （次回起動時にデフォルト値になるだけ）ため、警告ログのみ残して続行する。
 // 呼び出し側で a.mu を保持していること。
