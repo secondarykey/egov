@@ -33,9 +33,14 @@ func tryIPCServer(onFile func(string)) bool {
 	return true
 }
 
+// ipcMaxPayload はIPCで受け付ける最大バイト数。ファイルパス1件のみを想定した
+// 通信のため、不正なクライアントからの巨大データ送信によるメモリ消費を防ぐ。
+// Windows の拡張パス上限（約32K文字）を余裕を持って超える値。
+const ipcMaxPayload = 64 * 1024
+
 func ipcReadConn(conn net.Conn, onFile func(string)) {
 	defer conn.Close()
-	data, err := io.ReadAll(conn)
+	data, err := io.ReadAll(io.LimitReader(conn, ipcMaxPayload))
 	if err == nil && len(data) > 0 {
 		onFile(string(data))
 	}
