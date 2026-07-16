@@ -102,9 +102,32 @@ const SeekBarArea = memo(function SeekBarArea({
     setThumbInfo(null)
   }
 
+  // マーカー移動時に再生位置が範囲より前に取り残されないよう追従させる
+  const clampCurrentTimeToRange = (newTime, otherPoint) => {
+    if (otherPoint === null) return
+    const rangeStart = Math.min(newTime, otherPoint)
+    if (video && video.currentTime < rangeStart) video.currentTime = rangeStart
+  }
+
+  // ピック（クリック）で選択状態＝フォーカスにし、←/→ で1秒ずつ微調整する。
+  // stopPropagation で Player 側のコマ送り/シークのキー操作を抑止する。
+  const handleMarkerKeyDown = (setPoint, point, otherPoint, e) => {
+    if (e.key === 'Escape') { e.currentTarget.blur(); return }
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+    e.preventDefault()
+    e.stopPropagation()
+    if (!duration) return
+    const delta   = e.key === 'ArrowRight' ? 1 : -1
+    const newTime = Math.max(0, Math.min(duration, point + delta))
+    setPoint(newTime)
+    clampCurrentTimeToRange(newTime, otherPoint)
+  }
+
   const handleMarkerPointerDown = (setPoint, otherPoint, e) => {
     e.preventDefault()
     e.stopPropagation()
+    // preventDefault でフォーカスが当たらないため明示的に当てる
+    e.currentTarget.focus()
     const bar = seekBarRef.current
     if (!bar || !duration) return
     const onMove = (me) => {
@@ -112,10 +135,7 @@ const SeekBarArea = memo(function SeekBarArea({
       const ratio   = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width))
       const newTime = ratio * duration
       setPoint(newTime)
-      if (otherPoint !== null) {
-        const rangeStart = Math.min(newTime, otherPoint)
-        if (video && video.currentTime < rangeStart) video.currentTime = rangeStart
-      }
+      clampCurrentTimeToRange(newTime, otherPoint)
       if (thumbEnabledRef.current) {
         const localX = me.clientX - rect.left
         setThumbInfo(prev => ({ localX, time: newTime, dataUrl: prev?.dataUrl ?? null, w: prev?.w ?? 160, h: prev?.h ?? 90 }))
@@ -161,14 +181,19 @@ const SeekBarArea = memo(function SeekBarArea({
         return (
           <Box
             key={i}
+            tabIndex={-1}
             sx={{
               position: 'absolute', zIndex: 3, cursor: 'ew-resize',
               left: `${(point / duration) * 100}%`,
               top: 0, height: 'calc(100% + 20px)', width: 16,
               transform: 'translateX(-50%)',
               display: 'flex', flexDirection: 'column', alignItems: 'center',
+              outline: 'none',
+              // 選択中（フォーカス中）は白いグローで示す
+              '&:focus': { filter: 'drop-shadow(0 0 3px #fff)' },
             }}
             onPointerDown={(e) => handleMarkerPointerDown(setPoint, other, e)}
+            onKeyDown={(e) => handleMarkerKeyDown(setPoint, point, other, e)}
           >
             <Box sx={{ flex: 1, width: 2, bgcolor: activeColor }} />
             <Box sx={{ position: 'relative', width: 16, height: 16, flexShrink: 0 }}>
