@@ -2,6 +2,7 @@ package egov
 
 import (
 	"fmt"
+	"log/slog"
 	"net/url"
 	"sync"
 )
@@ -49,6 +50,15 @@ func (a *API) GetSettings() Settings {
 	return *a.settings
 }
 
+// save persists settings to disk. 保存失敗は致命的ではない
+// （次回起動時にデフォルト値になるだけ）ため、警告ログのみ残して続行する。
+// 呼び出し側で a.mu を保持していること。
+func (a *API) save() {
+	if err := SaveSettings(a.settings); err != nil {
+		slog.Warn("settings save error", "err", err)
+	}
+}
+
 // UpdatePlaybackSettings saves volume, mute, thumbnail state and language to disk.
 func (a *API) UpdatePlaybackSettings(volume float64, muted bool, thumbnailEnabled bool, language string) {
 	a.mu.Lock()
@@ -57,10 +67,7 @@ func (a *API) UpdatePlaybackSettings(volume float64, muted bool, thumbnailEnable
 	a.settings.Playback.Muted = muted
 	a.settings.Playback.ThumbnailEnabled = thumbnailEnabled
 	a.settings.Playback.Language = language
-	if err := SaveSettings(a.settings); err != nil {
-		// 保存失敗はサイレントに無視（次回起動時にデフォルト値になるだけ）
-		_ = err
-	}
+	a.save()
 }
 
 // UpdateVRSettings replaces the VR configuration and saves to disk.
@@ -68,9 +75,7 @@ func (a *API) UpdateVRSettings(vr VRSettings) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.settings.VR = vr
-	if err := SaveSettings(a.settings); err != nil {
-		_ = err
-	}
+	a.save()
 }
 
 // UpdateControlSettings replaces the control configuration and saves to disk.
@@ -78,9 +83,7 @@ func (a *API) UpdateControlSettings(controls ControlSettings) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.settings.Controls = controls
-	if err := SaveSettings(a.settings); err != nil {
-		_ = err
-	}
+	a.save()
 }
 
 // UpdateDefaultMode saves the default playback mode to disk.
@@ -88,9 +91,7 @@ func (a *API) UpdateDefaultMode(mode string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.settings.Playback.DefaultMode = mode
-	if err := SaveSettings(a.settings); err != nil {
-		_ = err
-	}
+	a.save()
 }
 
 // UpdateAlwaysOnTop saves the always-on-top state to disk.
@@ -98,9 +99,7 @@ func (a *API) UpdateAlwaysOnTop(enabled bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.settings.App.AlwaysOnTop = enabled
-	if err := SaveSettings(a.settings); err != nil {
-		_ = err
-	}
+	a.save()
 }
 
 // UpdateAppSettings replaces the application configuration and saves to disk.
@@ -108,9 +107,7 @@ func (a *API) UpdateAppSettings(app AppSettings) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.settings.App = app
-	if err := SaveSettings(a.settings); err != nil {
-		_ = err
-	}
+	a.save()
 }
 
 // UpdateActiveColor saves the UI active color to disk.
@@ -118,9 +115,7 @@ func (a *API) UpdateActiveColor(color string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.settings.Playback.ActiveColor = color
-	if err := SaveSettings(a.settings); err != nil {
-		_ = err
-	}
+	a.save()
 }
 
 // Quit signals QuitRequested so main can save the window state and exit.

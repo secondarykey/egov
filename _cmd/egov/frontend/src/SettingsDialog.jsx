@@ -59,7 +59,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
   const [playback, setPlayback] = useState({ defaultMode: 'fit', language: 'en', activeColor: '#4fc3f7', thumbnailEnabled: true })
   const [vr, setVr] = useState({ initialPitch: 0, initialYaw: 0, positionX: 0, positionY: 0, positionZ: 0, fov: 75, dragSensitivity: 0.004, scrollSpeed: 0.05, defaultStart: 'left' })
   const [controls, setControls] = useState({
-    clickTimeoutMs: 300, doubleClickSeekSecs: 10, tripleClickSeekSecs: 60,
+    clickTimeoutMs: 300, doubleClickSeekSecs: 10, fastSeekSecs: 60,
     uiHideDelayMs: 1500, uiHideOnLeaveDelayMs: 800,
   })
   const [origLanguage, setOrigLanguage] = useState('en')
@@ -114,7 +114,8 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
     playback: { defaultMode: 'fit', activeColor: '#4fc3f7' },
     vr: { initialPitch: 0, initialYaw: 0, positionX: 0, positionY: 0, positionZ: 0, fov: 75, dragSensitivity: 0.004, scrollSpeed: 0.05, defaultStart: 'left' },
     controls: { clickTimeoutMs: 300, doubleClickSeekSecs: 10, fastSeekSecs: 60, uiHideDelayMs: 1500, uiHideOnLeaveDelayMs: 800 },
-    app: { singleInstance: false, acceptInactiveClick: false, miniProgressBar: false, thumbnailEnabled: true },
+    app: { singleInstance: false, acceptInactiveClick: false, miniProgressBar: false },
+    thumbnailEnabled: true,
   }
 
   const setV = (k) => (v) => setVr(s => ({ ...s, [k]: v }))
@@ -317,7 +318,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             {t('settings.app.restartRequired')}
           </Typography>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => { setAppSettings(s => ({ ...s, ...defaults.app })); setPlayback(p => ({ ...p, thumbnailEnabled: defaults.app.thumbnailEnabled })) }}>
+            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => { setAppSettings(s => ({ ...s, ...defaults.app })); setPlayback(p => ({ ...p, thumbnailEnabled: defaults.thumbnailEnabled })) }}>
               {t('settings.resetDefaults')}
             </Button>
           </Box>

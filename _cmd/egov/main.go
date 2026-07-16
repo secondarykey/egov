@@ -273,11 +273,15 @@ func main() {
 
 	// フロントエンドから API.Quit() 経由で egov.QuitRequested に通知される。
 	// ウィンドウ破棄前に Position()/Size() を取得して保存する。
+	// 最大化・フルスクリーン・最小化中はその座標を保存すると復元時に
+	// 異常なサイズになるため、前回保存済みの通常時の値を維持する。
 	go func() {
 		<-egov.QuitRequested
-		x, y := win.Position()
-		w, h := win.Size()
-		settings.Window = egov.WindowSettings{X: x, Y: y, Width: w, Height: h}
+		if !win.IsMaximised() && !win.IsFullscreen() && !win.IsMinimised() {
+			x, y := win.Position()
+			w, h := win.Size()
+			settings.Window = egov.WindowSettings{X: x, Y: y, Width: w, Height: h}
+		}
 		if err := egov.SaveSettings(settings); err != nil {
 			slog.Error("settings save error", "err", err)
 		}
