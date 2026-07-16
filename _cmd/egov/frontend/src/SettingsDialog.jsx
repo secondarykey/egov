@@ -117,7 +117,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
       onClose={onClose}
       maxWidth={false}
       PaperComponent={DraggablePaper}
-      sx={{ '& .MuiDialog-paper': { width: 640, maxHeight: 'none' } }}
+      sx={{ '& .MuiDialog-paper': { width: 640, height: 574, maxHeight: 'none' } }}
     >
       <DialogTitle
         id="settings-dialog-title"
@@ -145,7 +145,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
           <Tab label={t('settings.tab.app')} />
         </Tabs>
 
-        <Box sx={{ minHeight: 574 }}>
+        <Box sx={{ minHeight: 320 }}>
         {/* Playback */}
         <TabPanel value={tab} index={0}>
           <Row label={t('settings.playback.language')}>
