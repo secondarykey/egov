@@ -229,12 +229,14 @@ const SeekBarArea = memo(function SeekBarArea({
         }}
         sx={{
           py: 0,
-          '& .MuiSlider-track': { height: 26, border: 'none', bgcolor: activeColor, borderRadius: 0.5 },
+          // track 右端は三角に接するため角丸なし。三角の底辺は 2px 左へ伸ばして
+          // track に重ね、% 位置のサブピクセル丸め差による隙間を防ぐ。
+          '& .MuiSlider-track': { height: 26, border: 'none', bgcolor: activeColor, borderRadius: '2px 0 0 2px' },
           '& .MuiSlider-rail':  { height: 26, bgcolor: 'rgba(255,255,255,0.25)', borderRadius: 0.5 },
           '& .MuiSlider-thumb': {
             width: 24, height: 24, bgcolor: activeColor,
             borderRadius: 0,
-            clipPath: 'polygon(50% 0, 100% 50%, 50% 100%)',
+            clipPath: 'polygon(calc(50% - 2px) 0, 100% 50%, calc(50% - 2px) 100%)',
             '&:hover, &.Mui-focusVisible': { boxShadow: 'none' },
             '&::before': { boxShadow: 'none' },
           },
