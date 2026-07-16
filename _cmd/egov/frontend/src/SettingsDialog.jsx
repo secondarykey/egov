@@ -6,7 +6,7 @@ import {
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import Draggable from 'react-draggable'
-import { GetSettings, GetVersion, UpdateActiveColor, UpdateAppSettings, UpdateControlSettings, UpdateDefaultMode, UpdateVRSettings } from '../bindings/egov/api'
+import { GetDefaultSettings, GetSettings, GetVersion, UpdateActiveColor, UpdateAppSettings, UpdateControlSettings, UpdateDefaultMode, UpdateVRSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
 
 function DraggablePaper(props) {
@@ -50,16 +50,22 @@ function SliderRow({ label, value, onChange, min, max, step, format }) {
   )
 }
 
-export default function SettingsDialog({ open, onClose, availableLangs, onLanguageChange, activeColor: activeColorProp, onActiveColorChange, acceptInactiveClick: acceptInactiveProp, onAcceptInactiveClickChange, miniProgressBar: miniProgressProp, onMiniProgressBarChange, thumbEnabled: thumbEnabledProp, onThumbEnabledChange }) {
+export default function SettingsDialog({ open, onClose, availableLangs, onLanguageChange, activeColor: activeColorProp, onActiveColorChange, acceptInactiveClick: acceptInactiveProp, onAcceptInactiveClickChange, miniProgressBar: miniProgressProp, onMiniProgressBarChange, thumbEnabled: thumbEnabledProp, onThumbEnabledChange, onControlsChange }) {
   const { t } = useTranslation()
   const [tab, setTab] = useState(0)
   const [version, setVersion] = useState('')
 
-  useEffect(() => { GetVersion().then(setVersion) }, [])
-  const [playback, setPlayback] = useState({ defaultMode: 'fit', language: 'en', activeColor: '#4fc3f7', thumbnailEnabled: true })
+  // defaults は「デフォルトに戻す」用。既定値の定義は Go 側 defaultSettings() に一元化されている。
+  const [defaults, setDefaults] = useState(null)
+  useEffect(() => {
+    GetVersion().then(setVersion)
+    GetDefaultSettings().then(setDefaults)
+  }, [])
+  const [playback, setPlayback] = useState({ defaultMode: 'normal', language: 'en', activeColor: '#4fc3f7', thumbnailEnabled: true })
   const [vr, setVr] = useState({ initialPitch: 0, initialYaw: 0, positionX: 0, positionY: 0, positionZ: 0, fov: 75, dragSensitivity: 0.004, scrollSpeed: 0.05, defaultStart: 'left' })
   const [controls, setControls] = useState({
-    clickTimeoutMs: 300, doubleClickSeekSecs: 10, tripleClickSeekSecs: 60,
+    clickTimeoutMs: 300, doubleClickSeekSecs: 10, dragSeekSecs: 10,
+    fastSeekSecs: 60, arrowSeekSecs: 5,
     uiHideDelayMs: 1500, uiHideOnLeaveDelayMs: 800,
   })
   const [origLanguage, setOrigLanguage] = useState('en')
@@ -67,20 +73,11 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
 
   useEffect(() => {
     if (!open) return
+    // 設定値は Go 側で正規化済みのため、フォールバックなしでそのまま使える
     GetSettings().then(s => {
-      setPlayback({ defaultMode: s.playback.defaultMode, language: s.playback.language, activeColor: s.playback.activeColor || '#4fc3f7', thumbnailEnabled: thumbEnabledProp ?? s.playback.thumbnailEnabled ?? true })
+      setPlayback({ defaultMode: s.playback.defaultMode, language: s.playback.language, activeColor: s.playback.activeColor, thumbnailEnabled: thumbEnabledProp ?? s.playback.thumbnailEnabled })
       setOrigLanguage(s.playback.language)
-      setVr({
-        initialPitch: s.vr.initialPitch ?? 0,
-        initialYaw: s.vr.initialYaw ?? 0,
-        positionX: s.vr.positionX ?? 0,
-        positionY: s.vr.positionY ?? 0,
-        positionZ: s.vr.positionZ ?? 0,
-        fov: s.vr.fov,
-        dragSensitivity: s.vr.dragSensitivity,
-        scrollSpeed: s.vr.scrollSpeed,
-        defaultStart: s.vr.defaultStart,
-      })
+      setVr(s.vr)
       setControls(s.controls)
       setAppSettings(s.app)
     })
@@ -94,6 +91,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
       UpdateControlSettings(controls),
       UpdateAppSettings(appSettings),
     ])
+    onControlsChange?.(controls)
     if (playback.language !== origLanguage) {
       onLanguageChange?.(playback.language)
     }
@@ -110,13 +108,6 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
     onClose()
   }
 
-  const defaults = {
-    playback: { defaultMode: 'fit', activeColor: '#4fc3f7' },
-    vr: { initialPitch: 0, initialYaw: 0, positionX: 0, positionY: 0, positionZ: 0, fov: 75, dragSensitivity: 0.004, scrollSpeed: 0.05, defaultStart: 'left' },
-    controls: { clickTimeoutMs: 300, doubleClickSeekSecs: 10, fastSeekSecs: 60, uiHideDelayMs: 1500, uiHideOnLeaveDelayMs: 800 },
-    app: { singleInstance: false, acceptInactiveClick: false, miniProgressBar: false, thumbnailEnabled: true },
-  }
-
   const setV = (k) => (v) => setVr(s => ({ ...s, [k]: v }))
   const setC = (k) => (v) => setControls(s => ({ ...s, [k]: v }))
 
@@ -126,7 +117,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
       onClose={onClose}
       maxWidth={false}
       PaperComponent={DraggablePaper}
-      sx={{ '& .MuiDialog-paper': { width: 640, maxHeight: 'none' } }}
+      sx={{ '& .MuiDialog-paper': { width: 640, height: 574, maxHeight: 'none' } }}
     >
       <DialogTitle
         id="settings-dialog-title"
@@ -169,8 +160,8 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
           <Row label={t('settings.playback.defaultMode')}>
             <FormControl size="small" fullWidth>
               <Select value={playback.defaultMode} onChange={e => setPlayback(p => ({ ...p, defaultMode: e.target.value }))}>
-                <MenuItem value="fit">{t('mode.normal')}</MenuItem>
-                <MenuItem value="normal">{t('mode.free')}</MenuItem>
+                <MenuItem value="normal">{t('mode.normal')}</MenuItem>
+                <MenuItem value="free">{t('mode.free')}</MenuItem>
                 <MenuItem value="vr">VR</MenuItem>
               </Select>
             </FormControl>
@@ -194,7 +185,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             </Stack>
           </Row>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => setPlayback(p => ({ ...p, ...defaults.playback }))}>
+            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => defaults && setPlayback(p => ({ ...p, defaultMode: defaults.playback.defaultMode, activeColor: defaults.playback.activeColor }))}>
               {t('settings.resetDefaults')}
             </Button>
           </Box>
@@ -228,7 +219,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             </FormControl>
           </Row>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => setVr(defaults.vr)}>
+            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => defaults && setVr(defaults.vr)}>
               {t('settings.resetDefaults')}
             </Button>
           </Box>
@@ -246,9 +237,19 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             min={1} max={60} step={1}
             format={v => `${v} s`}
           />
+          <SliderRow label={t('settings.controls.dragSeek')}
+            value={controls.dragSeekSecs ?? 10} onChange={setC('dragSeekSecs')}
+            min={1} max={60} step={1}
+            format={v => `${v} s`}
+          />
           <SliderRow label={t('settings.controls.fastSeek')}
             value={controls.fastSeekSecs ?? 60} onChange={setC('fastSeekSecs')}
             min={10} max={300} step={10}
+            format={v => `${v} s`}
+          />
+          <SliderRow label={t('settings.controls.arrowSeek')}
+            value={controls.arrowSeekSecs ?? 5} onChange={setC('arrowSeekSecs')}
+            min={1} max={60} step={1}
             format={v => `${v} s`}
           />
           <SliderRow label={t('settings.controls.uiHideDelay')}
@@ -262,7 +263,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             format={v => `${v} ms`}
           />
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => setControls(defaults.controls)}>
+            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => defaults && setControls(defaults.controls)}>
               {t('settings.resetDefaults')}
             </Button>
           </Box>
@@ -317,7 +318,17 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             {t('settings.app.restartRequired')}
           </Typography>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => { setAppSettings(s => ({ ...s, ...defaults.app })); setPlayback(p => ({ ...p, thumbnailEnabled: defaults.app.thumbnailEnabled })) }}>
+            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => {
+              if (!defaults) return
+              // alwaysOnTop はタイトルバー側の状態と連動するためリセット対象外
+              setAppSettings(s => ({
+                ...s,
+                singleInstance:      defaults.app.singleInstance,
+                acceptInactiveClick: defaults.app.acceptInactiveClick,
+                miniProgressBar:     defaults.app.miniProgressBar,
+              }))
+              setPlayback(p => ({ ...p, thumbnailEnabled: defaults.playback.thumbnailEnabled }))
+            }}>
               {t('settings.resetDefaults')}
             </Button>
           </Box>

@@ -42,6 +42,7 @@
     "rangeLoopOff": "範囲ループ: オフ",
     "fullscreen": "全画面表示",
     "exitFullscreen": "全画面解除",
+    "rotate": "回転",
     "resetCamera": "カメラをリセット",
     "fitWindow": "ウィンドウを動画サイズに合わせる",
     "resetView": "表示をリセット"
@@ -71,7 +72,9 @@
     "controls": {
       "clickTimeout": "クリックタイムアウト",
       "doubleClickSeek": "ダブルクリックシーク",
+      "dragSeek": "ドラッグシーク (>>)",
       "fastSeek": "高速シーク (>>>)",
+      "arrowSeek": "十字キーシーク",
       "uiHideDelay": "UI非表示遅延",
       "uiHideOnLeave": "離脱時UI非表示遅延"
     },

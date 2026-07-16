@@ -5,7 +5,7 @@
 !include "FileFunc.nsh"
 
 !ifndef INFO_PROJECTNAME
-    !define INFO_PROJECTNAME ""
+    !define INFO_PROJECTNAME "egov"
 !endif
 !ifndef INFO_COMPANYNAME
     !define INFO_COMPANYNAME "secondarykey"
@@ -14,7 +14,7 @@
     !define INFO_PRODUCTNAME "egov"
 !endif
 !ifndef INFO_PRODUCTVERSION
-    !define INFO_PRODUCTVERSION "0.3.1"
+    !define INFO_PRODUCTVERSION "0.4.0"
 !endif
 !ifndef INFO_COPYRIGHT
     !define INFO_COPYRIGHT "(c)2026, secondarykey"

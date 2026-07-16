@@ -8,10 +8,10 @@ info:
   companyName: "secondarykey" # The name of the company
   productName: "egov" # The name of the application
   productIdentifier: "com.github.secondarykey.egov" # The unique product identifier
-  description: "Media Player" # The application description
+  description: "EgoV - MediaPlayer" # The application description (Windowsではタスクバー/タスクマネージャの表示名になる)
   copyright: "(c)2026, secondarykey" # Copyright text
   comments: "Media Player" # Comments
-  version: "0.3.1"
+  version: "0.4.0"
   # cfBundleIconName: "appicon" # The macOS icon name in Assets.car icon bundles (optional)
   #                               # Should match the name of your .icon file without the extension
   #                               # If not set and Assets.car exists, defaults to "appicon"

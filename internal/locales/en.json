@@ -42,6 +42,7 @@
     "rangeLoopOff": "Range Loop: Off",
     "fullscreen": "Fullscreen",
     "exitFullscreen": "Exit Fullscreen",
+    "rotate": "Rotate",
     "resetCamera": "Reset Camera",
     "fitWindow": "Fit window to video size",
     "resetView": "Reset View"
@@ -71,7 +72,9 @@
     "controls": {
       "clickTimeout": "Click Timeout",
       "doubleClickSeek": "Double-click Seek",
+      "dragSeek": "Drag Seek (>>)",
       "fastSeek": "Fast Seek (>>>)",
+      "arrowSeek": "Arrow Key Seek",
       "uiHideDelay": "UI Hide Delay",
       "uiHideOnLeave": "UI Hide on Leave"
     },
