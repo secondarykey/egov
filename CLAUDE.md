@@ -91,7 +91,7 @@ Key facts:
 
 - **Three.js** (`r0.184`) + `OrbitControls` for rendering: a sphere (VR mode) and a plane (fit/normal mode) share one `VideoTexture`
 - **MUI** for all UI controls (title bar, control bar, sliders, menus)
-- Three view modes: `fit` (default, window-fit), `normal` (free pan/zoom), `vr` (spherical, right-click rotates)
+- Three view modes: `normal` (default, window-fit), `free` (pan/zoom), `vr` (spherical, right-click rotates) — internal names match the UI labels. Legacy `fit` in settings.json is migrated to `normal` by `Settings.normalize()`
 - VR split-screen: `textureRef.current.repeat/offset` selects the left/right/top/bottom half of the video
 
 ### Wails3 Drag Behavior

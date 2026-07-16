@@ -20,7 +20,7 @@ import { VR_START, applyHeadRotation, applySpherePosition, barStyle, deg2rad, ra
 // 描画は useThreeScene（Three.jsシーン）と player/ 以下の各コンポーネントに委譲する。
 export default function Player() {
   const { t } = useTranslation()
-  const modeRef      = useRef('fit')
+  const modeRef      = useRef('normal')
   const dragCounter  = useRef(0)
   const hideTimer    = useRef(null)
   const thumbVideoRef   = useRef(null)
@@ -65,7 +65,7 @@ export default function Player() {
   const [dragging,    setDragging]    = useState(false)
   const [showUI,      setShowUI]      = useState(false)
   const [resizeCursor, setResizeCursor] = useState(null)   // Wails3リサイズ判定領域内で明示すべきカーソル種別
-  const [mode,        setMode]        = useState('fit')
+  const [mode,        setMode]        = useState('normal')   // normal=ウィンドウフィット / free=自由パン・ズーム / vr
   const [vrStart,     setVrStart]     = useState('left')
   const [startOpen,   setStartOpen]   = useState(false)
   const [clickFeedback, setClickFeedback] = useState(null)
@@ -126,7 +126,7 @@ export default function Player() {
       controls.enabled = false
       camera.updateProjectionMatrix()
       planeRef.current.rotation.z = 0
-    } else if (mode === 'normal') {
+    } else if (mode === 'free') {
       headGroup.rotation.set(0, 0, 0)
       camera.position.set(0, 0, 9)
       camera.fov            = 60
@@ -491,7 +491,7 @@ export default function Player() {
       applySpherePosition(sphereRef.current, vrPosRef.current)
       camera.fov = vrFovRef.current
       camera.updateProjectionMatrix()
-    } else if (mode === 'fit') {
+    } else if (mode === 'normal') {
       const video = videoRef.current
       if (video?.videoWidth && video?.videoHeight) {
         if (rotation % 180) {
@@ -691,7 +691,7 @@ export default function Player() {
 
   const handleRotate = () => {
     const next = (rotation + 90) % 360
-    if (mode === 'fit' && (rotation % 180 === 0) !== (next % 180 === 0)) {
+    if (mode === 'normal' && (rotation % 180 === 0) !== (next % 180 === 0)) {
       Window.SetSize(window.innerHeight, window.innerWidth)
     }
     setRotation(next)
@@ -723,7 +723,7 @@ export default function Player() {
       <div
         ref={mountRef}
         style={{
-          ...(mode === 'fit' && rotation % 180
+          ...(mode === 'normal' && rotation % 180
             ? {
                 position: 'absolute',
                 top: '50%', left: '50%',
@@ -733,7 +733,7 @@ export default function Player() {
               }
             : {
                 width: '100%', height: '100%',
-                transform: mode === 'fit' && rotation ? `rotate(${rotation}deg)` : undefined,
+                transform: mode === 'normal' && rotation ? `rotate(${rotation}deg)` : undefined,
               }),
         }}
         onClick={handleCanvasClick}
@@ -850,7 +850,7 @@ export default function Player() {
           </IconButton>
         </Tooltip>
         <Tooltip
-          title={mode === 'vr' ? t('controls.resetCamera') : mode === 'fit' ? t('controls.fitWindow') : t('controls.resetView')}
+          title={mode === 'vr' ? t('controls.resetCamera') : mode === 'normal' ? t('controls.fitWindow') : t('controls.resetView')}
           placement="left"
         >
           <IconButton onClick={handleReset} sx={{ color: 'white', width: 56, height: 56 }}>

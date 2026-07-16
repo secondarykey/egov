@@ -87,10 +87,10 @@ export default function TitleBar({
           }}
         >
           <Tooltip title={t('mode.normal')} placement="bottom">
-            <ToggleButton value="fit"><OndemandVideoIcon fontSize="small" /></ToggleButton>
+            <ToggleButton value="normal"><OndemandVideoIcon fontSize="small" /></ToggleButton>
           </Tooltip>
           <Tooltip title={t('mode.free')} placement="bottom">
-            <ToggleButton value="normal"><OpenWithIcon fontSize="small" /></ToggleButton>
+            <ToggleButton value="free"><OpenWithIcon fontSize="small" /></ToggleButton>
           </Tooltip>
           <Tooltip title="VR" placement="bottom">
             <ToggleButton value="vr"><VrpanoIcon fontSize="small" /></ToggleButton>

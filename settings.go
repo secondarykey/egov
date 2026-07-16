@@ -101,7 +101,7 @@ func defaultSettings() *Settings {
 		},
 		Playback: PlaybackSettings{
 			Volume:           0.5,
-			DefaultMode:      "fit",
+			DefaultMode:      "normal",
 			ThumbnailEnabled: true,
 			Language:         "en",
 			ActiveColor:      "#4fc3f7",
@@ -137,7 +137,12 @@ func (s *Settings) normalize() {
 		s.VR.DefaultStart = d.VR.DefaultStart
 	}
 	switch s.Playback.DefaultMode {
-	case "fit", "normal", "vr":
+	case "normal", "free", "vr":
+	case "fit":
+		// 旧内部名からの移行: fit（ウィンドウフィット）は normal に改名された。
+		// 旧 normal（自由パン/ズーム）は free に改名されたが、値が新 normal と
+		// 衝突するため区別できず、旧設定はウィンドウフィット扱いになる。
+		s.Playback.DefaultMode = "normal"
 	default:
 		s.Playback.DefaultMode = d.Playback.DefaultMode
 	}

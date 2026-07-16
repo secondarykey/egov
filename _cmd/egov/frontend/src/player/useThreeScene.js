@@ -129,7 +129,7 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
       // DPIの異なるモニタ間を移動するとデバイスピクセル比が変わるため毎回反映する
       renderer.setPixelRatio(window.devicePixelRatio)
       renderer.setSize(mount.clientWidth, mount.clientHeight)
-      if (modeRef.current === 'fit') fitCamera()
+      if (modeRef.current === 'normal') fitCamera()
       requestRender()
     }
     window.addEventListener('resize', onResize)
@@ -139,7 +139,7 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
       if (video.videoWidth && video.videoHeight) {
         const aspect = video.videoWidth / video.videoHeight
         plane.scale.set(aspect / (16 / 9), 1, 1)
-        if (modeRef.current === 'fit') fitCamera()
+        if (modeRef.current === 'normal') fitCamera()
       }
       requestRender()
     })

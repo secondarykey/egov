@@ -61,7 +61,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
     GetVersion().then(setVersion)
     GetDefaultSettings().then(setDefaults)
   }, [])
-  const [playback, setPlayback] = useState({ defaultMode: 'fit', language: 'en', activeColor: '#4fc3f7', thumbnailEnabled: true })
+  const [playback, setPlayback] = useState({ defaultMode: 'normal', language: 'en', activeColor: '#4fc3f7', thumbnailEnabled: true })
   const [vr, setVr] = useState({ initialPitch: 0, initialYaw: 0, positionX: 0, positionY: 0, positionZ: 0, fov: 75, dragSensitivity: 0.004, scrollSpeed: 0.05, defaultStart: 'left' })
   const [controls, setControls] = useState({
     clickTimeoutMs: 300, doubleClickSeekSecs: 10, fastSeekSecs: 60,
@@ -158,8 +158,8 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
           <Row label={t('settings.playback.defaultMode')}>
             <FormControl size="small" fullWidth>
               <Select value={playback.defaultMode} onChange={e => setPlayback(p => ({ ...p, defaultMode: e.target.value }))}>
-                <MenuItem value="fit">{t('mode.normal')}</MenuItem>
-                <MenuItem value="normal">{t('mode.free')}</MenuItem>
+                <MenuItem value="normal">{t('mode.normal')}</MenuItem>
+                <MenuItem value="free">{t('mode.free')}</MenuItem>
                 <MenuItem value="vr">VR</MenuItem>
               </Select>
             </FormControl>
