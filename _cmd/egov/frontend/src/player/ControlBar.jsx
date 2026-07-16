@@ -43,16 +43,6 @@ export default function ControlBar({
           rangeLoop={rangeLoop}
           visible={showUI}
         />
-        <Tooltip title={loop ? t('controls.loopOn') : t('controls.loopOff')} placement="top">
-          <IconButton onClick={onLoopToggle} sx={{ color: loop ? activeColor : 'rgba(255,255,255,0.3)', width: 28, height: 28 }}>
-            <RepeatIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title={rangeLoop ? t('controls.rangeLoopOn') : t('controls.rangeLoopOff')} placement="top">
-          <IconButton onClick={onRangeLoopToggle} sx={{ color: rangeLoop ? activeColor : 'rgba(255,255,255,0.3)', width: 28, height: 28 }}>
-            <LinearScaleIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
       </Stack>
       <Collapse in={rangeLoop}>
         <Box sx={{ mt: 0.25, height: 16 }} />
@@ -87,8 +77,18 @@ export default function ControlBar({
         }}>
           {fileName}
         </Typography>
+        <Tooltip title={loop ? t('controls.loopOn') : t('controls.loopOff')} placement="top">
+          <IconButton onClick={onLoopToggle} sx={{ color: loop ? activeColor : 'rgba(255,255,255,0.3)', width: 28, height: 28 }}>
+            <RepeatIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title={rangeLoop ? t('controls.rangeLoopOn') : t('controls.rangeLoopOff')} placement="top">
+          <IconButton onClick={onRangeLoopToggle} sx={{ color: rangeLoop ? activeColor : 'rgba(255,255,255,0.3)', width: 28, height: 28 }}>
+            <LinearScaleIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
         <Tooltip title={fullscreen ? t('controls.exitFullscreen') : t('controls.fullscreen')} placement="top">
-          <IconButton onClick={onFullscreenToggle} sx={{ color: 'white', width: 28, height: 28 }}>
+          <IconButton onClick={onFullscreenToggle} sx={{ color: 'white', width: 28, height: 28, ml: '20px !important' }}>
             {fullscreen
               ? <FullscreenExitIcon fontSize="small" />
               : <FullscreenIcon    fontSize="small" />
