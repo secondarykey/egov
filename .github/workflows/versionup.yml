@@ -64,7 +64,7 @@ jobs:
             FINAL_VERSION="${PREFIX}.${NEXT_PATCH}"
           fi
 
-          go run _cmd/version.go $FINAL_VERSION
+          go run ./_cmd/version $FINAL_VERSION
 
           echo "NEW_VERSION=$FINAL_VERSION" >> $GITHUB_ENV
 
@@ -72,6 +72,10 @@ jobs:
         run: |
           cd _cmd/egov
           wails3 update build-assets -config build/config.yml -dir build
+          # wails3 update build-assets は build/Taskfile.yml をテンプレートで上書きし、
+          # install:frontend:deps の status チェック等のローカル修正を破壊するため元に戻す。
+          # （バージョン情報は Taskfile.yml には含まれないので巻き戻しても問題ない）
+          git checkout -- build/Taskfile.yml
 
       - name: Commit and Pull Request
         run: |

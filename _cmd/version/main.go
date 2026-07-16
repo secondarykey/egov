@@ -220,7 +220,9 @@ func write(v *ver) error {
 	}
 
 	for _, o := range ops {
-		os.Rename(o.output, o.input)
+		if err := os.Rename(o.output, o.input); err != nil {
+			return fmt.Errorf("rename %s -> %s: %w", o.output, o.input, err)
+		}
 		fmt.Println("Rename:", o.input)
 	}
 
