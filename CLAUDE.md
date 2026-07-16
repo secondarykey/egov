@@ -75,7 +75,19 @@ Vite builds to `_cmd/egov/frontend/dist/`. The Go binary embeds that directory w
 
 ### Frontend Component
 
-`_cmd/egov/frontend/src/Player.jsx` is the entire UI — one large component rendered from `App.jsx`. It uses:
+`_cmd/egov/frontend/src/Player.jsx` is the orchestrator component rendered from `App.jsx` — it owns all state/refs and input handling, and delegates rendering to `src/player/`:
+
+| File | Role |
+|------|------|
+| `player/useThreeScene.js` | Three.js scene setup + render-on-demand loop (rVFC), exposes refs |
+| `player/TitleBar.jsx` | Title bar (drag region, mode toggle, window controls) |
+| `player/ControlBar.jsx` | Bottom bar (seek, play/pause, volume, fullscreen) |
+| `player/SeekBarArea.jsx` / `TimeDisplay.jsx` / `MiniProgressBar.jsx` | `memo`-isolated high-frequency updates (`timeupdate`, thumbnail hover) |
+| `player/VrViewpointOverlay.jsx` | VR start-point + view sliders overlay |
+| `player/Overlays.jsx` | Feedback/error/drop/empty-state overlays |
+| `player/utils.js` | Shared constants (`VR_START`, `barStyle`) and helpers |
+
+Key facts:
 
 - **Three.js** (`r0.184`) + `OrbitControls` for rendering: a sphere (VR mode) and a plane (fit/normal mode) share one `VideoTexture`
 - **MUI** for all UI controls (title bar, control bar, sliders, menus)
