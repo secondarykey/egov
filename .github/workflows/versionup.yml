@@ -71,7 +71,9 @@ jobs:
       - name: Update Build Assets
         run: |
           cd _cmd/egov
-          wails3 update build-assets -config build/config.yml -dir build
+          # -name/-binaryname は config.yml から読まれないため必ず指定する。
+          # 省略すると INFO_PROJECTNAME / CFBundleExecutable / nfpm name / desktop Exec が空になる。
+          wails3 update build-assets -name "egov" -binaryname "egov" -config build/config.yml -dir build
           # wails3 update build-assets は build/Taskfile.yml をテンプレートで上書きし、
           # install:frontend:deps の status チェック等のローカル修正を破壊するため元に戻す。
           # （バージョン情報は Taskfile.yml には含まれないので巻き戻しても問題ない）
