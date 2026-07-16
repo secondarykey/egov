@@ -145,7 +145,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
           <Tab label={t('settings.tab.app')} />
         </Tabs>
 
-        <Box sx={{ minHeight: 320 }}>
+        <Box sx={{ minHeight: 574 }}>
         {/* Playback */}
         <TabPanel value={tab} index={0}>
           <Row label={t('settings.playback.language')}>
