@@ -53,6 +53,7 @@ The project uses **two Go modules**:
 | Module | Path | Purpose |
 |--------|------|---------|
 | `egov` | `/` (root) | Shared library — defines the `API` struct and its methods |
+| `github.com/secondarykey/egov/cmd/egov` | `_cmd/egov/` | Wails3 application entry point (`main.go`), build assets, frontend |
 
 The command module imports the root module as a local `replace` directive in its `go.mod`.
 
