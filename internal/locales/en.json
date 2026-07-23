@@ -76,6 +76,7 @@
       "dragSeek": "Drag Seek (>>)",
       "fastSeek": "Fast Seek (>>>)",
       "arrowSeek": "Arrow Key Seek",
+      "thumbnailGrid": "Thumbnail Grid (N×N)",
       "uiHideDelay": "UI Hide Delay",
       "uiHideOnLeave": "UI Hide on Leave"
     },

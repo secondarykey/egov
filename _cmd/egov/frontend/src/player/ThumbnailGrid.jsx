@@ -3,23 +3,22 @@ import { Box, CircularProgress, IconButton, Typography } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import { fmt } from './utils'
 
-const COLS = 4
-const ROWS = 4
-const COUNT = COLS * ROWS   // 16 サムネイル
 const CAPTURE_LONG_SIDE = 320   // 取り込み時の長辺ピクセル
 
 // Normalモードのサムネイル一覧オーバーレイ。
-// 動画を (COUNT+1) 分割した内側の COUNT 個の時刻（0秒と末尾を除く）を
-// 専用の隠しビデオでシークしながら取り込み、4x4 で表示する。
+// gridSize=N のとき N×N 枚を並べる。動画を (N²+1) 分割した内側の N² 個の
+// 時刻（0秒と末尾を除く）を専用の隠しビデオでシークしながら取り込む。
 // クリックでその時刻へシークして閉じる。
-export default function ThumbnailGrid({ src, duration, rotation = 0, activeColor, onSeek, onClose }) {
-  const [thumbs, setThumbs] = useState(() => new Array(COUNT).fill(null))
+export default function ThumbnailGrid({ src, duration, rotation = 0, gridSize = 4, activeColor, onSeek, onClose }) {
+  const cols  = Math.max(2, Math.min(9, gridSize))
+  const count = cols * cols
+  const [thumbs, setThumbs] = useState(() => new Array(count).fill(null))
   const [ready, setReady]   = useState(0)
 
   // 取り込み対象の時刻（0秒と末尾を除いた等間隔）
   const timesRef = useRef([])
   if (timesRef.current.length === 0 && duration > 0) {
-    timesRef.current = Array.from({ length: COUNT }, (_, i) => (duration * (i + 1)) / (COUNT + 1))
+    timesRef.current = Array.from({ length: count }, (_, i) => (duration * (i + 1)) / (count + 1))
   }
 
   useEffect(() => {
@@ -38,7 +37,7 @@ export default function ThumbnailGrid({ src, duration, rotation = 0, activeColor
     const ctx = canvas.getContext('2d')
 
     const seekNext = () => {
-      if (cancelled || idx >= COUNT) return
+      if (cancelled || idx >= count) return
       v.currentTime = times[idx]
     }
 
@@ -87,7 +86,7 @@ export default function ThumbnailGrid({ src, duration, rotation = 0, activeColor
       v.removeAttribute('src')
       v.load()
     }
-  }, [src, duration, rotation])
+  }, [src, duration, rotation, count])
 
   return (
     <Box
@@ -107,13 +106,13 @@ export default function ThumbnailGrid({ src, duration, rotation = 0, activeColor
         <CloseIcon />
       </IconButton>
 
-      {ready < COUNT && (
+      {ready < count && (
         <Box sx={{
           position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)',
           display: 'flex', alignItems: 'center', gap: 1, color: 'rgba(255,255,255,0.8)',
         }}>
           <CircularProgress size={16} sx={{ color: activeColor }} />
-          <Typography variant="caption">{ready}/{COUNT}</Typography>
+          <Typography variant="caption">{ready}/{count}</Typography>
         </Box>
       )}
 
@@ -121,7 +120,7 @@ export default function ThumbnailGrid({ src, duration, rotation = 0, activeColor
         onClick={e => e.stopPropagation()}
         sx={{
           display: 'grid',
-          gridTemplateColumns: `repeat(${COLS}, 1fr)`,
+          gridTemplateColumns: `repeat(${cols}, 1fr)`,
           gap: 1,
           width: '100%', maxWidth: 1100,
           maxHeight: '100%',

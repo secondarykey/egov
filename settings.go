@@ -38,7 +38,9 @@ type ControlSettings struct {
 	DragSeekSecs int `json:"dragSeekSecs"`
 	FastSeekSecs int `json:"fastSeekSecs"`
 	// ArrowSeekSecs は再生中の ←/→ キーによるシーク秒数（一時停止中はコマ送り）。
-	ArrowSeekSecs        int `json:"arrowSeekSecs"`
+	ArrowSeekSecs int `json:"arrowSeekSecs"`
+	// ThumbnailGridSize は Normalモードのサムネイル一覧の一辺の分割数（N×N、2..9）。
+	ThumbnailGridSize    int `json:"thumbnailGridSize"`
 	UIHideDelayMs        int `json:"uiHideDelayMs"`
 	UIHideOnLeaveDelayMs int `json:"uiHideOnLeaveDelayMs"`
 }
@@ -116,6 +118,7 @@ func defaultSettings() *Settings {
 			DragSeekSecs:         10,
 			FastSeekSecs:         60,
 			ArrowSeekSecs:        5,
+			ThumbnailGridSize:    4,
 			UIHideDelayMs:        1500,
 			UIHideOnLeaveDelayMs: 800,
 		},
@@ -170,6 +173,9 @@ func (s *Settings) normalize() {
 	}
 	if s.Controls.ArrowSeekSecs <= 0 {
 		s.Controls.ArrowSeekSecs = d.Controls.ArrowSeekSecs
+	}
+	if s.Controls.ThumbnailGridSize < 2 || s.Controls.ThumbnailGridSize > 9 {
+		s.Controls.ThumbnailGridSize = d.Controls.ThumbnailGridSize
 	}
 	if s.Controls.UIHideDelayMs <= 0 {
 		s.Controls.UIHideDelayMs = d.Controls.UIHideDelayMs

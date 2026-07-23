@@ -65,7 +65,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
   const [vr, setVr] = useState({ initialPitch: 0, initialYaw: 0, positionX: 0, positionY: 0, positionZ: 0, fov: 75, dragSensitivity: 0.004, scrollSpeed: 0.05, defaultStart: 'left' })
   const [controls, setControls] = useState({
     clickTimeoutMs: 300, doubleClickSeekSecs: 10, dragSeekSecs: 10,
-    fastSeekSecs: 60, arrowSeekSecs: 5,
+    fastSeekSecs: 60, arrowSeekSecs: 5, thumbnailGridSize: 4,
     uiHideDelayMs: 1500, uiHideOnLeaveDelayMs: 800,
   })
   const [origLanguage, setOrigLanguage] = useState('en')
@@ -251,6 +251,11 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             value={controls.arrowSeekSecs ?? 5} onChange={setC('arrowSeekSecs')}
             min={1} max={60} step={1}
             format={v => `${v} s`}
+          />
+          <SliderRow label={t('settings.controls.thumbnailGrid')}
+            value={controls.thumbnailGridSize ?? 4} onChange={setC('thumbnailGridSize')}
+            min={2} max={9} step={1}
+            format={v => `${v}×${v}`}
           />
           <SliderRow label={t('settings.controls.uiHideDelay')}
             value={controls.uiHideDelayMs} onChange={setC('uiHideDelayMs')}

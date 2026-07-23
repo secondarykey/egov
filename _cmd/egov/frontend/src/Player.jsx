@@ -50,6 +50,7 @@ export default function Player() {
   const doubleClickSeekRef  = useRef(10)
   const dragSeekSecsRef     = useRef(10)
   const arrowSeekSecsRef    = useRef(5)
+  const thumbGridSizeRef    = useRef(4)
   const justFocusedRef      = useRef(false)
   const focusTimerRef       = useRef(null)
   const acceptInactiveRef   = useRef(false)
@@ -312,6 +313,7 @@ export default function Player() {
     dragSeekSecsRef.current     = c.dragSeekSecs
     fastSeekSecsRef.current     = c.fastSeekSecs
     arrowSeekSecsRef.current    = c.arrowSeekSecs
+    thumbGridSizeRef.current    = c.thumbnailGridSize
     uiHideDelayRef.current      = c.uiHideDelayMs
     uiHideLeaveDelayRef.current = c.uiHideOnLeaveDelayMs
   }
@@ -905,6 +907,7 @@ export default function Player() {
           src={videoRef.current?.src}
           duration={duration}
           rotation={rotation}
+          gridSize={thumbGridSizeRef.current}
           activeColor={activeColor}
           onSeek={handleThumbGridSeek}
           onClose={() => setThumbGridOpen(false)}
