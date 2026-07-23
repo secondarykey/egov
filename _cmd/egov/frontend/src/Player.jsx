@@ -28,6 +28,7 @@ export default function Player() {
   const thumbVideoRef   = useRef(null)
   const thumbCanvasRef  = useRef(null)
   const thumbEnabledRef = useRef(true)
+  const thumbCacheRef   = useRef(null)   // { key, thumbs } 同一動画・分割数・回転のサムネイル一覧キャッシュ
   const vrStartRef      = useRef('left')
   const vrYawRef        = useRef(0)   // 現在の頭の向き（ラジアン、セッション中保持）
   const vrPitchRef      = useRef(0)
@@ -281,6 +282,7 @@ export default function Player() {
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
     objectUrlRef.current = url
     setVideoError(null)
+    thumbCacheRef.current = null
     video.src = url
     if (thumbEnabledRef.current && thumbVideoRef.current) thumbVideoRef.current.src = url
     safePlay(video)
@@ -297,6 +299,7 @@ export default function Player() {
       objectUrlRef.current = null
     }
     setVideoError(null)
+    thumbCacheRef.current = null
     video.src = fileUrl
     if (thumbEnabledRef.current && thumbVideoRef.current) thumbVideoRef.current.src = fileUrl
     safePlay(video)
@@ -740,6 +743,10 @@ export default function Player() {
     UpdateAlwaysOnTop(next)
   }
 
+  // サムネイル一覧キャッシュのキー（動画src・分割数・回転が一致すれば再利用）
+  const thumbCacheKey = `${videoRef.current?.src ?? ''}|${thumbGridSizeRef.current}|${rotation}`
+  const cachedThumbs  = thumbCacheRef.current?.key === thumbCacheKey ? thumbCacheRef.current.thumbs : null
+
   return (
     <div
       data-file-drop-target
@@ -909,8 +916,10 @@ export default function Player() {
           rotation={rotation}
           gridSize={thumbGridSizeRef.current}
           activeColor={activeColor}
+          initialThumbs={cachedThumbs}
           onSeek={handleThumbGridSeek}
           onClose={() => setThumbGridOpen(false)}
+          onComplete={(thumbs) => { thumbCacheRef.current = { key: thumbCacheKey, thumbs } }}
         />
       )}
 

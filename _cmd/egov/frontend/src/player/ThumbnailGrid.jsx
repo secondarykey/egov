@@ -9,11 +9,13 @@ const CAPTURE_LONG_SIDE = 320   // 取り込み時の長辺ピクセル
 // gridSize=N のとき N×N 枚を並べる。動画を (N²+1) 分割した内側の N² 個の
 // 時刻（0秒と末尾を除く）を専用の隠しビデオでシークしながら取り込む。
 // クリックでその時刻へシークして閉じる。
-export default function ThumbnailGrid({ src, duration, rotation = 0, gridSize = 4, activeColor, onSeek, onClose }) {
+export default function ThumbnailGrid({ src, duration, rotation = 0, gridSize = 4, activeColor, initialThumbs, onSeek, onClose, onComplete }) {
   const cols  = Math.max(2, Math.min(9, gridSize))
   const count = cols * cols
-  const [thumbs, setThumbs] = useState(() => new Array(count).fill(null))
-  const [ready, setReady]   = useState(0)
+  // 同一動画・分割数・回転のキャッシュが渡っていれば再生成せずそのまま使う
+  const cached = !!initialThumbs && initialThumbs.length === count && initialThumbs.every(Boolean)
+  const [thumbs, setThumbs] = useState(() => cached ? initialThumbs : new Array(count).fill(null))
+  const [ready, setReady]   = useState(() => cached ? count : 0)
 
   // 取り込み対象の時刻（0秒と末尾を除いた等間隔）
   const timesRef = useRef([])
@@ -22,10 +24,11 @@ export default function ThumbnailGrid({ src, duration, rotation = 0, gridSize = 
   }
 
   useEffect(() => {
-    if (!src || !duration) return
+    if (!src || !duration || cached) return
     const times = timesRef.current
     let cancelled = false
     let idx = 0
+    const results = new Array(count).fill(null)
 
     const v = document.createElement('video')
     v.src = src
@@ -62,15 +65,16 @@ export default function ThumbnailGrid({ src, duration, rotation = 0, gridSize = 
         }
         ctx.restore()
         const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
-        const capIdx = idx
-        setThumbs(prev => {
-          const next = prev.slice()
-          next[capIdx] = { time: times[capIdx], dataUrl }
-          return next
-        })
+        results[idx] = { time: times[idx], dataUrl }
+        setThumbs(results.slice())
         setReady(r => r + 1)
       }
       idx++
+      if (idx >= count) {
+        // 全枚数そろったらキャッシュへ渡す（欠けがある場合はキャッシュしない）
+        if (results.every(Boolean)) onComplete?.(results)
+        return
+      }
       seekNext()
     }
 
