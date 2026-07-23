@@ -3,15 +3,21 @@ import { Box, CircularProgress, IconButton, Typography } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import { fmt } from './utils'
 
-const CAPTURE_LONG_SIDE = 320   // 取り込み時の長辺ピクセル
+// グリッドが占める最大の表示領域（ビューポート比）
+const AREA_W = 0.9
+const AREA_H = 0.88
 
 // Normalモードのサムネイル一覧オーバーレイ。
 // gridSize=N のとき N×N 枚を並べる。動画を (N²+1) 分割した内側の N² 個の
 // 時刻（0秒と末尾を除く）を専用の隠しビデオでシークしながら取り込む。
+// グリッドはウィンドウと動画のアスペクト比に合わせて拡縮し、取り込み解像度も
+// 実際の表示セルサイズ（×devicePixelRatio）に合わせる。
 // クリックでその時刻へシークして閉じる。
-export default function ThumbnailGrid({ src, duration, rotation = 0, gridSize = 4, activeColor, initialThumbs, onSeek, onClose, onComplete }) {
+export default function ThumbnailGrid({ src, duration, rotation = 0, gridSize = 4, aspect = 16 / 9, activeColor, initialThumbs, onSeek, onClose, onComplete }) {
   const cols  = Math.max(2, Math.min(9, gridSize))
   const count = cols * cols
+  // 表示上のグリッド幅（px）とセル寸法。取り込み解像度の決定にも使う。
+  const gridW = Math.min(window.innerWidth * AREA_W, window.innerHeight * AREA_H * aspect)
   // 同一動画・分割数・回転のキャッシュが渡っていれば再生成せずそのまま使う
   const cached = !!initialThumbs && initialThumbs.length === count && initialThumbs.every(Boolean)
   const [thumbs, setThumbs] = useState(() => cached ? initialThumbs : new Array(count).fill(null))
@@ -29,6 +35,13 @@ export default function ThumbnailGrid({ src, duration, rotation = 0, gridSize = 
     let cancelled = false
     let idx = 0
     const results = new Array(count).fill(null)
+
+    // 実際に表示されるセルの長辺（px）× dpr を取り込み目標の長辺にする。
+    // 元動画の解像度は上限（拡大はしない）。
+    const dpr      = window.devicePixelRatio || 1
+    const cellW    = gridW / cols
+    const cellH    = cellW / aspect
+    const wantLong = Math.max(160, Math.ceil(Math.max(cellW, cellH) * dpr))
 
     const v = document.createElement('video')
     v.src = src
@@ -49,7 +62,7 @@ export default function ThumbnailGrid({ src, duration, rotation = 0, gridSize = 
       const vw = v.videoWidth
       const vh = v.videoHeight
       if (vw && vh) {
-        const scale = CAPTURE_LONG_SIDE / Math.max(vw, vh)
+        const scale = Math.min(1, wantLong / Math.max(vw, vh))
         const sw = Math.max(1, Math.round(vw * scale))
         const sh = Math.max(1, Math.round(vh * scale))
         const rotated = rotation % 180 !== 0
@@ -90,7 +103,7 @@ export default function ThumbnailGrid({ src, duration, rotation = 0, gridSize = 
       v.removeAttribute('src')
       v.load()
     }
-  }, [src, duration, rotation, count])
+  }, [src, duration, rotation, count, gridW, aspect])
 
   return (
     <Box
@@ -125,9 +138,11 @@ export default function ThumbnailGrid({ src, duration, rotation = 0, gridSize = 
         sx={{
           display: 'grid',
           gridTemplateColumns: `repeat(${cols}, 1fr)`,
-          gap: 1,
-          width: '100%', maxWidth: 1100,
-          maxHeight: '100%',
+          gridTemplateRows: `repeat(${cols}, 1fr)`,
+          gap: 0.5,
+          // ウィンドウと動画アスペクト比に合わせて拡縮する（リサイズにも追従）
+          width: `min(${AREA_W * 100}vw, calc(${AREA_H * 100}vh * ${aspect}))`,
+          aspectRatio: String(aspect),
         }}
       >
         {thumbs.map((thumb, i) => (
@@ -136,7 +151,7 @@ export default function ThumbnailGrid({ src, duration, rotation = 0, gridSize = 
             onClick={() => { if (thumb) { onSeek(thumb.time); onClose() } }}
             sx={{
               position: 'relative',
-              aspectRatio: '16 / 9',
+              minWidth: 0, minHeight: 0,
               bgcolor: 'rgba(255,255,255,0.06)',
               borderRadius: 1,
               overflow: 'hidden',
@@ -150,7 +165,7 @@ export default function ThumbnailGrid({ src, duration, rotation = 0, gridSize = 
               <Box
                 component="img"
                 src={thumb.dataUrl}
-                sx={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+                sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
               />
             ) : (
               <Box sx={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

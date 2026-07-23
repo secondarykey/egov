@@ -746,6 +746,10 @@ export default function Player() {
   // サムネイル一覧キャッシュのキー（動画src・分割数・回転が一致すれば再利用）
   const thumbCacheKey = `${videoRef.current?.src ?? ''}|${thumbGridSizeRef.current}|${rotation}`
   const cachedThumbs  = thumbCacheRef.current?.key === thumbCacheKey ? thumbCacheRef.current.thumbs : null
+  // 表示用アスペクト比（回転で縦横入れ替わる）
+  const thumbVw = videoRef.current?.videoWidth  || 0
+  const thumbVh = videoRef.current?.videoHeight || 0
+  const thumbAspect = thumbVw && thumbVh ? (rotation % 180 ? thumbVh / thumbVw : thumbVw / thumbVh) : 16 / 9
 
   return (
     <div
@@ -915,6 +919,7 @@ export default function Player() {
           duration={duration}
           rotation={rotation}
           gridSize={thumbGridSizeRef.current}
+          aspect={thumbAspect}
           activeColor={activeColor}
           initialThumbs={cachedThumbs}
           onSeek={handleThumbGridSeek}
