@@ -278,9 +278,12 @@ const SeekBarArea = memo(function SeekBarArea({
           '& .MuiSlider-track': { height: 26, border: 'none', bgcolor: activeColor, borderRadius: '2px 0 0 2px' },
           '& .MuiSlider-rail':  { height: 26, bgcolor: 'rgba(255,255,255,0.25)', borderRadius: 0.5 },
           '& .MuiSlider-thumb': {
-            width: 24, height: 24, bgcolor: activeColor,
+            // rail(高さ26)を覆える最小限の高さにして右側の rail(灰)を隠し、
+            // はみ出しは控えめに。底辺は track 右端(=再生位置)へ 3px 重ね、
+            // バーと一体の矢印に見せる。
+            width: 26, height: 28, bgcolor: activeColor,
             borderRadius: 0,
-            clipPath: 'polygon(calc(50% - 2px) 0, 100% 50%, calc(50% - 2px) 100%)',
+            clipPath: 'polygon(calc(50% - 3px) 0, 100% 50%, calc(50% - 3px) 100%)',
             '&:hover, &.Mui-focusVisible': { boxShadow: 'none' },
             '&::before': { boxShadow: 'none' },
           },

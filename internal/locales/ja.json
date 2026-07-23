@@ -36,6 +36,7 @@
     "thumbnailOn": "サムネイルプレビュー: オン",
     "thumbnailOff": "サムネイルプレビュー: オフ",
     "snapshot": "スナップショット",
+    "thumbnailGrid": "サムネイル一覧",
     "loopOn": "リピート: オン",
     "loopOff": "リピート: オフ",
     "rangeLoopOn": "範囲ループ: オン",
@@ -75,6 +76,7 @@
       "dragSeek": "ドラッグシーク (>>)",
       "fastSeek": "高速シーク (>>>)",
       "arrowSeek": "十字キーシーク",
+      "thumbnailGrid": "サムネイル分割数 (N×N)",
       "uiHideDelay": "UI非表示遅延",
       "uiHideOnLeave": "離脱時UI非表示遅延"
     },

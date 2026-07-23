@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { Box, IconButton, Tooltip } from '@mui/material'
 import CameraAltIcon from '@mui/icons-material/CameraAlt'
+import GridViewIcon from '@mui/icons-material/GridView'
 import FitScreenIcon from '@mui/icons-material/FitScreen'
 import { Events, Window } from '@wailsio/runtime'
 import { GetInitialFile, GetServerURL, GetSettings, UpdateAlwaysOnTop, UpdatePlaybackSettings, UpdateVRSettings } from '../bindings/egov/api'
@@ -12,6 +13,7 @@ import useThreeScene from './player/useThreeScene'
 import TitleBar from './player/TitleBar'
 import ControlBar from './player/ControlBar'
 import MiniProgressBar from './player/MiniProgressBar'
+import ThumbnailGrid from './player/ThumbnailGrid'
 import VrViewpointOverlay from './player/VrViewpointOverlay'
 import { ClickFeedback, DropHint, EmptyState, SeekFeedback, SeekZoneOverlay, VideoErrorOverlay } from './player/Overlays'
 import { VR_START, applyHeadRotation, applySpherePosition, barStyle, deg2rad, rad2deg } from './player/utils'
@@ -26,6 +28,7 @@ export default function Player() {
   const thumbVideoRef   = useRef(null)
   const thumbCanvasRef  = useRef(null)
   const thumbEnabledRef = useRef(true)
+  const thumbCacheRef   = useRef(null)   // { key, thumbs } 同一動画・分割数・回転のサムネイル一覧キャッシュ
   const vrStartRef      = useRef('left')
   const vrYawRef        = useRef(0)   // 現在の頭の向き（ラジアン、セッション中保持）
   const vrPitchRef      = useRef(0)
@@ -48,6 +51,7 @@ export default function Player() {
   const doubleClickSeekRef  = useRef(10)
   const dragSeekSecsRef     = useRef(10)
   const arrowSeekSecsRef    = useRef(5)
+  const thumbGridSizeRef    = useRef(4)
   const justFocusedRef      = useRef(false)
   const focusTimerRef       = useRef(null)
   const acceptInactiveRef   = useRef(false)
@@ -87,6 +91,7 @@ export default function Player() {
   const [seekZoneActive, setSeekZoneActive] = useState(null)   // { seconds, forward } or null
   const [rangeLoop,      setRangeLoop]      = useState(false)
   const [rotation,       setRotation]       = useState(0)
+  const [thumbGridOpen,  setThumbGridOpen]  = useState(false)
 
   // Three.js シーン（生成・破棄・描画ループはフック側が担う）
   const {
@@ -277,6 +282,7 @@ export default function Player() {
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
     objectUrlRef.current = url
     setVideoError(null)
+    thumbCacheRef.current = null
     video.src = url
     if (thumbEnabledRef.current && thumbVideoRef.current) thumbVideoRef.current.src = url
     safePlay(video)
@@ -293,6 +299,7 @@ export default function Player() {
       objectUrlRef.current = null
     }
     setVideoError(null)
+    thumbCacheRef.current = null
     video.src = fileUrl
     if (thumbEnabledRef.current && thumbVideoRef.current) thumbVideoRef.current.src = fileUrl
     safePlay(video)
@@ -309,6 +316,7 @@ export default function Player() {
     dragSeekSecsRef.current     = c.dragSeekSecs
     fastSeekSecsRef.current     = c.fastSeekSecs
     arrowSeekSecsRef.current    = c.arrowSeekSecs
+    thumbGridSizeRef.current    = c.thumbnailGridSize
     uiHideDelayRef.current      = c.uiHideDelayMs
     uiHideLeaveDelayRef.current = c.uiHideOnLeaveDelayMs
   }
@@ -669,6 +677,17 @@ export default function Player() {
     }, 'image/png')
   }
 
+  const handleThumbGridToggle = () => {
+    const video = videoRef.current
+    if (!video?.src || !video.duration) return
+    setThumbGridOpen(o => !o)
+  }
+
+  const handleThumbGridSeek = (time) => {
+    const video = videoRef.current
+    if (video?.src) video.currentTime = time
+  }
+
   const handleLoopToggle = () => {
     const next = !loop
     setLoop(next)
@@ -705,6 +724,7 @@ export default function Player() {
 
   const handleModeChange = (v) => {
     if (v === 'vr' && rotation) setRotation(0)
+    if (v !== 'normal') setThumbGridOpen(false)
     setMode(v)
   }
 
@@ -722,6 +742,14 @@ export default function Player() {
     Window.SetAlwaysOnTop(next)
     UpdateAlwaysOnTop(next)
   }
+
+  // サムネイル一覧キャッシュのキー（動画src・分割数・回転が一致すれば再利用）
+  const thumbCacheKey = `${videoRef.current?.src ?? ''}|${thumbGridSizeRef.current}|${rotation}`
+  const cachedThumbs  = thumbCacheRef.current?.key === thumbCacheKey ? thumbCacheRef.current.thumbs : null
+  // 表示用アスペクト比（回転で縦横入れ替わる）
+  const thumbVw = videoRef.current?.videoWidth  || 0
+  const thumbVh = videoRef.current?.videoHeight || 0
+  const thumbAspect = thumbVw && thumbVh ? (rotation % 180 ? thumbVh / thumbVw : thumbVw / thumbVh) : 16 / 9
 
   return (
     <div
@@ -868,6 +896,13 @@ export default function Player() {
             <CameraAltIcon sx={{ fontSize: 40 }} />
           </IconButton>
         </Tooltip>
+        {mode === 'normal' && (
+          <Tooltip title={t('controls.thumbnailGrid')} placement="left">
+            <IconButton onClick={handleThumbGridToggle} sx={{ color: 'white', width: 56, height: 56 }}>
+              <GridViewIcon sx={{ fontSize: 36 }} />
+            </IconButton>
+          </Tooltip>
+        )}
         <Tooltip
           title={mode === 'vr' ? t('controls.resetCamera') : mode === 'normal' ? t('controls.fitWindow') : t('controls.resetView')}
           placement="left"
@@ -877,6 +912,21 @@ export default function Player() {
           </IconButton>
         </Tooltip>
       </Box>
+
+      {thumbGridOpen && mode === 'normal' && (
+        <ThumbnailGrid
+          src={videoRef.current?.src}
+          duration={duration}
+          rotation={rotation}
+          gridSize={thumbGridSizeRef.current}
+          aspect={thumbAspect}
+          activeColor={activeColor}
+          initialThumbs={cachedThumbs}
+          onSeek={handleThumbGridSeek}
+          onClose={() => setThumbGridOpen(false)}
+          onComplete={(thumbs) => { thumbCacheRef.current = { key: thumbCacheKey, thumbs } }}
+        />
+      )}
 
       <SettingsDialog
         open={settingsOpen}
