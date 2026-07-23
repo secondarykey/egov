@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { Box, IconButton, Tooltip } from '@mui/material'
 import CameraAltIcon from '@mui/icons-material/CameraAlt'
+import GridViewIcon from '@mui/icons-material/GridView'
 import FitScreenIcon from '@mui/icons-material/FitScreen'
 import { Events, Window } from '@wailsio/runtime'
 import { GetInitialFile, GetServerURL, GetSettings, UpdateAlwaysOnTop, UpdatePlaybackSettings, UpdateVRSettings } from '../bindings/egov/api'
@@ -12,6 +13,7 @@ import useThreeScene from './player/useThreeScene'
 import TitleBar from './player/TitleBar'
 import ControlBar from './player/ControlBar'
 import MiniProgressBar from './player/MiniProgressBar'
+import ThumbnailGrid from './player/ThumbnailGrid'
 import VrViewpointOverlay from './player/VrViewpointOverlay'
 import { ClickFeedback, DropHint, EmptyState, SeekFeedback, SeekZoneOverlay, VideoErrorOverlay } from './player/Overlays'
 import { VR_START, applyHeadRotation, applySpherePosition, barStyle, deg2rad, rad2deg } from './player/utils'
@@ -87,6 +89,7 @@ export default function Player() {
   const [seekZoneActive, setSeekZoneActive] = useState(null)   // { seconds, forward } or null
   const [rangeLoop,      setRangeLoop]      = useState(false)
   const [rotation,       setRotation]       = useState(0)
+  const [thumbGridOpen,  setThumbGridOpen]  = useState(false)
 
   // Three.js シーン（生成・破棄・描画ループはフック側が担う）
   const {
@@ -669,6 +672,17 @@ export default function Player() {
     }, 'image/png')
   }
 
+  const handleThumbGridToggle = () => {
+    const video = videoRef.current
+    if (!video?.src || !video.duration) return
+    setThumbGridOpen(o => !o)
+  }
+
+  const handleThumbGridSeek = (time) => {
+    const video = videoRef.current
+    if (video?.src) video.currentTime = time
+  }
+
   const handleLoopToggle = () => {
     const next = !loop
     setLoop(next)
@@ -705,6 +719,7 @@ export default function Player() {
 
   const handleModeChange = (v) => {
     if (v === 'vr' && rotation) setRotation(0)
+    if (v !== 'normal') setThumbGridOpen(false)
     setMode(v)
   }
 
@@ -868,6 +883,13 @@ export default function Player() {
             <CameraAltIcon sx={{ fontSize: 40 }} />
           </IconButton>
         </Tooltip>
+        {mode === 'normal' && (
+          <Tooltip title={t('controls.thumbnailGrid')} placement="left">
+            <IconButton onClick={handleThumbGridToggle} sx={{ color: 'white', width: 56, height: 56 }}>
+              <GridViewIcon sx={{ fontSize: 36 }} />
+            </IconButton>
+          </Tooltip>
+        )}
         <Tooltip
           title={mode === 'vr' ? t('controls.resetCamera') : mode === 'normal' ? t('controls.fitWindow') : t('controls.resetView')}
           placement="left"
@@ -877,6 +899,17 @@ export default function Player() {
           </IconButton>
         </Tooltip>
       </Box>
+
+      {thumbGridOpen && mode === 'normal' && (
+        <ThumbnailGrid
+          src={videoRef.current?.src}
+          duration={duration}
+          rotation={rotation}
+          activeColor={activeColor}
+          onSeek={handleThumbGridSeek}
+          onClose={() => setThumbGridOpen(false)}
+        />
+      )}
 
       <SettingsDialog
         open={settingsOpen}
