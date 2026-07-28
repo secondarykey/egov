@@ -95,6 +95,10 @@ jobs:
           cd ./_cmd/egov/bin
           if [ "${{ runner.os }}" = "Windows" ]; then
             7z a ../../../${ZIP_NAME} ./*
+          elif [ "${{ runner.os }}" = "macOS" ]; then
+            # .app は拡張属性・シンボリックリンク・署名リソースを含むディレクトリのため
+            # zip -r では壊れる。Apple 推奨の ditto を使う
+            ditto -c -k --sequesterRsrc . ../../../${ZIP_NAME}
           else
             zip -r ../../../${ZIP_NAME} ./*
           fi
@@ -134,3 +138,17 @@ jobs:
         generate_release_notes: true
         draft: true
         prerelease: false
+        body: |
+          ### ⚠️ macOS 版をお使いの方へ
+
+          macOS 版はまだ Apple の Developer ID 署名・notarization を行っていないため、
+          ダウンロードしたままでは Gatekeeper に拒否され、
+          「"egov" は壊れているため開けません。ゴミ箱に入れる必要があります。」と表示されます。
+          **ファイルは壊れていません。** 以下のコマンドで隔離属性を外してから起動してください。
+
+          ```bash
+          xattr -dr com.apple.quarantine /Applications/egov.app
+          ```
+
+          また macOS 版は Apple Silicon (arm64) 専用です。Intel Mac では動作しません。
+

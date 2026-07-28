@@ -24,6 +24,20 @@ task build    # プロダクションビルド
 task run      # ビルド済みバイナリの実行
 ```
 
+## macOS 版の実行について
+
+macOS 版はまだ Apple の Developer ID 署名・notarization を行っていません。
+そのため GitHub Release からダウンロードすると `com.apple.quarantine` 属性が付き、
+Gatekeeper に「"egov" は壊れているため開けません。ゴミ箱に入れる必要があります。」と拒否されます。
+
+**ファイルは壊れていません。** 以下のコマンドで隔離属性を外してから起動してください。
+
+```bash
+xattr -dr com.apple.quarantine /Applications/egov.app
+```
+
+また現在の macOS 版は Apple Silicon (arm64) 専用ビルドのため、Intel Mac では動作しません。
+
 ## リリース
 
 1. PR が `main` にマージされると [versionup.yml](.github/workflows/versionup.yml) がパッチバージョンを自動更新し、`chore: version x.y.z` の PR を作成・マージして `vx.y.z` タグを push します。
