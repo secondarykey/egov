@@ -23,6 +23,8 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
   const requestRenderRef = useRef(null)   // 単発レンダーを要求（操作・状態変化時）
   const objectUrlRef   = useRef(null)     // loadFile で作成した Object URL（解放用）
   const detectedFpsRef = useRef(0)
+  const frameCountRef  = useRef(0)        // テクスチャに取り込んだ動画フレーム数（診断用）
+  const renderCountRef = useRef(0)        // WebGL描画回数（診断用）
 
   useEffect(() => {
     document.body.style.margin   = '0'
@@ -40,13 +42,30 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
     scene.add(headGroup)
     headGroupRef.current = headGroup
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true })
+    // WebGLコンテキストの生成はドライバ・環境に依存して失敗しうる
+    // （LinuxのWebKitGTKでGPUアクセラレーションが使えない場合など）。
+    // 失敗を握り潰すと「UIは出るが映像だけ真っ黒」になり原因が分からないため、
+    // エラーオーバーレイに出して切り分け可能にする。
+    let renderer
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true })
+    } catch (err) {
+      onVideoError(`WEBGL_INIT_FAILED: ${err?.message || err}`)
+      return
+    }
     // HiDPI: OSスケーリング環境（Windowsの125%〜200%等）でCSSピクセル解像度の
     // まま描画すると動画がにじむため、デバイスピクセル比で内部バッファを確保する
     renderer.setPixelRatio(window.devicePixelRatio)
     renderer.setSize(mount.clientWidth, mount.clientHeight)
     mount.appendChild(renderer.domElement)
     rendererRef.current = renderer
+
+    // コンテキストロスト後は描画が止まったまま黒画面になる。無言で壊れないよう通知する。
+    const onContextLost = (e) => {
+      e.preventDefault()
+      onVideoError('WEBGL_CONTEXT_LOST')
+    }
+    renderer.domElement.addEventListener('webglcontextlost', onContextLost)
 
     const video = document.createElement('video')
     video.loop        = true    // Player 側 loop state の初期値と一致させる
@@ -87,6 +106,7 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
     const renderOnce = () => {
       controls.update()
       renderer.render(scene, camera)
+      renderCountRef.current++
     }
 
     let renderScheduled = false
@@ -164,6 +184,7 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
     let prevMediaTime = -1
     const onVideoFrame = (_now, metadata) => {
       texture.needsUpdate = true
+      frameCountRef.current++
       renderOnce()
       if (metadata && prevMediaTime >= 0 && metadata.mediaTime > prevMediaTime) {
         const delta = metadata.mediaTime - prevMediaTime
@@ -189,6 +210,7 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
       animId = requestAnimationFrame(rafLoop)
       if (!video.paused && !video.ended) {
         texture.needsUpdate = true
+        frameCountRef.current++
         renderOnce()
       }
     }
@@ -213,6 +235,7 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
         cancelAnimationFrame(animId)
       }
       window.removeEventListener('resize', onResize)
+      renderer.domElement.removeEventListener('webglcontextlost', onContextLost)
       renderer.domElement.removeEventListener('wheel', onWheel)
       controls.removeEventListener('change', requestRender)
       controls.dispose()
@@ -227,5 +250,6 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
     mountRef, videoRef, cameraRef, controlsRef, sphereRef, planeRef,
     textureRef, fitCameraRef, headGroupRef, rendererRef,
     requestRenderRef, objectUrlRef, detectedFpsRef,
+    frameCountRef, renderCountRef,
   }
 }

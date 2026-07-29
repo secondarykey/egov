@@ -15,6 +15,7 @@ import ControlBar from './player/ControlBar'
 import MiniProgressBar from './player/MiniProgressBar'
 import ThumbnailGrid from './player/ThumbnailGrid'
 import VrViewpointOverlay from './player/VrViewpointOverlay'
+import DiagnosticsOverlay from './player/DiagnosticsOverlay'
 import { ClickFeedback, DropHint, EmptyState, SeekFeedback, SeekZoneOverlay, VideoErrorOverlay } from './player/Overlays'
 import { VR_START, applyHeadRotation, applySpherePosition, barStyle, deg2rad, rad2deg } from './player/utils'
 
@@ -92,12 +93,14 @@ export default function Player() {
   const [rangeLoop,      setRangeLoop]      = useState(false)
   const [rotation,       setRotation]       = useState(0)
   const [thumbGridOpen,  setThumbGridOpen]  = useState(false)
+  const [diagOpen,       setDiagOpen]       = useState(false)   // Ctrl+Shift+D の診断オーバーレイ
 
   // Three.js シーン（生成・破棄・描画ループはフック側が担う）
   const {
     mountRef, videoRef, cameraRef, controlsRef, sphereRef, planeRef,
     textureRef, fitCameraRef, headGroupRef, rendererRef,
     requestRenderRef, objectUrlRef, detectedFpsRef,
+    frameCountRef, renderCountRef,
   } = useThreeScene({
     modeRef,
     vrScrollSpeedRef,
@@ -277,6 +280,9 @@ export default function Player() {
   const loadFile = (file) => {
     if (!file || !file.type.startsWith('video/')) return
     const video = videoRef.current
+    // Three.js の初期化に失敗している場合は video 要素が存在しない。
+    // ここで例外にせず、初期化失敗のエラー表示をそのまま残す。
+    if (!video) return
     const url   = URL.createObjectURL(file)
     // 前のファイルの Object URL を解放（Blob 参照のリーク防止）
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
@@ -294,6 +300,7 @@ export default function Player() {
   const loadFilePath = (fileUrl) => {
     if (!fileUrl) return
     const video = videoRef.current
+    if (!video) return
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current)
       objectUrlRef.current = null
@@ -382,6 +389,21 @@ export default function Player() {
     }
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
+  }, [])
+
+  // 診断オーバーレイの開閉。Three.js の初期化が失敗していても使えるよう、
+  // video 要素に依存しない独立した effect にしている。
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.ctrlKey && e.shiftKey && (e.key === 'D' || e.key === 'd')) {
+        e.preventDefault()
+        setDiagOpen(o => !o)
+      } else if (e.key === 'Escape') {
+        setDiagOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
   useEffect(() => {
@@ -925,6 +947,16 @@ export default function Player() {
           onSeek={handleThumbGridSeek}
           onClose={() => setThumbGridOpen(false)}
           onComplete={(thumbs) => { thumbCacheRef.current = { key: thumbCacheKey, thumbs } }}
+        />
+      )}
+
+      {diagOpen && (
+        <DiagnosticsOverlay
+          videoRef={videoRef}
+          rendererRef={rendererRef}
+          frameCountRef={frameCountRef}
+          renderCountRef={renderCountRef}
+          onClose={() => setDiagOpen(false)}
         />
       )}
 
