@@ -383,6 +383,10 @@ export default function Player() {
     settingsReady.then(() => GetInitialFile()).then(loadFilePath)
 
     const unsub = Events.On('open-file', (event) => {
+      // ドロップ経由の場合、Linux では DOM の drop/dragleave が来ず
+      // ドロップ表示が消えないため、ここで確実に解除する
+      dragCounter.current = 0
+      setDragging(false)
       settingsReady.then(() => loadFilePath(event.data))
     })
     return () => unsub()
@@ -449,15 +453,23 @@ export default function Player() {
   const handleDragEnter = (e) => { e.preventDefault(); dragCounter.current++; setDragging(true) }
   const handleDragLeave = (e) => {
     e.preventDefault()
-    dragCounter.current--
+    // Linux(WebKitGTK)/macOS ではネイティブ側がドラッグを処理する際に
+    // relatedTarget=null の dragleave が即座に飛んでくる。これを数えると
+    // カウンタが狂うため無視する（@wailsio/runtime 側の判定と揃えている）。
+    if (e.relatedTarget === null) return
+    dragCounter.current = Math.max(0, dragCounter.current - 1)
     if (dragCounter.current === 0) setDragging(false)
   }
   const handleDragOver = (e) => e.preventDefault()
+
+  // ファイルの読み込みは行わない。Wails がネイティブ側でドロップを横取りし、
+  // Go の WindowFilesDropped → open-file イベントとして配送される。
+  // Linux/macOS ではそもそも drop イベントが来ず、Windows でも
+  // ランタイムが Go へ転送するため、ここで dataTransfer を読むと二重読み込みになる。
   const handleDrop = (e) => {
     e.preventDefault()
     dragCounter.current = 0
     setDragging(false)
-    loadFile(e.dataTransfer.files[0])
   }
 
   // Wails3ランタイム（drag.js）のリサイズ判定と同じ境界でカーソル種別を計算する。

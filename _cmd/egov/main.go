@@ -228,6 +228,29 @@ func main() {
 		win.SetAlwaysOnTop(true)
 	}
 
+	// ドラッグ&ドロップ。
+	//
+	// Wails はネイティブ側でドロップを横取りし、ドロップ先の要素が
+	// data-file-drop-target を持つ場合にこのイベントを発火させる。
+	// Linux(WebKitGTK)/macOS では DOM の drop イベント自体が配送されないため、
+	// フロントエンドの dataTransfer には依存できない。Windows でも
+	// ランタイムがドロップを Go へ転送するので、全プラットフォームで
+	// この経路に一本化する。
+	win.OnWindowEvent(events.Common.WindowFilesDropped, func(e *application.WindowEvent) {
+		for _, path := range e.Context().DroppedFiles() {
+			// 動画以外は無視する（従来のフロントエンド側 MIME 判定と同じ扱い）
+			if !egov.IsVideoFile(path) {
+				continue
+			}
+			mu.Lock()
+			allowed[path] = struct{}{}
+			mu.Unlock()
+			app.Event.Emit("open-file", egov.LocalFileURL(fileServerPort, secret, path))
+			// 複数ドロップされても最初の1件だけ開く
+			return
+		}
+	})
+
 	// WindowRuntimeReady でウィンドウ準備完了を待ってから
 	// 保存済みの位置・サイズをスクリーンにクランプして適用する。
 	if savedWS.Width > 0 && savedWS.Height > 0 {

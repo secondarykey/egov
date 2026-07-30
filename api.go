@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -11,6 +13,21 @@ import (
 func LocalFileURL(port int, secret, path string) string {
 	return fmt.Sprintf("http://127.0.0.1:%d/localfile?token=%s&path=%s",
 		port, secret, url.QueryEscape(path))
+}
+
+// videoExts はドロップを受け付ける拡張子。
+// ドラッグ&ドロップは Go 側でパスとして受け取るため、
+// ブラウザの MIME 判定（file.type）が使えず拡張子で判断する。
+var videoExts = map[string]struct{}{
+	".mp4": {}, ".m4v": {}, ".mov": {}, ".mkv": {}, ".webm": {},
+	".avi": {}, ".wmv": {}, ".flv": {}, ".mpg": {}, ".mpeg": {},
+	".m2ts": {}, ".mts": {}, ".ts": {}, ".ogv": {}, ".3gp": {},
+}
+
+// IsVideoFile reports whether path looks like a playable video file.
+func IsVideoFile(path string) bool {
+	_, ok := videoExts[strings.ToLower(filepath.Ext(path))]
+	return ok
 }
 
 type API struct {

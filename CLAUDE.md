@@ -131,6 +131,20 @@ egov は VideoTexture 経由で WebGL に転送するためこの経路に強く
 ⚠️ 検証時の注意: `VAR=1` を単独行で書くと export されず子プロセスに渡らない。
 `VAR=1 ./bin/egov` か `export VAR=1` を使うこと。
 
+### ファイルのドラッグ&ドロップ
+
+`EnableFileDrop: true` のとき、Wails はネイティブ側でドロップを横取りし、
+ドロップ先の要素が `data-file-drop-target` を持つ場合に **Go 側の**
+`events.Common.WindowFilesDropped` を発火させる。
+
+⚠️ **Linux(WebKitGTK)/macOS では DOM の `drop` イベントが配送されない**ため、
+フロントエンドの `e.dataTransfer.files` に依存してはいけない。
+Windows でもランタイムがドロップを Go へ転送するので、
+`WindowFilesDropped` に一本化するのが正しい（両方で処理すると二重読み込みになる）。
+
+また Linux/macOS では `relatedTarget=null` の `dragleave` が即座に飛んでくるので、
+ドラッグ表示のカウンタはこれを無視しないと状態が壊れる。
+
 ### 診断オーバーレイ
 
 `Ctrl+Shift+D` で `player/DiagnosticsOverlay.jsx` を開ける（Esc で閉じる）。
