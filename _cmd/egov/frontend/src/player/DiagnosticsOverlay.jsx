@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Box, Button, Typography } from '@mui/material'
+import { Clipboard } from '@wailsio/runtime'
 
 // 再生できない環境（特にLinux/WebKitGTK）の切り分け用オーバーレイ。
 // devtoolsの無いプロダクションビルドでも Ctrl+Shift+D で開ける。
@@ -57,9 +58,44 @@ function decodeProbe(video) {
   }
 }
 
+// クリップボードへ書き込む。Wails ランタイム（ネイティブ）を優先する。
+// wails://localhost は secure context 扱いにならないことがあり、
+// navigator.clipboard が使えない環境があるため。
+async function writeClipboard(text) {
+  try {
+    await Clipboard.SetText(text)
+    return true
+  } catch { /* ランタイム未使用時などはブラウザAPIへ続行 */ }
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch { /* secure context でない場合は execCommand へ続行 */ }
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity  = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    return ok
+  } catch {
+    return false
+  }
+}
+
 export default function DiagnosticsOverlay({ videoRef, rendererRef, frameCountRef, renderCountRef, renderPathRef, lastPlayErrorRef, onClose }) {
   const [info, setInfo]   = useState(null)
   const [fetchResult, setFetchResult] = useState('未実行')
+  const [copyStatus, setCopyStatus]   = useState('')
+  const [frozen,     setFrozen]       = useState(false)
+
+  const copyText = async (text) => {
+    const ok = await writeClipboard(text)
+    setCopyStatus(ok ? 'コピーしました' : 'コピー失敗')
+    setTimeout(() => setCopyStatus(''), 2000)
+  }
 
   const collect = useCallback(() => {
     const video = videoRef.current
@@ -86,11 +122,14 @@ export default function DiagnosticsOverlay({ videoRef, rendererRef, frameCountRe
     })
   }, [videoRef, rendererRef, frameCountRef, renderCountRef, renderPathRef, lastPlayErrorRef])
 
+  // 1秒ごとの自動更新。値を選択・コピーしている最中に書き換わると
+  // 選択が外れるため、停止できるようにしてある。
   useEffect(() => {
     collect()
+    if (frozen) return undefined
     const id = setInterval(collect, 1000)
     return () => clearInterval(id)
-  }, [collect])
+  }, [collect, frozen])
 
   // ローカルHTTPサーバへの到達性とCORSを、video要素とは独立に確かめる。
   // Rangeを付けるのは実際の再生と同じ経路（206応答）を通すため。
@@ -112,25 +151,28 @@ export default function DiagnosticsOverlay({ videoRef, rendererRef, frameCountRe
 
   if (!info) return null
 
+  // key は共有・貼り付け用に ASCII で固定する（label は画面表示用）
   const rows = [
-    ['UserAgent',      info.ua],
-    ['WebGL',          info.webgl],
-    ['video要素',      info.hasVideoEl ? 'あり' : 'なし（Three.js初期化失敗）'],
-    ['src',            info.src],
-    ['networkState',   info.networkState],
-    ['readyState',     info.readyState],
-    ['MediaError',     info.error],
-    ['解像度',         info.size],
-    ['再生位置',       info.time],
-    ['再生状態',       info.playback],
-    ['play()拒否理由', info.playError],
-    ['rVFC',           info.rvfc],
-    ['描画経路',       info.renderPath],
-    ['描画カウンタ',   info.frames],
-    ['2Dデコード確認', info.decode],
-    ['canPlayType',    info.codecs],
-    ['HTTP取得テスト', fetchResult],
+    ['userAgent',    'UserAgent',      info.ua],
+    ['webgl',        'WebGL',          info.webgl],
+    ['videoElement', 'video要素',      info.hasVideoEl ? 'あり' : 'なし（Three.js初期化失敗）'],
+    ['src',          'src',            info.src],
+    ['networkState', 'networkState',   info.networkState],
+    ['readyState',   'readyState',     info.readyState],
+    ['mediaError',   'MediaError',     info.error],
+    ['resolution',   '解像度',         info.size],
+    ['currentTime',  '再生位置',       info.time],
+    ['playbackState','再生状態',       info.playback],
+    ['playError',    'play()拒否理由', info.playError],
+    ['rvfc',         'rVFC',           info.rvfc],
+    ['renderPath',   '描画経路',       info.renderPath],
+    ['renderCounter','描画カウンタ',   info.frames],
+    ['decodeProbe',  '2Dデコード確認', info.decode],
+    ['canPlayType',  'canPlayType',    info.codecs],
+    ['fetchTest',    'HTTP取得テスト', fetchResult],
   ]
+
+  const asText = rows.map(([key, , value]) => `${key}=${value}`).join('\n')
 
   return (
     <Box sx={{
@@ -144,24 +186,44 @@ export default function DiagnosticsOverlay({ videoRef, rendererRef, frameCountRe
           Diagnostics
         </Typography>
         <Button size="small" variant="outlined" onClick={runFetchTest}>HTTP取得テスト</Button>
+        <Button size="small" variant="outlined" onClick={() => setFrozen(f => !f)}>
+          {frozen ? '更新再開' : '更新停止'}
+        </Button>
+        <Button size="small" variant="outlined" onClick={() => copyText(asText)}>
+          {copyStatus || 'コピー'}
+        </Button>
         <Button size="small" variant="outlined" onClick={onClose}>閉じる (Esc)</Button>
       </Box>
       <Box component="table" sx={{ borderCollapse: 'collapse', width: '100%' }}>
         <tbody>
-          {rows.map(([k, v]) => (
-            <tr key={k}>
+          {rows.map(([key, label, value]) => (
+            <tr key={key}>
               <Box component="td" sx={{
                 verticalAlign: 'top', pr: 2, py: 0.4, whiteSpace: 'nowrap',
                 color: 'rgba(255,255,255,0.55)', borderBottom: '1px solid rgba(255,255,255,0.08)',
-              }}>{k}</Box>
+              }}>{label}</Box>
               <Box component="td" sx={{
                 py: 0.4, wordBreak: 'break-all',
                 borderBottom: '1px solid rgba(255,255,255,0.08)',
-              }}>{v}</Box>
+              }}>{value}</Box>
             </tr>
           ))}
         </tbody>
       </Box>
+
+      {/* クリップボードが使えない環境でも手動で選択・コピーできるようにしておく */}
+      <Box
+        component="textarea"
+        readOnly
+        value={asText}
+        onFocus={(e) => e.target.select()}
+        sx={{
+          mt: 1.5, width: '100%', minHeight: 120,
+          bgcolor: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.75)',
+          border: '1px solid rgba(255,255,255,0.15)', borderRadius: 1,
+          fontFamily: 'monospace', fontSize: 11, p: 1, resize: 'vertical',
+        }}
+      />
     </Box>
   )
 }
