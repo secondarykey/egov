@@ -25,6 +25,7 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
   const detectedFpsRef = useRef(0)
   const frameCountRef  = useRef(0)        // テクスチャに取り込んだ動画フレーム数（診断用）
   const renderCountRef = useRef(0)        // WebGL描画回数（診断用）
+  const renderPathRef  = useRef('rvfc')   // 実際に使っている描画経路 'rvfc' | 'raf'（診断用）
 
   useEffect(() => {
     document.body.style.margin   = '0'
@@ -190,9 +191,21 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
 
     // 再生中: 新しい動画フレームが提示されたときのみ描画する。
     // requestVideoFrameCallback 対応環境では一時停止中に一切描画しない。
+    //
+    // ただし rVFC は「メソッドは存在するがコールバックが発火しない」環境がある
+    // （LinuxのWebKitGTK）。three.js の VideoTexture も内部で rVFC を使って
+    // needsUpdate を立てるため、この場合は自前ループと three.js 側が同時に
+    // 沈黙し、デコードもシークも正常なのに映像だけ静止する。
+    // 存在チェックだけでは検出できないので、再生開始後に実際にフレームが
+    // 来たかを監視し、来なければ rAF ループへ恒久的に切り替える。
     const hasRVFC = typeof video.requestVideoFrameCallback === 'function'
-    let animId = null
+    const RVFC_WATCHDOG_MS = 800
+    renderPathRef.current = hasRVFC ? 'rvfc' : 'raf'
+    let rvfcId       = null
+    let rafId        = null
+    let watchdogId   = null
     let framesRunning = false
+    let useRaf       = !hasRVFC
 
     let prevMediaTime = -1
     const onVideoFrame = (_now, metadata) => {
@@ -207,69 +220,105 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
       }
       if (metadata) prevMediaTime = metadata.mediaTime
       if (!video.paused && !video.ended) {
-        animId = video.requestVideoFrameCallback(onVideoFrame)
+        rvfcId = video.requestVideoFrameCallback(onVideoFrame)
       } else {
         framesRunning = false
       }
     }
+
+    // フォールバック: 再生中のみ rAF ループで描画する。
+    // 停止時は自然に抜けるので、一時停止中はCPUを消費しない。
+    const rafLoop = () => {
+      if (video.paused || video.ended) {
+        rafId = null
+        return
+      }
+      texture.needsUpdate = true
+      frameCountRef.current++
+      renderOnce()
+      rafId = requestAnimationFrame(rafLoop)
+    }
+    const startRaf = () => {
+      if (rafId != null) return
+      rafId = requestAnimationFrame(rafLoop)
+    }
+
+    // rVFC を登録しても発火しない環境の検出。
+    // 再生位置が進んでいるのにフレームが1枚も来ていなければ壊れていると判断する。
+    // 誤検出しても rAF ループに落ちるだけで、描画は正しく行われる。
+    const armWatchdog = () => {
+      if (useRaf || watchdogId != null) return
+      const baseFrames = frameCountRef.current
+      const baseTime   = video.currentTime
+      watchdogId = setTimeout(() => {
+        watchdogId = null
+        if (useRaf || video.paused || video.ended) return
+        if (frameCountRef.current > baseFrames) return   // 正常に発火している
+        if (video.currentTime <= baseTime) return        // 再生自体が進んでいない
+        console.warn('requestVideoFrameCallback did not fire; falling back to requestAnimationFrame')
+        useRaf = true
+        renderPathRef.current = 'raf'
+        if (rvfcId != null) {
+          video.cancelVideoFrameCallback(rvfcId)
+          rvfcId = null
+        }
+        framesRunning = false
+        startRaf()
+      }, RVFC_WATCHDOG_MS)
+    }
+
     const startFrames = () => {
-      if (!hasRVFC || framesRunning) return
-      framesRunning = true
-      animId = video.requestVideoFrameCallback(onVideoFrame)
+      if (useRaf) {
+        startRaf()
+        return
+      }
+      if (!framesRunning) {
+        framesRunning = true
+        rvfcId = video.requestVideoFrameCallback(onVideoFrame)
+      }
+      armWatchdog()
     }
 
     // 一時停止時は保留中のコールバックを明示的に破棄してフラグを戻す。
     //
     // onVideoFrame の else 節だけに頼るとフラグが戻らない環境がある。
     // 停止するとフレームの提示が止まるため、保留中のコールバックが
-    // 二度と発火しない実装（LinuxのWebKitGTK等）では framesRunning が
-    // true のまま残り、再開時に startFrames() が早期returnして
-    // 描画ループが回らなくなる（音と currentTime だけ進んで画が止まる）。
+    // 二度と発火しない実装では framesRunning が true のまま残り、
+    // 再開時に startFrames() が早期returnして描画ループが回らなくなる
+    // （音と currentTime だけ進んで画が止まる）。
     const stopFrames = () => {
-      if (!hasRVFC) return
-      if (animId != null) {
-        video.cancelVideoFrameCallback(animId)
-        animId = null
+      if (watchdogId != null) {
+        clearTimeout(watchdogId)
+        watchdogId = null
+      }
+      if (rvfcId != null) {
+        video.cancelVideoFrameCallback(rvfcId)
+        rvfcId = null
+      }
+      if (rafId != null) {
+        cancelAnimationFrame(rafId)
+        rafId = null
       }
       framesRunning = false
     }
 
-    // フォールバック（rVFC 非対応環境）: 再生中のみ rAF ループで描画
-    const rafLoop = () => {
-      animId = requestAnimationFrame(rafLoop)
-      if (!video.paused && !video.ended) {
-        texture.needsUpdate = true
-        frameCountRef.current++
-        renderOnce()
-      }
-    }
-
-    // 一時停止中のシークでも新フレームを表示する。rVFC の有無に関わらず
-    // 停止中は描画ループが回らないため、どちらの経路でも登録する。
+    // 一時停止中のシークでも新フレームを表示する。描画経路に関わらず
+    // 停止中はループが回らないため、常に登録する。
     video.addEventListener('seeked', onLoadedData)
-
-    if (hasRVFC) {
-      video.addEventListener('play', startFrames)
-      video.addEventListener('playing', startFrames)
-      video.addEventListener('pause', stopFrames)
-      video.addEventListener('ended', stopFrames)
-    } else {
-      rafLoop()
-    }
+    video.addEventListener('play', startFrames)
+    video.addEventListener('playing', startFrames)
+    video.addEventListener('pause', stopFrames)
+    video.addEventListener('ended', stopFrames)
 
     // 初期表示（黒画面）を一度描画
     renderOnce()
 
     return () => {
-      if (hasRVFC) {
-        if (animId != null) video.cancelVideoFrameCallback(animId)
-        video.removeEventListener('play', startFrames)
-        video.removeEventListener('playing', startFrames)
-        video.removeEventListener('pause', stopFrames)
-        video.removeEventListener('ended', stopFrames)
-      } else if (animId != null) {
-        cancelAnimationFrame(animId)
-      }
+      stopFrames()
+      video.removeEventListener('play', startFrames)
+      video.removeEventListener('playing', startFrames)
+      video.removeEventListener('pause', stopFrames)
+      video.removeEventListener('ended', stopFrames)
       video.removeEventListener('loadeddata', onLoadedData)
       video.removeEventListener('seeked', onLoadedData)
       window.removeEventListener('resize', onResize)
@@ -288,6 +337,6 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
     mountRef, videoRef, cameraRef, controlsRef, sphereRef, planeRef,
     textureRef, fitCameraRef, headGroupRef, rendererRef,
     requestRenderRef, objectUrlRef, detectedFpsRef,
-    frameCountRef, renderCountRef,
+    frameCountRef, renderCountRef, renderPathRef,
   }
 }

@@ -101,7 +101,7 @@ export default function Player() {
     mountRef, videoRef, cameraRef, controlsRef, sphereRef, planeRef,
     textureRef, fitCameraRef, headGroupRef, rendererRef,
     requestRenderRef, objectUrlRef, detectedFpsRef,
-    frameCountRef, renderCountRef,
+    frameCountRef, renderCountRef, renderPathRef,
   } = useThreeScene({
     modeRef,
     vrScrollSpeedRef,
@@ -964,6 +964,7 @@ export default function Player() {
           rendererRef={rendererRef}
           frameCountRef={frameCountRef}
           renderCountRef={renderCountRef}
+          renderPathRef={renderPathRef}
           lastPlayErrorRef={lastPlayErrorRef}
           onClose={() => setDiagOpen(false)}
         />

@@ -57,7 +57,7 @@ function decodeProbe(video) {
   }
 }
 
-export default function DiagnosticsOverlay({ videoRef, rendererRef, frameCountRef, renderCountRef, lastPlayErrorRef, onClose }) {
+export default function DiagnosticsOverlay({ videoRef, rendererRef, frameCountRef, renderCountRef, renderPathRef, lastPlayErrorRef, onClose }) {
   const [info, setInfo]   = useState(null)
   const [fetchResult, setFetchResult] = useState('未実行')
 
@@ -77,13 +77,14 @@ export default function DiagnosticsOverlay({ videoRef, rendererRef, frameCountRe
       size: video ? `${video.videoWidth}x${video.videoHeight}` : '-',
       time: video ? `${video.currentTime.toFixed(2)} / ${Number.isFinite(video.duration) ? video.duration.toFixed(2) : '?'}` : '-',
       playback: video ? `paused=${video.paused} muted=${video.muted} volume=${video.volume}` : '-',
-      rvfc: typeof videoRef.current?.requestVideoFrameCallback === 'function' ? 'あり' : 'なし（rAFフォールバック）',
+      rvfc: typeof videoRef.current?.requestVideoFrameCallback === 'function' ? 'あり' : 'なし',
+      renderPath: renderPathRef?.current === 'raf' ? 'requestAnimationFrame' : 'requestVideoFrameCallback',
       frames: `${frameCountRef.current} frames / ${renderCountRef.current} renders`,
       decode: decodeProbe(video),
       codecs: CODECS.map(([label, type]) => `${label}: ${video?.canPlayType(type) || 'no'}`).join(' , '),
       playError: lastPlayErrorRef?.current || 'なし',
     })
-  }, [videoRef, rendererRef, frameCountRef, renderCountRef, lastPlayErrorRef])
+  }, [videoRef, rendererRef, frameCountRef, renderCountRef, renderPathRef, lastPlayErrorRef])
 
   useEffect(() => {
     collect()
@@ -124,6 +125,7 @@ export default function DiagnosticsOverlay({ videoRef, rendererRef, frameCountRe
     ['再生状態',       info.playback],
     ['play()拒否理由', info.playError],
     ['rVFC',           info.rvfc],
+    ['描画経路',       info.renderPath],
     ['描画カウンタ',   info.frames],
     ['2Dデコード確認', info.decode],
     ['canPlayType',    info.codecs],
