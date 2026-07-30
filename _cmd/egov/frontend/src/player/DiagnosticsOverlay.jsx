@@ -57,7 +57,7 @@ function decodeProbe(video) {
   }
 }
 
-export default function DiagnosticsOverlay({ videoRef, rendererRef, frameCountRef, renderCountRef, onClose }) {
+export default function DiagnosticsOverlay({ videoRef, rendererRef, frameCountRef, renderCountRef, lastPlayErrorRef, onClose }) {
   const [info, setInfo]   = useState(null)
   const [fetchResult, setFetchResult] = useState('未実行')
 
@@ -81,8 +81,9 @@ export default function DiagnosticsOverlay({ videoRef, rendererRef, frameCountRe
       frames: `${frameCountRef.current} frames / ${renderCountRef.current} renders`,
       decode: decodeProbe(video),
       codecs: CODECS.map(([label, type]) => `${label}: ${video?.canPlayType(type) || 'no'}`).join(' , '),
+      playError: lastPlayErrorRef?.current || 'なし',
     })
-  }, [videoRef, rendererRef, frameCountRef, renderCountRef])
+  }, [videoRef, rendererRef, frameCountRef, renderCountRef, lastPlayErrorRef])
 
   useEffect(() => {
     collect()
@@ -121,6 +122,7 @@ export default function DiagnosticsOverlay({ videoRef, rendererRef, frameCountRe
     ['解像度',         info.size],
     ['再生位置',       info.time],
     ['再生状態',       info.playback],
+    ['play()拒否理由', info.playError],
     ['rVFC',           info.rvfc],
     ['描画カウンタ',   info.frames],
     ['2Dデコード確認', info.decode],

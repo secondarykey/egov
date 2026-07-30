@@ -61,6 +61,7 @@ export default function Player() {
   const vrScrollSpeedRef    = useRef(0.05)
   const uiHideDelayRef      = useRef(1500)
   const uiHideLeaveDelayRef = useRef(800)
+  const lastPlayErrorRef    = useRef(null)   // 直近の play() 拒否理由（診断用）
   const [miniProgress, setMiniProgress] = useState(false)
 
   const [paused,      setPaused]      = useState(true)
@@ -270,8 +271,15 @@ export default function Player() {
 
   // play() は自動再生ポリシー等で拒否されることがある。
   // 拒否時は楽観的に false にした paused 状態を停止へ戻す。
+  //
+  // 特に Linux の WebKitGTK はミュートしていないメディアの自動再生に
+  // ユーザー操作を要求するため、ファイルを開いた直後の play() は
+  // NotAllowedError で必ず拒否される（Wails v3 alpha2.114 時点で
+  // EnableAutoplayWithoutUserAction は darwin/iOS 専用でLinuxには無い）。
+  // この場合クリック等の操作で再生できるので、停止状態に戻すだけでよい。
   const safePlay = (video) => {
     video.play().catch((err) => {
+      lastPlayErrorRef.current = `${err?.name || 'Error'}: ${err?.message || err}`
       console.warn('video.play() rejected:', err)
       setPaused(true)
     })
@@ -956,6 +964,7 @@ export default function Player() {
           rendererRef={rendererRef}
           frameCountRef={frameCountRef}
           renderCountRef={renderCountRef}
+          lastPlayErrorRef={lastPlayErrorRef}
           onClose={() => setDiagOpen(false)}
         />
       )}

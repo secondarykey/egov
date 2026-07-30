@@ -163,6 +163,19 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
       }
       requestRender()
     })
+
+    // loadedmetadata 時点は readyState=HAVE_METADATA でフレーム実体がまだ無く、
+    // ここで描画しても黒画のままになる。最初のフレームが揃う loadeddata で
+    // 明示的にテクスチャを更新して描画する。
+    //
+    // これが無いと「再生が始まらない環境では永久に真っ黒」になる。
+    // 例: LinuxのWebKitGTKは自動再生にユーザー操作を要求するため play() が
+    // NotAllowedError で拒否され、play イベント起点の rVFC ループが回らない。
+    const onLoadedData = () => {
+      texture.needsUpdate = true
+      requestRender()
+    }
+    video.addEventListener('loadeddata', onLoadedData)
     video.addEventListener('error', () => {
       if (!video.src || video.src === location.href) return
       const e = video.error
@@ -215,10 +228,12 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
       }
     }
 
+    // 一時停止中のシークでも新フレームを表示する。rVFC の有無に関わらず
+    // 停止中は描画ループが回らないため、どちらの経路でも登録する。
+    video.addEventListener('seeked', onLoadedData)
+
     if (hasRVFC) {
       video.addEventListener('play', startFrames)
-      // 一時停止中のシークでも新フレームを表示する
-      video.addEventListener('seeked', requestRender)
     } else {
       rafLoop()
     }
@@ -230,10 +245,11 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
       if (hasRVFC) {
         if (animId != null) video.cancelVideoFrameCallback(animId)
         video.removeEventListener('play', startFrames)
-        video.removeEventListener('seeked', requestRender)
       } else if (animId != null) {
         cancelAnimationFrame(animId)
       }
+      video.removeEventListener('loadeddata', onLoadedData)
+      video.removeEventListener('seeked', onLoadedData)
       window.removeEventListener('resize', onResize)
       renderer.domElement.removeEventListener('webglcontextlost', onContextLost)
       renderer.domElement.removeEventListener('wheel', onWheel)
