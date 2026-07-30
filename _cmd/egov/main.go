@@ -47,6 +47,9 @@ func main() {
 
 	setupLogger()
 
+	// WebView 生成前に環境変数を確定させる必要がある（Linux の WebKitGTK 向け）
+	configureWebviewEnv()
+
 	if err := egov.DistributeLocales(); err != nil {
 		slog.Warn("locales distribute error", "err", err)
 	}

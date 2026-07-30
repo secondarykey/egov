@@ -114,6 +114,23 @@ Windows の WebView2 は既定で自動再生を許可するため、この問�
 ここで描画しても黒画になる。最初のフレームは `loadeddata` で
 `texture.needsUpdate` を立てて描画すること（`player/useThreeScene.js`）。
 
+### Linux (WebKitGTK) の DMA-BUF による映像化け
+
+WebKitGTK 2.40 以降はデコード済み動画フレームを DMA-BUF（YUV マルチプレーン＋
+DRM format modifier）でゼロコピー転送するが、ドライバが未対応だとタイル化された
+バッファをリニアな RGB として読み、**映像が砂嵐状に化ける**。
+Intel Haswell 世代の Mesa が該当し、起動時に
+`FINISHME: support YUV colorspace with DRM format modifiers` を出力する。
+
+egov は VideoTexture 経由で WebGL に転送するためこの経路に強く依存する。
+`webkitenv_linux.go` の `configureWebviewEnv()` で
+`WEBKIT_DISABLE_DMABUF_RENDERER=1` を既定で設定して回避する
+（`application.New()` より前に設定すること。Webプロセスのfork前である必要がある）。
+環境変数が既に設定済みなら尊重するため、`WEBKIT_DISABLE_DMABUF_RENDERER=0` で上書き可能。
+
+⚠️ 検証時の注意: `VAR=1` を単独行で書くと export されず子プロセスに渡らない。
+`VAR=1 ./bin/egov` か `export VAR=1` を使うこと。
+
 ### 診断オーバーレイ
 
 `Ctrl+Shift+D` で `player/DiagnosticsOverlay.jsx` を開ける（Esc で閉じる）。
