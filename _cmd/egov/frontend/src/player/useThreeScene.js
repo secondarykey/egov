@@ -218,6 +218,22 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
       animId = video.requestVideoFrameCallback(onVideoFrame)
     }
 
+    // 一時停止時は保留中のコールバックを明示的に破棄してフラグを戻す。
+    //
+    // onVideoFrame の else 節だけに頼るとフラグが戻らない環境がある。
+    // 停止するとフレームの提示が止まるため、保留中のコールバックが
+    // 二度と発火しない実装（LinuxのWebKitGTK等）では framesRunning が
+    // true のまま残り、再開時に startFrames() が早期returnして
+    // 描画ループが回らなくなる（音と currentTime だけ進んで画が止まる）。
+    const stopFrames = () => {
+      if (!hasRVFC) return
+      if (animId != null) {
+        video.cancelVideoFrameCallback(animId)
+        animId = null
+      }
+      framesRunning = false
+    }
+
     // フォールバック（rVFC 非対応環境）: 再生中のみ rAF ループで描画
     const rafLoop = () => {
       animId = requestAnimationFrame(rafLoop)
@@ -234,6 +250,9 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
 
     if (hasRVFC) {
       video.addEventListener('play', startFrames)
+      video.addEventListener('playing', startFrames)
+      video.addEventListener('pause', stopFrames)
+      video.addEventListener('ended', stopFrames)
     } else {
       rafLoop()
     }
@@ -245,6 +264,9 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
       if (hasRVFC) {
         if (animId != null) video.cancelVideoFrameCallback(animId)
         video.removeEventListener('play', startFrames)
+        video.removeEventListener('playing', startFrames)
+        video.removeEventListener('pause', stopFrames)
+        video.removeEventListener('ended', stopFrames)
       } else if (animId != null) {
         cancelAnimationFrame(animId)
       }
