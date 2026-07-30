@@ -100,6 +100,29 @@ Key facts:
 
 ## Wails3 Known Patterns
 
+### Linux (WebKitGTK) の自動再生制限
+
+WebKitGTK はミュートしていないメディアの自動再生にユーザー操作を要求するため、
+ファイルを開いた直後の `video.play()` は必ず `NotAllowedError` で拒否される。
+Wails v3 alpha2.114 時点で `EnableAutoplayWithoutUserAction`（`mediaTypesRequiringUserActionForPlayback`）は
+**darwin/iOS 専用**で、Linux 側の `linux_cgo.go` は
+`webkit_settings_set_media_playback_requires_user_gesture` を一切呼んでいない。
+Windows の WebView2 は既定で自動再生を許可するため、この問題は Linux でのみ顕在化する。
+
+そのため **描画のきっかけを `play` イベントだけに依存してはいけない**。
+`loadedmetadata` 時点は `readyState=HAVE_METADATA` でフレーム実体がまだ無く、
+ここで描画しても黒画になる。最初のフレームは `loadeddata` で
+`texture.needsUpdate` を立てて描画すること（`player/useThreeScene.js`）。
+
+### 診断オーバーレイ
+
+`Ctrl+Shift+D` で `player/DiagnosticsOverlay.jsx` を開ける（Esc で閉じる）。
+HTTP取得/CORS・デコード・WebGL転送のどこで詰まっているかを
+`networkState` / `readyState` / `MediaError` / 2D drawImage / 描画カウンタで判別する。
+Linux では `-tags production,devtools` がビルドできない
+（`webview_window_linux_production.go` が `!devtools`、`webview_window_linux_dev.go` が `!production`
+で両方とも除外される）ため、プロダクションビルドでの切り分けにはこれを使う。
+
 ### Window State Save/Restore
 
 Window position/size restoration uses a **two-phase approach**:
