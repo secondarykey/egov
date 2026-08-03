@@ -41,13 +41,12 @@ jobs:
         with:
           go-version: '1.26'
 
-      - name: Determine Wails3 CLI version
-        working-directory: ./_cmd/egov
-        run: |
-          WAILS_VERSION=$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v3)
-          echo "WAILS_VERSION=$WAILS_VERSION" >> $GITHUB_ENV
+      - name: Load variables
+        shell: bash
+        run: cat .github/variables >> $GITHUB_ENV
 
       - name: Install Wails3
+        # .github/variables でピン留めしたバージョンを使う（@latest は使わない）
         run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS_VERSION }}
 
       - name: Determine and Bump Version
