@@ -3,6 +3,7 @@ package egov
 import (
 	"fmt"
 	"log/slog"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -284,8 +285,13 @@ func uniqueExtractPath(src string, startSec, endSec float64) (string, error) {
 }
 
 // timeTag formats seconds as a filename-safe tag (e.g. 1h02m03s / 02m03s).
+// シークバーのマーカー表示（フロントの fmt()）と同じく切り捨てる。
+// 四捨五入すると 54.6秒 のマーカーが 0:54 なのにファイル名は 55s になり食い違う。
 func timeTag(sec float64) string {
-	total := int(sec + 0.5)
+	if sec < 0 {
+		sec = 0
+	}
+	total := int(math.Floor(sec))
 	h, m, s := total/3600, (total/60)%60, total%60
 	if h > 0 {
 		return fmt.Sprintf("%dh%02dm%02ds", h, m, s)
