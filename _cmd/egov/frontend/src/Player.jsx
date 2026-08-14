@@ -420,9 +420,17 @@ export default function Player() {
 
   useEffect(() => {
     let frameSeeking = false
-    const onSeeked = () => { frameSeeking = false }
+    let frameSeekTimer = 0
+    // seeked を待つラッチ。解除されないままだと以後のコマ送り/戻しが
+    // すべて無視されるため、読み込み直しやエラーでも必ず解除する。
+    const clearFrameSeek = () => {
+      frameSeeking = false
+      clearTimeout(frameSeekTimer)
+    }
     const video = videoRef.current
-    video?.addEventListener('seeked', onSeeked)
+    video?.addEventListener('seeked', clearFrameSeek)
+    video?.addEventListener('emptied', clearFrameSeek)
+    video?.addEventListener('error', clearFrameSeek)
 
     const onKeyDown = (e) => {
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
@@ -431,11 +439,19 @@ export default function Player() {
       const forward = e.key === 'ArrowRight'
       if (video.paused) {
         if (frameSeeking) return
-        frameSeeking = true
+        // メタデータ未取得だと duration が NaN。代入しても seeked は来ない
+        if (!Number.isFinite(video.duration)) return
         const fps = detectedFpsRef.current > 1 ? detectedFpsRef.current : 30
         const step = 1 / fps
+        const target = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? step : -step)))
+        // 先頭/終端でクランプされると currentTime が変化せず seeked が飛ばない。
+        // ここでラッチすると復帰不能になるので、シーク自体を行わない。
+        if (Math.abs(target - video.currentTime) < 1e-6) return
+        frameSeeking = true
+        // seeked が届かない状況への保険。ラッチが永久に残るのを防ぐ
+        frameSeekTimer = setTimeout(() => { frameSeeking = false }, 1000)
         // シークで timeupdate が発火し、SeekBarArea 等が追従する
-        video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? step : -step)))
+        video.currentTime = target
       } else {
         if (e.repeat) return
         doZoneSeek(arrowSeekSecsRef.current, forward)
@@ -444,7 +460,10 @@ export default function Player() {
     window.addEventListener('keydown', onKeyDown)
     return () => {
       window.removeEventListener('keydown', onKeyDown)
-      video?.removeEventListener('seeked', onSeeked)
+      clearTimeout(frameSeekTimer)
+      video?.removeEventListener('seeked', clearFrameSeek)
+      video?.removeEventListener('emptied', clearFrameSeek)
+      video?.removeEventListener('error', clearFrameSeek)
     }
   }, [])
 
