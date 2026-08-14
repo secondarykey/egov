@@ -13,7 +13,24 @@
 | `_cmd/egov/` | アプリ本体（Wails3 エントリポイント、ビルド設定、フロントエンド） |
 | `_cmd/egov/frontend/` | React + Three.js + MUI のフロントエンド |
 | `_cmd/version/` | バージョン同期ツール（`version` ファイル → `config.yml` / `package.json`） |
-| `_cmd/wails3check/` | wails3 CLI とモジュールのバージョン整合チェックツール |
+| `.github/variables` | CI がインストールする wails3 CLI バージョン（`WAILS_VERSION`）のピン留め |
+
+### wails3 のバージョン
+
+CI がインストールする wails3 CLI のバージョンは `.github/variables` の
+`WAILS_VERSION` 1箇所で決まります（`release.yml` / `versionup.yml` の両方が参照）。
+`@latest` は使いません（alpha/beta の破壊的変更を意図せず取り込むため）。
+
+CI 固定値・ローカルの CLI・`_cmd/egov/go.mod` の整合は、リポジトリ横断の
+チェックコマンド `check-wails3` をリポジトリルートで実行すると確認できます
+（`.github/variables` を上位方向に探索して CI 固定値を正とします）。
+
+```bash
+check-wails3
+```
+
+バージョンを上げるときは `.github/variables` と `_cmd/egov/go.mod`、
+ローカルの `go install ...@<version>` の3つを同じ値に揃えてください。
 
 ### 開発
 

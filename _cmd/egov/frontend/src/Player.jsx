@@ -15,8 +15,13 @@ import ControlBar from './player/ControlBar'
 import MiniProgressBar from './player/MiniProgressBar'
 import ThumbnailGrid from './player/ThumbnailGrid'
 import VrViewpointOverlay from './player/VrViewpointOverlay'
+import DiagnosticsOverlay from './player/DiagnosticsOverlay'
 import { ClickFeedback, DropHint, EmptyState, SeekFeedback, SeekZoneOverlay, VideoErrorOverlay } from './player/Overlays'
 import { VR_START, applyHeadRotation, applySpherePosition, barStyle, deg2rad, rad2deg } from './player/utils'
+
+// 押し込み中にこの距離（px）を超えて動いたらドラッグ操作とみなし、
+// シークコントローラーは表示しない（free/vr モードの視点操作を邪魔しないため）
+const HOLD_MOVE_TOLERANCE = 8
 
 // プレイヤー本体。状態・設定・入力処理のオーケストレーターとして働き、
 // 描画は useThreeScene（Three.jsシーン）と player/ 以下の各コンポーネントに委譲する。
@@ -39,6 +44,7 @@ export default function Player() {
   const feedbackKeyRef      = useRef(0)
   const clickTimerRef           = useRef(null)
   const holdTimerRef            = useRef(null)
+  const holdOriginRef           = useRef(null)   // 押し込み開始座標。オーバーレイ表示までの移動量判定に使う
   const wasHoldRef              = useRef(false)
   const lastPointerDownTimeRef  = useRef(0)
   const isMouseHeldRef          = useRef(false)
@@ -60,6 +66,7 @@ export default function Player() {
   const vrScrollSpeedRef    = useRef(0.05)
   const uiHideDelayRef      = useRef(1500)
   const uiHideLeaveDelayRef = useRef(800)
+  const lastPlayErrorRef    = useRef(null)   // 直近の play() 拒否理由（診断用）
   const [miniProgress, setMiniProgress] = useState(false)
 
   const [paused,      setPaused]      = useState(true)
@@ -92,12 +99,14 @@ export default function Player() {
   const [rangeLoop,      setRangeLoop]      = useState(false)
   const [rotation,       setRotation]       = useState(0)
   const [thumbGridOpen,  setThumbGridOpen]  = useState(false)
+  const [diagOpen,       setDiagOpen]       = useState(false)   // Ctrl+Shift+D の診断オーバーレイ
 
   // Three.js シーン（生成・破棄・描画ループはフック側が担う）
   const {
     mountRef, videoRef, cameraRef, controlsRef, sphereRef, planeRef,
     textureRef, fitCameraRef, headGroupRef, rendererRef,
     requestRenderRef, objectUrlRef, detectedFpsRef,
+    frameCountRef, renderCountRef, renderPathRef,
   } = useThreeScene({
     modeRef,
     vrScrollSpeedRef,
@@ -267,8 +276,15 @@ export default function Player() {
 
   // play() は自動再生ポリシー等で拒否されることがある。
   // 拒否時は楽観的に false にした paused 状態を停止へ戻す。
+  //
+  // 特に Linux の WebKitGTK はミュートしていないメディアの自動再生に
+  // ユーザー操作を要求するため、ファイルを開いた直後の play() は
+  // NotAllowedError で必ず拒否される（Wails v3 alpha2.114 時点で
+  // EnableAutoplayWithoutUserAction は darwin/iOS 専用でLinuxには無い）。
+  // この場合クリック等の操作で再生できるので、停止状態に戻すだけでよい。
   const safePlay = (video) => {
     video.play().catch((err) => {
+      lastPlayErrorRef.current = `${err?.name || 'Error'}: ${err?.message || err}`
       console.warn('video.play() rejected:', err)
       setPaused(true)
     })
@@ -277,6 +293,9 @@ export default function Player() {
   const loadFile = (file) => {
     if (!file || !file.type.startsWith('video/')) return
     const video = videoRef.current
+    // Three.js の初期化に失敗している場合は video 要素が存在しない。
+    // ここで例外にせず、初期化失敗のエラー表示をそのまま残す。
+    if (!video) return
     const url   = URL.createObjectURL(file)
     // 前のファイルの Object URL を解放（Blob 参照のリーク防止）
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
@@ -294,6 +313,7 @@ export default function Player() {
   const loadFilePath = (fileUrl) => {
     if (!fileUrl) return
     const video = videoRef.current
+    if (!video) return
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current)
       objectUrlRef.current = null
@@ -368,6 +388,10 @@ export default function Player() {
     settingsReady.then(() => GetInitialFile()).then(loadFilePath)
 
     const unsub = Events.On('open-file', (event) => {
+      // ドロップ経由の場合、Linux では DOM の drop/dragleave が来ず
+      // ドロップ表示が消えないため、ここで確実に解除する
+      dragCounter.current = 0
+      setDragging(false)
       settingsReady.then(() => loadFilePath(event.data))
     })
     return () => unsub()
@@ -384,11 +408,34 @@ export default function Player() {
     return () => window.removeEventListener('focus', onFocus)
   }, [])
 
+  // 診断オーバーレイの開閉。Three.js の初期化が失敗していても使えるよう、
+  // video 要素に依存しない独立した effect にしている。
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.ctrlKey && e.shiftKey && (e.key === 'D' || e.key === 'd')) {
+        e.preventDefault()
+        setDiagOpen(o => !o)
+      } else if (e.key === 'Escape') {
+        setDiagOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
   useEffect(() => {
     let frameSeeking = false
-    const onSeeked = () => { frameSeeking = false }
+    let frameSeekTimer = 0
+    // seeked を待つラッチ。解除されないままだと以後のコマ送り/戻しが
+    // すべて無視されるため、読み込み直しやエラーでも必ず解除する。
+    const clearFrameSeek = () => {
+      frameSeeking = false
+      clearTimeout(frameSeekTimer)
+    }
     const video = videoRef.current
-    video?.addEventListener('seeked', onSeeked)
+    video?.addEventListener('seeked', clearFrameSeek)
+    video?.addEventListener('emptied', clearFrameSeek)
+    video?.addEventListener('error', clearFrameSeek)
 
     const onKeyDown = (e) => {
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
@@ -397,11 +444,19 @@ export default function Player() {
       const forward = e.key === 'ArrowRight'
       if (video.paused) {
         if (frameSeeking) return
-        frameSeeking = true
+        // メタデータ未取得だと duration が NaN。代入しても seeked は来ない
+        if (!Number.isFinite(video.duration)) return
         const fps = detectedFpsRef.current > 1 ? detectedFpsRef.current : 30
         const step = 1 / fps
+        const target = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? step : -step)))
+        // 先頭/終端でクランプされると currentTime が変化せず seeked が飛ばない。
+        // ここでラッチすると復帰不能になるので、シーク自体を行わない。
+        if (Math.abs(target - video.currentTime) < 1e-6) return
+        frameSeeking = true
+        // seeked が届かない状況への保険。ラッチが永久に残るのを防ぐ
+        frameSeekTimer = setTimeout(() => { frameSeeking = false }, 1000)
         // シークで timeupdate が発火し、SeekBarArea 等が追従する
-        video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? step : -step)))
+        video.currentTime = target
       } else {
         if (e.repeat) return
         doZoneSeek(arrowSeekSecsRef.current, forward)
@@ -410,7 +465,10 @@ export default function Player() {
     window.addEventListener('keydown', onKeyDown)
     return () => {
       window.removeEventListener('keydown', onKeyDown)
-      video?.removeEventListener('seeked', onSeeked)
+      clearTimeout(frameSeekTimer)
+      video?.removeEventListener('seeked', clearFrameSeek)
+      video?.removeEventListener('emptied', clearFrameSeek)
+      video?.removeEventListener('error', clearFrameSeek)
     }
   }, [])
 
@@ -419,15 +477,23 @@ export default function Player() {
   const handleDragEnter = (e) => { e.preventDefault(); dragCounter.current++; setDragging(true) }
   const handleDragLeave = (e) => {
     e.preventDefault()
-    dragCounter.current--
+    // Linux(WebKitGTK)/macOS ではネイティブ側がドラッグを処理する際に
+    // relatedTarget=null の dragleave が即座に飛んでくる。これを数えると
+    // カウンタが狂うため無視する（@wailsio/runtime 側の判定と揃えている）。
+    if (e.relatedTarget === null) return
+    dragCounter.current = Math.max(0, dragCounter.current - 1)
     if (dragCounter.current === 0) setDragging(false)
   }
   const handleDragOver = (e) => e.preventDefault()
+
+  // ファイルの読み込みは行わない。Wails がネイティブ側でドロップを横取りし、
+  // Go の WindowFilesDropped → open-file イベントとして配送される。
+  // Linux/macOS ではそもそも drop イベントが来ず、Windows でも
+  // ランタイムが Go へ転送するため、ここで dataTransfer を読むと二重読み込みになる。
   const handleDrop = (e) => {
     e.preventDefault()
     dragCounter.current = 0
     setDragging(false)
-    loadFile(e.dataTransfer.files[0])
   }
 
   // Wails3ランタイム（drag.js）のリサイズ判定と同じ境界でカーソル種別を計算する。
@@ -455,6 +521,16 @@ export default function Player() {
 
   const handleMouseMove = (e) => {
     setResizeCursor(computeResizeCursor(e))
+    // 押し込み待機中に動かした場合はドラッグ（視点操作）とみなして表示を取り消す。
+    // 「ぐっと押し込んでほぼ動かさない」ときだけコントローラーを出す。
+    if (holdOriginRef.current) {
+      const o = holdOriginRef.current
+      if (Math.hypot(e.clientX - o.x, e.clientY - o.y) > HOLD_MOVE_TOLERANCE) {
+        clearTimeout(holdTimerRef.current)
+        holdOriginRef.current = null
+        wasHoldRef.current = true   // ドラッグ終了時のクリック（再生/一時停止）も抑止する
+      }
+    }
     const inZone = e.clientY <= 80 || e.clientY >= window.innerHeight - 160 || e.clientX >= window.innerWidth - 80
     if (inZone) {
       clearTimeout(hideTimer.current)
@@ -579,6 +655,8 @@ export default function Player() {
   // シングルクリックでも一定時間（800ms）保持し続けたらコントローラー（オーバーレイ）を表示する
   const handleCanvasMouseDown = (e) => {
     if (e.button !== 0) return
+    // 前回のジェスチャで click が来ないまま残った抑止フラグを引きずらない
+    wasHoldRef.current = false
     const pos = { x: e.clientX, y: e.clientY }
     const now = Date.now()
     const isDouble = e.detail >= 2 || (now - lastPointerDownTimeRef.current) <= clickTimeoutMsRef.current
@@ -594,7 +672,10 @@ export default function Player() {
     }
 
     clearTimeout(holdTimerRef.current)
+    holdOriginRef.current = pos
     holdTimerRef.current = setTimeout(() => {
+      // 表示後は移動量でゾーン（早送り/巻き戻し）を選ぶので判定を解除する
+      holdOriginRef.current = null
       wasHoldRef.current = true
       isMouseHeldRef.current = true
       seekOverlayRef.current = pos
@@ -604,6 +685,7 @@ export default function Player() {
 
   const handleCanvasMouseUp = () => {
     clearTimeout(holdTimerRef.current)
+    holdOriginRef.current = null
     if (isMouseHeldRef.current) hideSeekOverlay()
   }
 
@@ -925,6 +1007,18 @@ export default function Player() {
           onSeek={handleThumbGridSeek}
           onClose={() => setThumbGridOpen(false)}
           onComplete={(thumbs) => { thumbCacheRef.current = { key: thumbCacheKey, thumbs } }}
+        />
+      )}
+
+      {diagOpen && (
+        <DiagnosticsOverlay
+          videoRef={videoRef}
+          rendererRef={rendererRef}
+          frameCountRef={frameCountRef}
+          renderCountRef={renderCountRef}
+          renderPathRef={renderPathRef}
+          lastPlayErrorRef={lastPlayErrorRef}
+          onClose={() => setDiagOpen(false)}
         />
       )}
 

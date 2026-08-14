@@ -61,14 +61,14 @@ jobs:
           node -v
           npm -v
 
-      - name: Determine Wails3 CLI version
-        working-directory: ./_cmd/egov
+      - name: Load variables
+        # matrix に windows-latest が入るため shell: bash は必須。
+        # 既定の pwsh では $GITHUB_ENV がファイルに解決されず WAILS_VERSION が空になる。
         shell: bash
-        run: |
-          WAILS_VERSION=$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v3)
-          echo "WAILS_VERSION=$WAILS_VERSION" >> $GITHUB_ENV
+        run: cat .github/variables >> $GITHUB_ENV
 
       - name: Install Wails CLI
+        # .github/variables でピン留めしたバージョンを使う（@latest は使わない）
         run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS_VERSION }}
 
       - name: Wails doctor

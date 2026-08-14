@@ -100,6 +100,60 @@ Key facts:
 
 ## Wails3 Known Patterns
 
+### Linux (WebKitGTK) の自動再生制限
+
+WebKitGTK はミュートしていないメディアの自動再生にユーザー操作を要求するため、
+ファイルを開いた直後の `video.play()` は必ず `NotAllowedError` で拒否される。
+Wails v3 alpha2.114 時点で `EnableAutoplayWithoutUserAction`（`mediaTypesRequiringUserActionForPlayback`）は
+**darwin/iOS 専用**で、Linux 側の `linux_cgo.go` は
+`webkit_settings_set_media_playback_requires_user_gesture` を一切呼んでいない。
+Windows の WebView2 は既定で自動再生を許可するため、この問題は Linux でのみ顕在化する。
+
+そのため **描画のきっかけを `play` イベントだけに依存してはいけない**。
+`loadedmetadata` 時点は `readyState=HAVE_METADATA` でフレーム実体がまだ無く、
+ここで描画しても黒画になる。最初のフレームは `loadeddata` で
+`texture.needsUpdate` を立てて描画すること（`player/useThreeScene.js`）。
+
+### Linux (WebKitGTK) の DMA-BUF による映像化け
+
+WebKitGTK 2.40 以降はデコード済み動画フレームを DMA-BUF（YUV マルチプレーン＋
+DRM format modifier）でゼロコピー転送するが、ドライバが未対応だとタイル化された
+バッファをリニアな RGB として読み、**映像が砂嵐状に化ける**。
+Intel Haswell 世代の Mesa が該当し、起動時に
+`FINISHME: support YUV colorspace with DRM format modifiers` を出力する。
+
+egov は VideoTexture 経由で WebGL に転送するためこの経路に強く依存する。
+`webkitenv_linux.go` の `configureWebviewEnv()` で
+`WEBKIT_DISABLE_DMABUF_RENDERER=1` を既定で設定して回避する
+（`application.New()` より前に設定すること。Webプロセスのfork前である必要がある）。
+環境変数が既に設定済みなら尊重するため、`WEBKIT_DISABLE_DMABUF_RENDERER=0` で上書き可能。
+
+⚠️ 検証時の注意: `VAR=1` を単独行で書くと export されず子プロセスに渡らない。
+`VAR=1 ./bin/egov` か `export VAR=1` を使うこと。
+
+### ファイルのドラッグ&ドロップ
+
+`EnableFileDrop: true` のとき、Wails はネイティブ側でドロップを横取りし、
+ドロップ先の要素が `data-file-drop-target` を持つ場合に **Go 側の**
+`events.Common.WindowFilesDropped` を発火させる。
+
+⚠️ **Linux(WebKitGTK)/macOS では DOM の `drop` イベントが配送されない**ため、
+フロントエンドの `e.dataTransfer.files` に依存してはいけない。
+Windows でもランタイムがドロップを Go へ転送するので、
+`WindowFilesDropped` に一本化するのが正しい（両方で処理すると二重読み込みになる）。
+
+また Linux/macOS では `relatedTarget=null` の `dragleave` が即座に飛んでくるので、
+ドラッグ表示のカウンタはこれを無視しないと状態が壊れる。
+
+### 診断オーバーレイ
+
+`Ctrl+Shift+D` で `player/DiagnosticsOverlay.jsx` を開ける（Esc で閉じる）。
+HTTP取得/CORS・デコード・WebGL転送のどこで詰まっているかを
+`networkState` / `readyState` / `MediaError` / 2D drawImage / 描画カウンタで判別する。
+Linux では `-tags production,devtools` がビルドできない
+（`webview_window_linux_production.go` が `!devtools`、`webview_window_linux_dev.go` が `!production`
+で両方とも除外される）ため、プロダクションビルドでの切り分けにはこれを使う。
+
 ### Window State Save/Restore
 
 Window position/size restoration uses a **two-phase approach**:
