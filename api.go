@@ -175,16 +175,30 @@ type ExtractResult struct {
 	Size     int64   `json:"size"`
 }
 
-// ExtractRange writes [startSec, endSec) of path to a new file next to the
-// source, without re-encoding. 開始点は直前のキーフレームまで戻る。
-func (a *API) ExtractRange(path string, startSec, endSec float64) (ExtractResult, error) {
+// SuggestExtractName returns a not-yet-used file name for the range, to be
+// offered as the default in the frontend's save dialog.
+func (a *API) SuggestExtractName(path string, startSec, endSec float64) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("切り出し元のファイルが不明です")
+	}
+	dst, err := uniqueExtractPath(path, startSec, endSec)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Base(dst), nil
+}
+
+// ExtractRange writes [startSec, endSec) of path to fileName in the source's
+// directory, without re-encoding. 開始点は直前のキーフレームまで戻る。
+// fileName が空なら SuggestExtractName と同じ名前を使う。
+func (a *API) ExtractRange(path string, startSec, endSec float64, fileName string) (ExtractResult, error) {
 	if path == "" {
 		return ExtractResult{}, fmt.Errorf("切り出し元のファイルが不明です")
 	}
 	if !a.CanExtract(path) {
 		return ExtractResult{}, fmt.Errorf("%s は無劣化切り出しに対応していません", filepath.Ext(path))
 	}
-	dst, err := uniqueExtractPath(path, startSec, endSec)
+	dst, err := resolveExtractPath(path, fileName, startSec, endSec)
 	if err != nil {
 		return ExtractResult{}, err
 	}
@@ -201,6 +215,30 @@ func (a *API) ExtractRange(path string, startSec, endSec float64) (ExtractResult
 		EndSec:   res.EndSec,
 		Size:     res.Size,
 	}, nil
+}
+
+// resolveExtractPath validates a user-supplied file name and turns it into a
+// full path in src's directory. 上書きは事故になりやすいので拒否する。
+func resolveExtractPath(src, fileName string, startSec, endSec float64) (string, error) {
+	fileName = strings.TrimSpace(fileName)
+	if fileName == "" {
+		return uniqueExtractPath(src, startSec, endSec)
+	}
+	// ディレクトリを跨がせない（保存先は常に元ファイルと同じ場所）
+	if strings.ContainsAny(fileName, `/\`) || fileName == "." || fileName == ".." {
+		return "", fmt.Errorf("ファイル名にフォルダを含めることはできません")
+	}
+	if filepath.Ext(fileName) == "" {
+		fileName += filepath.Ext(src)
+	}
+	dst := filepath.Join(filepath.Dir(src), fileName)
+	if dst == src {
+		return "", fmt.Errorf("元のファイルと同じ名前は使えません")
+	}
+	if _, err := os.Stat(dst); err == nil {
+		return "", fmt.Errorf("%s は既に存在します", fileName)
+	}
+	return dst, nil
 }
 
 // uniqueExtractPath builds "<name>_<start>-<end><ext>" next to src, adding a

@@ -43,6 +43,7 @@
     "rangeLoopOff": "Range Loop: Off",
     "extract": "Extract selected range (no re-encode)",
     "extractUnsupported": "This container does not support lossless extraction",
+    "extractNeedsRange": "Turn on Range Loop and select a range first",
     "fullscreen": "Fullscreen",
     "exitFullscreen": "Exit Fullscreen",
     "rotate": "Rotate",
@@ -51,6 +52,12 @@
     "resetView": "Reset View"
   },
   "extract": {
+    "title": "Extract range",
+    "fileName": "File name",
+    "sameFolder": "Saved in the same folder as the source file",
+    "keyframeNote": "The start point snaps back to the nearest keyframe, so the result may begin slightly earlier.",
+    "run": "Extract",
+    "running": "Extracting...",
     "done": "Extracted {{name}} ({{start}} - {{end}})",
     "failed": "Extraction failed: {{msg}}",
     "rangeTooShort": "The selected range is too short"

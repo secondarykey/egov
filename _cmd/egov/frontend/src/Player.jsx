@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { Alert, Box, IconButton, Snackbar, Tooltip } from '@mui/material'
 import CameraAltIcon from '@mui/icons-material/CameraAlt'
+import ContentCutIcon from '@mui/icons-material/ContentCut'
 import GridViewIcon from '@mui/icons-material/GridView'
 import FitScreenIcon from '@mui/icons-material/FitScreen'
 import { Events, Window } from '@wailsio/runtime'
@@ -16,6 +17,7 @@ import MiniProgressBar from './player/MiniProgressBar'
 import ThumbnailGrid from './player/ThumbnailGrid'
 import VrViewpointOverlay from './player/VrViewpointOverlay'
 import DiagnosticsOverlay from './player/DiagnosticsOverlay'
+import ExtractDialog from './player/ExtractDialog'
 import { ClickFeedback, DropHint, EmptyState, SeekFeedback, SeekZoneOverlay, VideoErrorOverlay } from './player/Overlays'
 import { VR_START, applyHeadRotation, applySpherePosition, barStyle, deg2rad, fmt, rad2deg } from './player/utils'
 
@@ -104,6 +106,8 @@ export default function Player() {
   const [diagOpen,       setDiagOpen]       = useState(false)   // Ctrl+Shift+D の診断オーバーレイ
   const [canExtract,     setCanExtract]     = useState(false)   // 無劣化切り出しが可能なコンテナか
   const [extracting,     setExtracting]     = useState(false)
+  const [extractRange,   setExtractRange]   = useState(null)    // ダイアログ表示中の { start, end }
+  const [extractError,   setExtractError]   = useState(null)    // ダイアログ内に出す入力エラー
   const [extractMsg,     setExtractMsg]     = useState(null)    // { severity, text }
 
   // Three.js シーン（生成・破棄・描画ループはフック側が担う）
@@ -770,27 +774,40 @@ export default function Player() {
     }, 'image/png')
   }
 
-  // 範囲ループのマーカー区間を無劣化で切り出す。実処理は Go 側（mp4cut）。
-  // 開始点は直前のキーフレームまで戻るため、結果の実範囲を通知に出す。
-  const handleExtract = () => {
+  // 切り出しダイアログを開く。範囲は範囲ループのマーカーをそのまま in/out 点として使う。
+  const handleExtractOpen = () => {
     const range = rangeRef.current
-    const path  = filePathRef.current
-    if (!path || !range || extracting) return
+    if (!canExtract || !filePathRef.current || !range) return
     if (range.end - range.start < 0.1) {
       setExtractMsg({ severity: 'warning', text: t('extract.rangeTooShort') })
       return
     }
+    setExtractError(null)
+    // ダイアログを開いた時点の範囲で固定する（背後でマーカーが動いても影響させない）
+    setExtractRange({ ...range })
+  }
+
+  // 実際の切り出し。実処理は Go 側（mp4cut）。開始点は直前のキーフレームまで
+  // 戻るため、結果の実範囲を通知に出す。
+  const handleExtractRun = (fileName) => {
+    const range = extractRange
+    const path  = filePathRef.current
+    if (!path || !range || extracting) return
     setExtracting(true)
-    ExtractRange(path, range.start, range.end)
+    setExtractError(null)
+    ExtractRange(path, range.start, range.end, fileName)
       .then((res) => {
+        setExtractRange(null)
         setExtractMsg({
           severity: 'success',
           text: t('extract.done', { name: res.fileName, start: fmt(res.startSec), end: fmt(res.endSec) }),
         })
       })
       .catch((err) => {
+        // 名前の重複など入力に起因するものが多いので、ダイアログを閉じず
+        // その場に出して直せるようにする
         console.error('ExtractRange failed:', err)
-        setExtractMsg({ severity: 'error', text: t('extract.failed', { msg: err?.message ?? String(err) }) })
+        setExtractError(err?.message ?? String(err))
       })
       .finally(() => setExtracting(false))
   }
@@ -991,9 +1008,6 @@ export default function Player() {
         modeRef={modeRef}
         vrStartRef={vrStartRef}
         rangeRef={rangeRef}
-        canExtract={canExtract}
-        extracting={extracting}
-        onExtract={handleExtract}
       />
 
       <Snackbar
@@ -1013,7 +1027,18 @@ export default function Player() {
         </Alert>
       </Snackbar>
 
-      {/* 右サイドパネル（スナップショット） */}
+      <ExtractDialog
+        open={!!extractRange}
+        filePath={filePathRef.current}
+        range={extractRange}
+        activeColor={activeColor}
+        extracting={extracting}
+        error={extractError}
+        onExtract={handleExtractRun}
+        onClose={() => { setExtractRange(null); setExtractError(null) }}
+      />
+
+      {/* 右サイドパネル（切り出し・スナップショット） */}
       <Box
         sx={{
           ...barStyle,
@@ -1030,6 +1055,24 @@ export default function Player() {
           '&:hover': { opacity: showUI ? 1 : 0 },
         }}
       >
+        {/* 範囲切り出し。範囲ループのマーカーを in/out 点として使うため、
+            範囲ループが有効なときだけ押せる */}
+        <Tooltip
+          title={!canExtract ? t('controls.extractUnsupported')
+            : !rangeLoop     ? t('controls.extractNeedsRange')
+            : t('controls.extract')}
+          placement="left"
+        >
+          <span>
+            <IconButton
+              onClick={handleExtractOpen}
+              disabled={!canExtract || !rangeLoop}
+              sx={{ color: 'white', width: 56, height: 56, '&.Mui-disabled': { color: 'rgba(255,255,255,0.3)' } }}
+            >
+              <ContentCutIcon sx={{ fontSize: 36 }} />
+            </IconButton>
+          </span>
+        </Tooltip>
         <Tooltip title={t('controls.snapshot')} placement="left">
           <IconButton onClick={handleSnapshot} sx={{ color: 'white', width: 56, height: 56 }}>
             <CameraAltIcon sx={{ fontSize: 40 }} />
