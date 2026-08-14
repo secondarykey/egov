@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"egov/internal/mp4cut"
 )
 
 // LocalFileURL builds a playable URL for path on the local file server.
@@ -147,6 +150,85 @@ func (a *API) Quit() {
 	case QuitRequested <- struct{}{}:
 	default:
 	}
+}
+
+// extractableExts は無劣化切り出し（ExtractRange）に対応する拡張子。
+// いずれも ISOBMFF なのでサンプルのバイトコピーだけで切り出せる。
+// mkv/webm/ts などはコンテナ構造が異なるため対象外。
+var extractableExts = map[string]struct{}{
+	".mp4": {}, ".m4v": {}, ".mov": {},
+}
+
+// CanExtract reports whether path can be range-extracted without re-encoding.
+func (a *API) CanExtract(path string) bool {
+	_, ok := extractableExts[strings.ToLower(filepath.Ext(path))]
+	return ok
+}
+
+// ExtractResult describes the file written by ExtractRange.
+// StartSec/EndSec は要求値ではなく、キーフレームにスナップされた実際の範囲。
+type ExtractResult struct {
+	Path     string  `json:"path"`
+	FileName string  `json:"fileName"`
+	StartSec float64 `json:"startSec"`
+	EndSec   float64 `json:"endSec"`
+	Size     int64   `json:"size"`
+}
+
+// ExtractRange writes [startSec, endSec) of path to a new file next to the
+// source, without re-encoding. 開始点は直前のキーフレームまで戻る。
+func (a *API) ExtractRange(path string, startSec, endSec float64) (ExtractResult, error) {
+	if path == "" {
+		return ExtractResult{}, fmt.Errorf("切り出し元のファイルが不明です")
+	}
+	if !a.CanExtract(path) {
+		return ExtractResult{}, fmt.Errorf("%s は無劣化切り出しに対応していません", filepath.Ext(path))
+	}
+	dst, err := uniqueExtractPath(path, startSec, endSec)
+	if err != nil {
+		return ExtractResult{}, err
+	}
+	res, err := mp4cut.Cut(path, dst, startSec, endSec)
+	if err != nil {
+		slog.Error("extract range failed", "src", path, "start", startSec, "end", endSec, "err", err)
+		return ExtractResult{}, err
+	}
+	slog.Info("extracted range", "dst", res.OutputPath, "start", res.StartSec, "end", res.EndSec, "size", res.Size)
+	return ExtractResult{
+		Path:     res.OutputPath,
+		FileName: filepath.Base(res.OutputPath),
+		StartSec: res.StartSec,
+		EndSec:   res.EndSec,
+		Size:     res.Size,
+	}, nil
+}
+
+// uniqueExtractPath builds "<name>_<start>-<end><ext>" next to src, adding a
+// numeric suffix until the name is free.
+func uniqueExtractPath(src string, startSec, endSec float64) (string, error) {
+	ext := filepath.Ext(src)
+	base := strings.TrimSuffix(src, ext)
+	stem := fmt.Sprintf("%s_%s-%s", base, timeTag(startSec), timeTag(endSec))
+	for i := 0; i < 1000; i++ {
+		candidate := stem + ext
+		if i > 0 {
+			candidate = fmt.Sprintf("%s_%d%s", stem, i+1, ext)
+		}
+		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("出力ファイル名を決められませんでした: %s", stem+ext)
+}
+
+// timeTag formats seconds as a filename-safe tag (e.g. 1h02m03s / 02m03s).
+func timeTag(sec float64) string {
+	total := int(sec + 0.5)
+	h, m, s := total/3600, (total/60)%60, total%60
+	if h > 0 {
+		return fmt.Sprintf("%dh%02dm%02ds", h, m, s)
+	}
+	return fmt.Sprintf("%02dm%02ds", m, s)
 }
 
 // GetInitialFile returns a playable URL for the startup file, then clears it.

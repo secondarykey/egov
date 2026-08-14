@@ -41,12 +41,19 @@
     "loopOff": "Loop: Off",
     "rangeLoopOn": "Range Loop: On",
     "rangeLoopOff": "Range Loop: Off",
+    "extract": "Extract selected range (no re-encode)",
+    "extractUnsupported": "This container does not support lossless extraction",
     "fullscreen": "Fullscreen",
     "exitFullscreen": "Exit Fullscreen",
     "rotate": "Rotate",
     "resetCamera": "Reset Camera",
     "fitWindow": "Fit window to video size",
     "resetView": "Reset View"
+  },
+  "extract": {
+    "done": "Extracted {{name}} ({{start}} - {{end}})",
+    "failed": "Extraction failed: {{msg}}",
+    "rangeTooShort": "The selected range is too short"
   },
   "settings": {
     "title": "Settings",

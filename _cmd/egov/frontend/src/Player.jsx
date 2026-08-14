@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { Box, IconButton, Tooltip } from '@mui/material'
+import { Alert, Box, IconButton, Snackbar, Tooltip } from '@mui/material'
 import CameraAltIcon from '@mui/icons-material/CameraAlt'
 import GridViewIcon from '@mui/icons-material/GridView'
 import FitScreenIcon from '@mui/icons-material/FitScreen'
 import { Events, Window } from '@wailsio/runtime'
-import { GetInitialFile, GetServerURL, GetSettings, UpdateAlwaysOnTop, UpdatePlaybackSettings, UpdateVRSettings } from '../bindings/egov/api'
+import { CanExtract, ExtractRange, GetInitialFile, GetServerURL, GetSettings, UpdateAlwaysOnTop, UpdatePlaybackSettings, UpdateVRSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
 import { loadLanguages } from './languages'
 import SettingsDialog from './SettingsDialog'
@@ -17,7 +17,7 @@ import ThumbnailGrid from './player/ThumbnailGrid'
 import VrViewpointOverlay from './player/VrViewpointOverlay'
 import DiagnosticsOverlay from './player/DiagnosticsOverlay'
 import { ClickFeedback, DropHint, EmptyState, SeekFeedback, SeekZoneOverlay, VideoErrorOverlay } from './player/Overlays'
-import { VR_START, applyHeadRotation, applySpherePosition, barStyle, deg2rad, rad2deg } from './player/utils'
+import { VR_START, applyHeadRotation, applySpherePosition, barStyle, deg2rad, fmt, rad2deg } from './player/utils'
 
 // 押し込み中にこの距離（px）を超えて動いたらドラッグ操作とみなし、
 // シークコントローラーは表示しない（free/vr モードの視点操作を邪魔しないため）
@@ -67,6 +67,8 @@ export default function Player() {
   const uiHideDelayRef      = useRef(1500)
   const uiHideLeaveDelayRef = useRef(800)
   const lastPlayErrorRef    = useRef(null)   // 直近の play() 拒否理由（診断用）
+  const filePathRef         = useRef('')     // 再生中ファイルのローカルパス（切り出し元）
+  const rangeRef            = useRef(null)   // SeekBarArea が公開する { start, end }
   const [miniProgress, setMiniProgress] = useState(false)
 
   const [paused,      setPaused]      = useState(true)
@@ -100,6 +102,9 @@ export default function Player() {
   const [rotation,       setRotation]       = useState(0)
   const [thumbGridOpen,  setThumbGridOpen]  = useState(false)
   const [diagOpen,       setDiagOpen]       = useState(false)   // Ctrl+Shift+D の診断オーバーレイ
+  const [canExtract,     setCanExtract]     = useState(false)   // 無劣化切り出しが可能なコンテナか
+  const [extracting,     setExtracting]     = useState(false)
+  const [extractMsg,     setExtractMsg]     = useState(null)    // { severity, text }
 
   // Three.js シーン（生成・破棄・描画ループはフック側が担う）
   const {
@@ -307,6 +312,9 @@ export default function Player() {
     safePlay(video)
     setPaused(false)
     setFileName(file.name)
+    // Blob 経由なのでローカルパスが無く、Go 側で切り出せない
+    filePathRef.current = ''
+    setCanExtract(false)
     resetRangeLoop()
   }
 
@@ -326,6 +334,9 @@ export default function Player() {
     setPaused(false)
     const filePath = new URL(fileUrl).searchParams.get('path') ?? ''
     setFileName(filePath.split(/[\\/]/).pop())
+    filePathRef.current = filePath
+    setCanExtract(false)
+    if (filePath) CanExtract(filePath).then(setCanExtract)
     resetRangeLoop()
   }
 
@@ -759,6 +770,31 @@ export default function Player() {
     }, 'image/png')
   }
 
+  // 範囲ループのマーカー区間を無劣化で切り出す。実処理は Go 側（mp4cut）。
+  // 開始点は直前のキーフレームまで戻るため、結果の実範囲を通知に出す。
+  const handleExtract = () => {
+    const range = rangeRef.current
+    const path  = filePathRef.current
+    if (!path || !range || extracting) return
+    if (range.end - range.start < 0.1) {
+      setExtractMsg({ severity: 'warning', text: t('extract.rangeTooShort') })
+      return
+    }
+    setExtracting(true)
+    ExtractRange(path, range.start, range.end)
+      .then((res) => {
+        setExtractMsg({
+          severity: 'success',
+          text: t('extract.done', { name: res.fileName, start: fmt(res.startSec), end: fmt(res.endSec) }),
+        })
+      })
+      .catch((err) => {
+        console.error('ExtractRange failed:', err)
+        setExtractMsg({ severity: 'error', text: t('extract.failed', { msg: err?.message ?? String(err) }) })
+      })
+      .finally(() => setExtracting(false))
+  }
+
   const handleThumbGridToggle = () => {
     const video = videoRef.current
     if (!video?.src || !video.duration) return
@@ -954,7 +990,28 @@ export default function Player() {
         thumbEnabledRef={thumbEnabledRef}
         modeRef={modeRef}
         vrStartRef={vrStartRef}
+        rangeRef={rangeRef}
+        canExtract={canExtract}
+        extracting={extracting}
+        onExtract={handleExtract}
       />
+
+      <Snackbar
+        open={!!extractMsg}
+        autoHideDuration={extractMsg?.severity === 'error' ? 8000 : 5000}
+        onClose={() => setExtractMsg(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        sx={{ bottom: { xs: 120, sm: 120 } }}
+      >
+        <Alert
+          severity={extractMsg?.severity ?? 'info'}
+          variant="filled"
+          onClose={() => setExtractMsg(null)}
+          sx={{ maxWidth: '70vw' }}
+        >
+          {extractMsg?.text}
+        </Alert>
+      </Snackbar>
 
       {/* 右サイドパネル（スナップショット） */}
       <Box

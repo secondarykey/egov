@@ -41,12 +41,19 @@
     "loopOff": "リピート: オフ",
     "rangeLoopOn": "範囲ループ: オン",
     "rangeLoopOff": "範囲ループ: オフ",
+    "extract": "選択範囲を切り出す（再エンコードなし）",
+    "extractUnsupported": "このコンテナは無劣化切り出しに対応していません",
     "fullscreen": "全画面表示",
     "exitFullscreen": "全画面解除",
     "rotate": "回転",
     "resetCamera": "カメラをリセット",
     "fitWindow": "ウィンドウを動画サイズに合わせる",
     "resetView": "表示をリセット"
+  },
+  "extract": {
+    "done": "切り出しました: {{name}} ({{start}} - {{end}})",
+    "failed": "切り出しに失敗しました: {{msg}}",
+    "rangeTooShort": "選択範囲が短すぎます"
   },
   "settings": {
     "title": "設定",

@@ -94,6 +94,30 @@ Key facts:
 - Three view modes: `normal` (default, window-fit), `free` (pan/zoom), `vr` (spherical, right-click rotates) — internal names match the UI labels. Legacy `fit` in settings.json is migrated to `normal` by `Settings.normalize()`
 - VR split-screen: `textureRef.current.repeat/offset` selects the left/right/top/bottom half of the video
 
+### 範囲切り出し（無劣化カット）
+
+`internal/mp4cut` が progressive MP4 (`moov` + `mdat`) から時間範囲をサンプル単位で
+バイトコピーして切り出す。再エンコードしないためコーデック非依存
+（H.264 / HEVC / AV1 いずれも可）。実装は [Eyevinn/mp4ff](https://github.com/Eyevinn/mp4ff) を使う。
+
+処理の流れは `stts` で時刻→サンプル番号を解決 → `stss` で開始点を直前のキーフレームへ
+スナップ → `stsc`/`stsz`/`stco` で入力チャンクを範囲の端で切り詰め →
+`stbl` 配下のテーブルを作り直し → mdat 本体の開始位置が確定してから chunk offset を絶対値へ補正、というもの。
+
+- **開始点は必ず sync sample にスナップされる**ため、指定より前にずれる。`ExtractResult.StartSec` に実際の値が返る
+- `edts`/`elst` は元のタイムラインを指すため破棄する。`sdtp`/`sbgp`/`sgpd`/`subs`/`saio`/`saiz` も破棄する
+- fragmented MP4 (`moof`) は非対応。対応拡張子は `API.CanExtract()`（`.mp4`/`.m4v`/`.mov`）が判定する
+- 4GB 超の出力では mdat を largesize ヘッダ（16バイト）にし、chunk offset も `co64` にする
+- 出力は元ファイルと同じディレクトリに `<name>_02m00s-07m00s.mp4` の形で作られる（衝突時は `_2` を付ける）
+
+UI は既存の**範囲ループのマーカーをそのまま in/out 点として使う**。選択範囲は
+`SeekBarArea` から `rangeRef`（ref）で Player へ公開する — state で持ち上げると
+マーカーのドラッグ中に Player 全体が再描画されるため。
+
+テスト用の `internal/mp4cut/testdata/sample.mp4` は ffmpeg で生成した合成クリップ
+（320x180 / 30fps / GOP 60 = キーフレームは 0,2,4,6,8秒 / AAC）。
+出力の妥当性検証に ffmpeg デコードを使うテストがあるが、ffmpeg が無い環境ではスキップされる。
+
 ### Wails3 Drag Behavior
 
 `@wailsio/runtime/dist/drag.js` registers capture-phase listeners on `mousedown/mousemove/mouseup`. Elements with `--wails-draggable: drag` trigger window drag on left-click-move. **Do not set `--wails-draggable: drag` on the Three.js canvas/mount div** — while `dragging=true`, the library suppresses all `mousedown` events and all non-left-button events via `stopImmediatePropagation`, which breaks OrbitControls right-click. Only set `--wails-draggable: drag` on the title bar.

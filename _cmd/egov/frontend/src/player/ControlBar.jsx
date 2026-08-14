@@ -1,4 +1,4 @@
-import { Box, Collapse, IconButton, Slider, Stack, Tooltip, Typography } from '@mui/material'
+import { Box, CircularProgress, Collapse, IconButton, Slider, Stack, Tooltip, Typography } from '@mui/material'
 import PlayArrowIcon      from '@mui/icons-material/PlayArrow'
 import PauseIcon          from '@mui/icons-material/Pause'
 import VolumeUpIcon       from '@mui/icons-material/VolumeUp'
@@ -7,6 +7,7 @@ import FullscreenIcon     from '@mui/icons-material/Fullscreen'
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit'
 import RepeatIcon         from '@mui/icons-material/Repeat'
 import LinearScaleIcon    from '@mui/icons-material/LinearScale'
+import ContentCutIcon     from '@mui/icons-material/ContentCut'
 import { useTranslation } from 'react-i18next'
 import SeekBarArea from './SeekBarArea'
 import TimeDisplay from './TimeDisplay'
@@ -19,6 +20,7 @@ export default function ControlBar({
   fileName, fullscreen, onFullscreenToggle,
   loop, onLoopToggle, rangeLoop, onRangeLoopToggle, activeColor,
   thumbVideoRef, thumbCanvasRef, thumbEnabledRef, modeRef, vrStartRef,
+  rangeRef, canExtract, extracting, onExtract,
 }) {
   const { t } = useTranslation()
 
@@ -42,6 +44,7 @@ export default function ControlBar({
           activeColor={activeColor}
           rangeLoop={rangeLoop}
           visible={showUI}
+          rangeRef={rangeRef}
         />
       </Stack>
       <Collapse in={rangeLoop}>
@@ -87,6 +90,23 @@ export default function ControlBar({
             <LinearScaleIcon fontSize="small" />
           </IconButton>
         </Tooltip>
+        {/* 範囲切り出し。範囲ループのマーカーをそのまま in/out 点として使う */}
+        {rangeLoop && (
+          <Tooltip title={canExtract ? t('controls.extract') : t('controls.extractUnsupported')} placement="top">
+            <span>
+              <IconButton
+                onClick={onExtract}
+                disabled={!canExtract || extracting}
+                sx={{ color: canExtract ? activeColor : 'rgba(255,255,255,0.3)', width: 28, height: 28 }}
+              >
+                {extracting
+                  ? <CircularProgress size={16} sx={{ color: activeColor }} />
+                  : <ContentCutIcon fontSize="small" />
+                }
+              </IconButton>
+            </span>
+          </Tooltip>
+        )}
         <Tooltip title={fullscreen ? t('controls.exitFullscreen') : t('controls.fullscreen')} placement="top">
           <IconButton onClick={onFullscreenToggle} sx={{ color: 'white', width: 28, height: 28, ml: '20px !important' }}>
             {fullscreen

@@ -7,7 +7,7 @@ import { VR_START, fmt } from './utils'
 // 高頻度 state 更新を Player 全体から切り離す。
 const SeekBarArea = memo(function SeekBarArea({
   video, thumbVideoRef, thumbCanvasRef, thumbEnabledRef,
-  modeRef, vrStartRef, duration, activeColor, rangeLoop, visible,
+  modeRef, vrStartRef, duration, activeColor, rangeLoop, visible, rangeRef,
 }) {
   const [currentTime, setCurrentTime] = useState(0)
   const [thumbInfo,   setThumbInfo]   = useState(null)
@@ -35,6 +35,20 @@ const SeekBarArea = memo(function SeekBarArea({
       setThumbInfo(null)
     }
   }, [rangeLoop, duration])
+
+  // 選択範囲を Player 側へ ref で公開する（切り出し機能が参照する）。
+  // state で持ち上げるとマーカーのドラッグ中に Player 全体が再描画されるため ref を使う。
+  useEffect(() => {
+    if (!rangeRef) return
+    if (!rangeLoop || rangePoint1 === null || rangePoint2 === null) {
+      rangeRef.current = null
+      return
+    }
+    rangeRef.current = {
+      start: Math.min(rangePoint1, rangePoint2),
+      end:   Math.max(rangePoint1, rangePoint2),
+    }
+  }, [rangeRef, rangeLoop, rangePoint1, rangePoint2])
 
   // 再生位置の追従と範囲ループの実施。
   // 非表示中は state 更新を省略するが、範囲ループの巻き戻しは常に行う。
