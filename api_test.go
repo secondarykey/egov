@@ -3,6 +3,7 @@ package egov
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -16,20 +17,24 @@ func TestResolveExtractPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	otherDir := t.TempDir()
+
 	tests := []struct {
 		name    string
 		input   string
 		want    string // 空なら期待はエラー
 		wantErr bool
 	}{
-		{"名前指定", "cut.mp4", "cut.mp4", false},
-		{"拡張子省略時は元と同じものを補う", "cut", "cut.mp4", false},
-		{"前後の空白は落とす", "  cut.mp4  ", "cut.mp4", false},
-		{"空なら自動命名", "", "movie_00m02s-00m07s.mp4", false},
-		{"既存ファイルは拒否", "taken.mp4", "", true},
-		{"元ファイルと同名は拒否", "movie.mp4", "", true},
-		{"パス区切りは拒否", "sub/cut.mp4", "", true},
-		{"親ディレクトリ指定は拒否", "../cut.mp4", "", true},
+		{"フルパス指定", filepath.Join(dir, "cut.mp4"), filepath.Join(dir, "cut.mp4"), false},
+		{"別フォルダも可", filepath.Join(otherDir, "cut.mp4"), filepath.Join(otherDir, "cut.mp4"), false},
+		{"拡張子省略時は元と同じものを補う", filepath.Join(dir, "cut"), filepath.Join(dir, "cut.mp4"), false},
+		{"前後の空白は落とす", "  " + filepath.Join(dir, "cut.mp4") + "  ", filepath.Join(dir, "cut.mp4"), false},
+		{"空なら自動命名", "", filepath.Join(dir, "movie_00m02s-00m07s.mp4"), false},
+		// 既存ファイルの上書き確認はネイティブダイアログ側の責務
+		{"既存ファイルは通す", filepath.Join(dir, "taken.mp4"), filepath.Join(dir, "taken.mp4"), false},
+		{"元ファイルへの上書きは拒否", src, "", true},
+		{"相対パスは拒否", "cut.mp4", "", true},
+		{"存在しないフォルダは拒否", filepath.Join(dir, "nope", "cut.mp4"), "", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -43,13 +48,25 @@ func TestResolveExtractPath(t *testing.T) {
 			if err != nil {
 				t.Fatalf("resolveExtractPath: %v", err)
 			}
-			if filepath.Base(got) != tt.want {
-				t.Errorf("= %q, want %q", filepath.Base(got), tt.want)
-			}
-			if d := filepath.Dir(got); d != dir {
-				t.Errorf("保存先ディレクトリ = %q, want %q", d, dir)
+			if got != tt.want {
+				t.Errorf("= %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+// Windows/macOS では大文字小文字が違うだけの指定も元ファイルを指す。
+func TestResolveExtractPathRejectsCaseVariantOfSource(t *testing.T) {
+	if runtime.GOOS != "windows" && runtime.GOOS != "darwin" {
+		t.Skip("大文字小文字を区別しないファイルシステム向けの確認")
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "movie.mp4")
+	if err := os.WriteFile(src, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolveExtractPath(src, filepath.Join(dir, "MOVIE.MP4"), 2, 7); err == nil {
+		t.Error("大文字小文字違いでも元ファイルへの上書きは拒否されるべき")
 	}
 }
 

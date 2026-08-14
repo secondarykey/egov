@@ -52,10 +52,8 @@
     "resetView": "Reset View"
   },
   "extract": {
-    "title": "Extract range",
-    "fileName": "File name",
-    "sameFolder": "Saved in the same folder as the source file",
-    "keyframeNote": "The start point snaps back to the nearest keyframe, so the result may begin slightly earlier.",
+    "title": "Save extracted range",
+    "filterName": "Video files",
     "run": "Extract",
     "running": "Extracting...",
     "done": "Extracted {{name}} ({{start}} - {{end}})",

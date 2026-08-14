@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -175,30 +176,36 @@ type ExtractResult struct {
 	Size     int64   `json:"size"`
 }
 
-// SuggestExtractName returns a not-yet-used file name for the range, to be
-// offered as the default in the frontend's save dialog.
-func (a *API) SuggestExtractName(path string, startSec, endSec float64) (string, error) {
+// SuggestExtractTarget returns a not-yet-used directory/file name pair for the
+// range, used to pre-fill the native save dialog.
+func (a *API) SuggestExtractTarget(path string, startSec, endSec float64) (ExtractTarget, error) {
 	if path == "" {
-		return "", fmt.Errorf("切り出し元のファイルが不明です")
+		return ExtractTarget{}, fmt.Errorf("切り出し元のファイルが不明です")
 	}
 	dst, err := uniqueExtractPath(path, startSec, endSec)
 	if err != nil {
-		return "", err
+		return ExtractTarget{}, err
 	}
-	return filepath.Base(dst), nil
+	return ExtractTarget{Dir: filepath.Dir(dst), FileName: filepath.Base(dst)}, nil
 }
 
-// ExtractRange writes [startSec, endSec) of path to fileName in the source's
-// directory, without re-encoding. 開始点は直前のキーフレームまで戻る。
-// fileName が空なら SuggestExtractName と同じ名前を使う。
-func (a *API) ExtractRange(path string, startSec, endSec float64, fileName string) (ExtractResult, error) {
+// ExtractTarget is the default location offered in the save dialog.
+type ExtractTarget struct {
+	Dir      string `json:"dir"`
+	FileName string `json:"fileName"`
+}
+
+// ExtractRange writes [startSec, endSec) of path to dstPath without
+// re-encoding. 開始点は直前のキーフレームまで戻る。
+// dstPath はネイティブの保存ダイアログで選ばれたフルパス。空なら自動命名する。
+func (a *API) ExtractRange(path string, startSec, endSec float64, dstPath string) (ExtractResult, error) {
 	if path == "" {
 		return ExtractResult{}, fmt.Errorf("切り出し元のファイルが不明です")
 	}
 	if !a.CanExtract(path) {
 		return ExtractResult{}, fmt.Errorf("%s は無劣化切り出しに対応していません", filepath.Ext(path))
 	}
-	dst, err := resolveExtractPath(path, fileName, startSec, endSec)
+	dst, err := resolveExtractPath(path, dstPath, startSec, endSec)
 	if err != nil {
 		return ExtractResult{}, err
 	}
@@ -217,28 +224,45 @@ func (a *API) ExtractRange(path string, startSec, endSec float64, fileName strin
 	}, nil
 }
 
-// resolveExtractPath validates a user-supplied file name and turns it into a
-// full path in src's directory. 上書きは事故になりやすいので拒否する。
-func resolveExtractPath(src, fileName string, startSec, endSec float64) (string, error) {
-	fileName = strings.TrimSpace(fileName)
-	if fileName == "" {
+// resolveExtractPath validates the destination chosen in the save dialog.
+// 既存ファイルの上書き確認はネイティブダイアログ側が済ませているためここでは通すが、
+// 読み込み中の元ファイルを潰すのは復旧不能なので必ず弾く。
+func resolveExtractPath(src, dstPath string, startSec, endSec float64) (string, error) {
+	dstPath = strings.TrimSpace(dstPath)
+	if dstPath == "" {
 		return uniqueExtractPath(src, startSec, endSec)
 	}
-	// ディレクトリを跨がせない（保存先は常に元ファイルと同じ場所）
-	if strings.ContainsAny(fileName, `/\`) || fileName == "." || fileName == ".." {
-		return "", fmt.Errorf("ファイル名にフォルダを含めることはできません")
+	dst := filepath.Clean(dstPath)
+	if !filepath.IsAbs(dst) {
+		return "", fmt.Errorf("保存先はフルパスで指定してください: %s", dstPath)
 	}
-	if filepath.Ext(fileName) == "" {
-		fileName += filepath.Ext(src)
+	// ダイアログのフィルタで拡張子が省かれることがあるため補う
+	if filepath.Ext(dst) == "" {
+		dst += filepath.Ext(src)
 	}
-	dst := filepath.Join(filepath.Dir(src), fileName)
-	if dst == src {
-		return "", fmt.Errorf("元のファイルと同じ名前は使えません")
+	if sameFile(dst, src) {
+		return "", fmt.Errorf("元のファイルには上書きできません")
 	}
-	if _, err := os.Stat(dst); err == nil {
-		return "", fmt.Errorf("%s は既に存在します", fileName)
+	dir := filepath.Dir(dst)
+	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+		return "", fmt.Errorf("保存先のフォルダがありません: %s", dir)
 	}
 	return dst, nil
+}
+
+// sameFile reports whether two paths point at the same file. Windows/macOS の
+// 既定のファイルシステムは大文字小文字を区別しないため、まず os.SameFile で
+// 実体を比較し、宛先がまだ存在しない場合のみ文字列比較にフォールバックする。
+func sameFile(a, b string) bool {
+	fa, errA := os.Stat(a)
+	fb, errB := os.Stat(b)
+	if errA == nil && errB == nil {
+		return os.SameFile(fa, fb)
+	}
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
+	}
+	return filepath.Clean(a) == filepath.Clean(b)
 }
 
 // uniqueExtractPath builds "<name>_<start>-<end><ext>" next to src, adding a

@@ -85,7 +85,6 @@ Vite builds to `_cmd/egov/frontend/dist/`. The Go binary embeds that directory w
 | `player/SeekBarArea.jsx` / `TimeDisplay.jsx` / `MiniProgressBar.jsx` | `memo`-isolated high-frequency updates (`timeupdate`, thumbnail hover) |
 | `player/VrViewpointOverlay.jsx` | VR start-point + view sliders overlay |
 | `player/Overlays.jsx` | Feedback/error/drop/empty-state overlays |
-| `player/ExtractDialog.jsx` | 範囲切り出しのファイル名確認ダイアログ |
 | `player/utils.js` | Shared constants (`VR_START`, `barStyle`) and helpers |
 
 Key facts:
@@ -109,18 +108,20 @@ Key facts:
 - `edts`/`elst` は元のタイムラインを指すため破棄する。`sdtp`/`sbgp`/`sgpd`/`subs`/`saio`/`saiz` も破棄する
 - fragmented MP4 (`moof`) は非対応。対応拡張子は `API.CanExtract()`（`.mp4`/`.m4v`/`.mov`）が判定する
 - 4GB 超の出力では mdat を largesize ヘッダ（16バイト）にし、chunk offset も `co64` にする
-- 保存先は元ファイルと同じディレクトリ固定。ファイル名は UI で指定でき、既定値は
-  `API.SuggestExtractName()` が `<name>_02m00s-07m00s.mp4` の形で作る（衝突時は `_2` を付ける）
-- `API.ExtractRange()` は**既存ファイルへの上書きを拒否する**。ファイル名にフォルダを
-  含めることもできない（`resolveExtractPath()`）
+- 保存先は**ネイティブの保存ダイアログ**（`Dialogs.SaveFile`、Go側Binding不要）で選ばせる。
+  既定のフォルダ・ファイル名は `API.SuggestExtractTarget()` が
+  `<元の場所>/<name>_02m00s-07m00s.mp4` の形で作る（衝突時は `_2` を付ける）
+- 上書き確認はネイティブダイアログの責務なので `API.ExtractRange()` は既存ファイルを拒否しないが、
+  **読み込み中の元ファイルへの上書きだけは必ず弾く**（`resolveExtractPath()` / `sameFile()`）。
+  Windows/macOS は大文字小文字を区別しないため `os.SameFile` で実体比較する
 
 UI は既存の**範囲ループのマーカーをそのまま in/out 点として使う**。選択範囲は
 `SeekBarArea` から `rangeRef`（ref）で Player へ公開する — state で持ち上げると
 マーカーのドラッグ中に Player 全体が再描画されるため。
-起動は右サイドパネル最上段のハサミ（範囲ループが ON のときだけ有効）で、
-`player/ExtractDialog.jsx` がファイル名を確認してから実行する。
-入力起因のエラー（名前の重複など）はダイアログを閉じずにその場に出し、
-成功時のみ Snackbar で実際の切り出し範囲を通知する。
+起動は右サイドパネル最上段のハサミ（範囲ループが ON のときだけ有効）。
+保存ダイアログを待っている間にマーカーが動いても影響しないよう、
+範囲はクリック時点の値をコピーして固定する。
+進行中と結果は Snackbar に出す（進行中は `busy` で自動クローズを止める）。
 
 テスト用の `internal/mp4cut/testdata/sample.mp4` は ffmpeg で生成した合成クリップ
 （320x180 / 30fps / GOP 60 = キーフレームは 0,2,4,6,8秒 / AAC）。
