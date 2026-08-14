@@ -44,6 +44,7 @@
     "extract": "Extract selected range (no re-encode)",
     "extractUnsupported": "This container does not support lossless extraction",
     "extractNeedsRange": "Turn on Range Loop and select a range first",
+    "extractKeyframeNote": "Cuts on keyframes, so the result starts slightly before the marker.",
     "fullscreen": "Fullscreen",
     "exitFullscreen": "Exit Fullscreen",
     "rotate": "Rotate",

@@ -1047,7 +1047,16 @@ export default function Player() {
         <Tooltip
           title={!canExtract ? t('controls.extractUnsupported')
             : !rangeLoop     ? t('controls.extractNeedsRange')
-            : t('controls.extract')}
+            : (
+              <>
+                {t('controls.extract')}
+                {/* キーフレーム単位でしか切れないことは押す直前に伝えないと
+                    「指定した位置と違う」という驚きになる */}
+                <Box component="span" sx={{ display: 'block', mt: 0.5, opacity: 0.75 }}>
+                  {t('controls.extractKeyframeNote')}
+                </Box>
+              </>
+            )}
           placement="left"
         >
           <span>
