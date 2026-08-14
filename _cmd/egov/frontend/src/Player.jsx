@@ -19,6 +19,10 @@ import DiagnosticsOverlay from './player/DiagnosticsOverlay'
 import { ClickFeedback, DropHint, EmptyState, SeekFeedback, SeekZoneOverlay, VideoErrorOverlay } from './player/Overlays'
 import { VR_START, applyHeadRotation, applySpherePosition, barStyle, deg2rad, rad2deg } from './player/utils'
 
+// 押し込み中にこの距離（px）を超えて動いたらドラッグ操作とみなし、
+// シークコントローラーは表示しない（free/vr モードの視点操作を邪魔しないため）
+const HOLD_MOVE_TOLERANCE = 8
+
 // プレイヤー本体。状態・設定・入力処理のオーケストレーターとして働き、
 // 描画は useThreeScene（Three.jsシーン）と player/ 以下の各コンポーネントに委譲する。
 export default function Player() {
@@ -40,6 +44,7 @@ export default function Player() {
   const feedbackKeyRef      = useRef(0)
   const clickTimerRef           = useRef(null)
   const holdTimerRef            = useRef(null)
+  const holdOriginRef           = useRef(null)   // 押し込み開始座標。オーバーレイ表示までの移動量判定に使う
   const wasHoldRef              = useRef(false)
   const lastPointerDownTimeRef  = useRef(0)
   const isMouseHeldRef          = useRef(false)
@@ -516,6 +521,16 @@ export default function Player() {
 
   const handleMouseMove = (e) => {
     setResizeCursor(computeResizeCursor(e))
+    // 押し込み待機中に動かした場合はドラッグ（視点操作）とみなして表示を取り消す。
+    // 「ぐっと押し込んでほぼ動かさない」ときだけコントローラーを出す。
+    if (holdOriginRef.current) {
+      const o = holdOriginRef.current
+      if (Math.hypot(e.clientX - o.x, e.clientY - o.y) > HOLD_MOVE_TOLERANCE) {
+        clearTimeout(holdTimerRef.current)
+        holdOriginRef.current = null
+        wasHoldRef.current = true   // ドラッグ終了時のクリック（再生/一時停止）も抑止する
+      }
+    }
     const inZone = e.clientY <= 80 || e.clientY >= window.innerHeight - 160 || e.clientX >= window.innerWidth - 80
     if (inZone) {
       clearTimeout(hideTimer.current)
@@ -640,6 +655,8 @@ export default function Player() {
   // シングルクリックでも一定時間（800ms）保持し続けたらコントローラー（オーバーレイ）を表示する
   const handleCanvasMouseDown = (e) => {
     if (e.button !== 0) return
+    // 前回のジェスチャで click が来ないまま残った抑止フラグを引きずらない
+    wasHoldRef.current = false
     const pos = { x: e.clientX, y: e.clientY }
     const now = Date.now()
     const isDouble = e.detail >= 2 || (now - lastPointerDownTimeRef.current) <= clickTimeoutMsRef.current
@@ -655,7 +672,10 @@ export default function Player() {
     }
 
     clearTimeout(holdTimerRef.current)
+    holdOriginRef.current = pos
     holdTimerRef.current = setTimeout(() => {
+      // 表示後は移動量でゾーン（早送り/巻き戻し）を選ぶので判定を解除する
+      holdOriginRef.current = null
       wasHoldRef.current = true
       isMouseHeldRef.current = true
       seekOverlayRef.current = pos
@@ -665,6 +685,7 @@ export default function Player() {
 
   const handleCanvasMouseUp = () => {
     clearTimeout(holdTimerRef.current)
+    holdOriginRef.current = null
     if (isMouseHeldRef.current) hideSeekOverlay()
   }
 
