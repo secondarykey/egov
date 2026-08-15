@@ -41,12 +41,25 @@
     "loopOff": "Loop: Off",
     "rangeLoopOn": "Range Loop: On",
     "rangeLoopOff": "Range Loop: Off",
+    "extract": "Extract selected range (no re-encode)",
+    "extractUnsupported": "This container does not support lossless extraction",
+    "extractNeedsRange": "Turn on Range Loop and select a range first",
+    "extractKeyframeNote": "Cuts on keyframes, so the result starts slightly before the marker.",
     "fullscreen": "Fullscreen",
     "exitFullscreen": "Exit Fullscreen",
     "rotate": "Rotate",
     "resetCamera": "Reset Camera",
     "fitWindow": "Fit window to video size",
     "resetView": "Reset View"
+  },
+  "extract": {
+    "title": "Save extracted range",
+    "filterName": "Video files",
+    "run": "Extract",
+    "running": "Extracting...",
+    "done": "Extracted {{name}} ({{start}} - {{end}})",
+    "failed": "Extraction failed: {{msg}}",
+    "rangeTooShort": "The selected range is too short"
   },
   "settings": {
     "title": "Settings",

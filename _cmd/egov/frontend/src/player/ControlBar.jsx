@@ -19,6 +19,7 @@ export default function ControlBar({
   fileName, fullscreen, onFullscreenToggle,
   loop, onLoopToggle, rangeLoop, onRangeLoopToggle, activeColor,
   thumbVideoRef, thumbCanvasRef, thumbEnabledRef, modeRef, vrStartRef,
+  rangeRef,
 }) {
   const { t } = useTranslation()
 
@@ -42,6 +43,7 @@ export default function ControlBar({
           activeColor={activeColor}
           rangeLoop={rangeLoop}
           visible={showUI}
+          rangeRef={rangeRef}
         />
       </Stack>
       <Collapse in={rangeLoop}>
