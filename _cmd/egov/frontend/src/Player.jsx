@@ -30,6 +30,7 @@ export default function Player() {
   const { t } = useTranslation()
   const modeRef      = useRef('normal')
   const dragCounter  = useRef(0)
+  const dragTimer    = useRef(null)
   const hideTimer    = useRef(null)
   const thumbVideoRef   = useRef(null)
   const thumbCanvasRef  = useRef(null)
@@ -402,11 +403,16 @@ export default function Player() {
     const unsub = Events.On('open-file', (event) => {
       // ドロップ経由の場合、Linux では DOM の drop/dragleave が来ず
       // ドロップ表示が消えないため、ここで確実に解除する
+      clearTimeout(dragTimer.current)
+      dragTimer.current = null
       dragCounter.current = 0
       setDragging(false)
       settingsReady.then(() => loadFilePath(event.data))
     })
-    return () => unsub()
+    return () => {
+      unsub()
+      clearTimeout(dragTimer.current)
+    }
   }, [])
 
   useEffect(() => {
@@ -486,17 +492,46 @@ export default function Player() {
 
   const handleFileChange = (e) => loadFile(e.target.files[0])
 
-  const handleDragEnter = (e) => { e.preventDefault(); dragCounter.current++; setDragging(true) }
+  // ドラッグ表示の解除は dragleave だけに頼れない。
+  // Linux(WebKitGTK)/macOS では relatedTarget=null の dragleave が即座に飛んでくるので
+  // 数えるとカウンタが狂い、Windows ではウィンドウ外へ抜けたときの dragleave も
+  // relatedTarget=null なので無視すると表示が残り続ける。
+  // dragover はドラッグ中ずっと（静止していても）発火し続けるため、
+  // 一定時間 dragover が来なくなったら「通り過ぎた」とみなして解除する。
+  const clearDragWatchdog = () => {
+    clearTimeout(dragTimer.current)
+    dragTimer.current = null
+  }
+  const endDrag = () => {
+    clearDragWatchdog()
+    dragCounter.current = 0
+    setDragging(false)
+  }
+  const armDragWatchdog = () => {
+    clearTimeout(dragTimer.current)
+    dragTimer.current = setTimeout(endDrag, 700)
+  }
+  const handleDragEnter = (e) => {
+    e.preventDefault()
+    dragCounter.current++
+    setDragging(true)
+    armDragWatchdog()
+  }
   const handleDragLeave = (e) => {
     e.preventDefault()
-    // Linux(WebKitGTK)/macOS ではネイティブ側がドラッグを処理する際に
-    // relatedTarget=null の dragleave が即座に飛んでくる。これを数えると
-    // カウンタが狂うため無視する（@wailsio/runtime 側の判定と揃えている）。
-    if (e.relatedTarget === null) return
+    if (e.relatedTarget === null) {
+      // ウィンドウ外かネイティブ横取りかを区別できないので、
+      // ウォッチドッグに判定を委ねる（dragover が続けば表示は維持される）
+      armDragWatchdog()
+      return
+    }
     dragCounter.current = Math.max(0, dragCounter.current - 1)
-    if (dragCounter.current === 0) setDragging(false)
+    if (dragCounter.current === 0) endDrag()
   }
-  const handleDragOver = (e) => e.preventDefault()
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    if (dragging) armDragWatchdog()
+  }
 
   // ファイルの読み込みは行わない。Wails がネイティブ側でドロップを横取りし、
   // Go の WindowFilesDropped → open-file イベントとして配送される。
@@ -504,8 +539,7 @@ export default function Player() {
   // ランタイムが Go へ転送するため、ここで dataTransfer を読むと二重読み込みになる。
   const handleDrop = (e) => {
     e.preventDefault()
-    dragCounter.current = 0
-    setDragging(false)
+    endDrag()
   }
 
   // Wails3ランタイム（drag.js）のリサイズ判定と同じ境界でカーソル種別を計算する。
