@@ -69,7 +69,7 @@
     "fullscreen": "全画面表示",
     "exitFullscreen": "全画面解除",
     "rotate": "回転",
-    "resetCamera": "カメラをリセット",
+    "resetCamera": "カメラをリセット（保存済みのVR設定へ全項目を戻す）",
     "fitWindow": "ウィンドウを動画サイズに合わせる",
     "resetView": "表示をリセット"
   },

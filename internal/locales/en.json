@@ -69,7 +69,7 @@
     "fullscreen": "Fullscreen",
     "exitFullscreen": "Exit Fullscreen",
     "rotate": "Rotate",
-    "resetCamera": "Reset Camera",
+    "resetCamera": "Reset Camera (restore all saved VR settings)",
     "fitWindow": "Fit window to video size",
     "resetView": "Reset View"
   },
