@@ -8,18 +8,26 @@ import (
 )
 
 type VRSettings struct {
-	// InitialPitch/InitialYaw は視聴開始時の頭の向き（度）。
+	// InitialPitch/InitialYaw/InitialRoll は視聴開始時の頭の向き（度）。
+	// Roll は素材の水平が傾いている場合の補正で、首振りでは代替できない。
 	InitialPitch float64 `json:"initialPitch"`
 	InitialYaw   float64 `json:"initialYaw"`
-	// PositionX/Y/Z は視点の平行移動（球半径に対する比率 -1..1）。
-	// 実装上は球体側を逆方向に動かす。X:右+ Y:上+ Z:前+
-	PositionX       float64 `json:"positionX"`
-	PositionY       float64 `json:"positionY"`
-	PositionZ       float64 `json:"positionZ"`
-	FOV             float64 `json:"fov"`
-	DragSensitivity float64 `json:"dragSensitivity"`
-	ScrollSpeed     float64 `json:"scrollSpeed"`
-	DefaultStart    string  `json:"defaultStart"`
+	InitialRoll  float64 `json:"initialRoll"`
+	// SourceProjection は素材の投影方式。"equirect"（正距円筒）のほか、
+	// 未変換のデュアル魚眼素材向けに "equidistant"（等距離）/
+	// "equisolid"（等立体角）を選べる。方式が合っていないと、
+	// 中央は合うのに首を振ると周辺が伸び縮みする。
+	SourceProjection string `json:"sourceProjection"`
+	// SourceFOV は素材の（片目分の）水平画角（度）。撮影機は 190°/200° が
+	// 多く、180°決め打ちだと首振り角と画の動きが一致しない。
+	SourceFOV float64 `json:"sourceFov"`
+	// DisplayProjection は画面への投影方式。"rectilinear"（透視）は画面端が
+	// 引き伸ばされるため、"panini" / "stereographic" を選べるようにしている。
+	DisplayProjection string  `json:"displayProjection"`
+	FOV               float64 `json:"fov"`
+	DragSensitivity   float64 `json:"dragSensitivity"`
+	ScrollSpeed       float64 `json:"scrollSpeed"`
+	DefaultStart      string  `json:"defaultStart"`
 }
 
 type PlaybackSettings struct {
@@ -98,12 +106,18 @@ func defaultSettings() *Settings {
 			SingleInstance: false,
 		},
 		VR: VRSettings{
-			InitialPitch:    0,
-			InitialYaw:      0,
-			FOV:             75,
-			DragSensitivity: 0.004,
-			ScrollSpeed:     0.05,
-			DefaultStart:    "left",
+			InitialPitch: 0,
+			InitialYaw:   0,
+			InitialRoll:  0,
+			// 既定値は旧実装（180°正距円筒を透視投影）と同じ見え方になる組み合わせ。
+			// ここを起点に、素材に合わせて調整する。
+			SourceProjection:  "equirect",
+			SourceFOV:         180,
+			DisplayProjection: "rectilinear",
+			FOV:               75,
+			DragSensitivity:   0.004,
+			ScrollSpeed:       0.05,
+			DefaultStart:      "left",
 		},
 		Playback: PlaybackSettings{
 			Volume:           0.5,
@@ -139,6 +153,19 @@ func (s *Settings) normalize() {
 	}
 	if s.VR.ScrollSpeed <= 0 {
 		s.VR.ScrollSpeed = d.VR.ScrollSpeed
+	}
+	if s.VR.SourceFOV < 60 || s.VR.SourceFOV > 360 {
+		s.VR.SourceFOV = d.VR.SourceFOV
+	}
+	switch s.VR.SourceProjection {
+	case "equirect", "equidistant", "equisolid":
+	default:
+		s.VR.SourceProjection = d.VR.SourceProjection
+	}
+	switch s.VR.DisplayProjection {
+	case "rectilinear", "panini", "stereographic":
+	default:
+		s.VR.DisplayProjection = d.VR.DisplayProjection
 	}
 	switch s.VR.DefaultStart {
 	case "left", "right", "top", "bottom":

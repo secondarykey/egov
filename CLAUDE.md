@@ -80,19 +80,23 @@ Vite builds to `_cmd/egov/frontend/dist/`. The Go binary embeds that directory w
 | File | Role |
 |------|------|
 | `player/useThreeScene.js` | Three.js scene setup + render-on-demand loop (rVFC), exposes refs |
+| `player/vrShader.js` | VR投影のフルスクリーンquad＋GLSL（投影方式の変換一式） |
 | `player/TitleBar.jsx` | Title bar (drag region, mode toggle, window controls) |
 | `player/ControlBar.jsx` | Bottom bar (seek, play/pause, volume, fullscreen) |
 | `player/SeekBarArea.jsx` / `TimeDisplay.jsx` / `MiniProgressBar.jsx` | `memo`-isolated high-frequency updates (`timeupdate`, thumbnail hover) |
-| `player/VrViewpointOverlay.jsx` | VR start-point + view sliders overlay |
+| `player/VrViewpointOverlay.jsx` | VR start-point + 視点/投影の調整オーバーレイ |
 | `player/Overlays.jsx` | Feedback/error/drop/empty-state overlays |
 | `player/utils.js` | Shared constants (`VR_START`, `barStyle`) and helpers |
 
 Key facts:
 
-- **Three.js** (`r0.184`) + `OrbitControls` for rendering: a sphere (VR mode) and a plane (fit/normal mode) share one `VideoTexture`
+- **Three.js** (`r0.184`) + `OrbitControls` for rendering. 平面モード（normal/free）は
+  `PerspectiveCamera` ＋ plane、VRモードは専用シーンのフルスクリーンquad＋シェーダ。
+  両者は同じ `VideoTexture` を共有し、`renderOnce()` が `modeRef` で描画先を切り替える
 - **MUI** for all UI controls (title bar, control bar, sliders, menus)
 - Three view modes: `normal` (default, window-fit), `free` (pan/zoom), `vr` (spherical, right-click rotates) — internal names match the UI labels. Legacy `fit` in settings.json is migrated to `normal` by `Settings.normalize()`
-- VR split-screen: `textureRef.current.repeat/offset` selects the left/right/top/bottom half of the video
+- VR split-screen: シェーダの `uSrcOffset` / `uSrcRepeat` uniform が左右／上下の半分を選ぶ。
+  `texture.repeat/offset` は平面モードと共有しているので触らないこと（等倍のまま）
 
 ### 範囲切り出し（無劣化カット）
 
@@ -130,6 +134,43 @@ UI は既存の**範囲ループのマーカーをそのまま in/out 点とし�
 テスト用の `internal/mp4cut/testdata/sample.mp4` は ffmpeg で生成した合成クリップ
 （320x180 / 30fps / GOP 60 = キーフレームは 0,2,4,6,8秒 / AAC）。
 出力の妥当性検証に ffmpeg デコードを使うテストがあるが、ffmpeg が無い環境ではスキップされる。
+
+### VR投影（`player/vrShader.js`）
+
+VR描画は球メッシュ＋`PerspectiveCamera` ではなく、**フルスクリーンquad＋フラグメント
+シェーダ**で行う。ピクセルごとに「画面座標 → 視線ベクトル → 頭の回転 → ソース画像のUV」
+を直接解く。旧実装（`SphereGeometry(500, 60, 40, 0, PI)`）には以下の問題があった。
+
+- **半球が前方ではなく左方向を向いていた**。`sphere.rotation.y = -PI/2` の結果、
+  ワールドの前方 `(0,0,-1)` が UV `u=1.0`（切り出した映像の右端）に対応し、
+  画面の右半分にはメッシュ自体が存在しなかった。数値で検証可能:
+  ジオメトリを組んで `matrixWorld` 適用後の頂点方向と UV を突き合わせると
+  前方の最近傍頂点が `uv=(1.000, 0.500)`、右方向 `(1,0,0)` は最近傍まで90°離れている
+- UVが頂点間で線形補間されるため、FOVを絞ると1マス（水平3°/垂直4.5°）が
+  画面の大きな割合を占め、面ごとの歪みが見えた
+- ソースが 180° 正距円筒であることを決め打ちしていた
+
+シェーダ側は3つの軸を独立に持つ。
+
+| uniform | 意味 |
+|---|---|
+| `uSrcProj` / `uSrcHalfFov` | 素材の投影方式（正距円筒 / 等距離魚眼 / 等立体角魚眼）と画角 |
+| `uDispProj` / `uProjScale` | 画面への投影方式（透視 / Panini / ステレオ）と画角 |
+| `uRot` | yaw(Y) → pitch(X) → roll(Z) の合成回転（`Euler(pitch, yaw, roll, 'YXZ')`） |
+
+- **素材の投影方式が合っていないと、中央は合うのに首を振ると周辺が伸び縮みする。**
+  未変換のデュアル魚眼素材を正距円筒として貼るのが典型例
+- **素材の画角は180°決め打ちにしない。** 撮影機は 190°/200° が多く、
+  180°として貼ると首振り角と画の動きが一致しない
+- 透視投影は原理的に画面端が引き伸ばされる。HMDならレンズが打ち消すが、
+  平面モニタでは歪みとして残るため Panini / ステレオ投影を選べるようにしている
+- `uProjScale` は「画面上端／下端で視線角がちょうど `fov/2` になる係数」。
+  投影方式を変えても画角の意味が揃うよう `projScaleFor()` で算出する
+- 出力は `#include <colorspace_fragment>` で再符号化する。`ShaderMaterial`（Rawではない）
+  なら `linearToOutputTexel` が `WebGLProgram` の prefixFragment に注入される
+- **視点の平行移動（旧 `positionX/Y/Z`）は撤去した。** 180°映像には視差情報が無く、
+  投影中心から離れても「一歩前に出る」にはならず非一様な歪みが増えるだけで、
+  これで位置を合わせようとしても収束しない
 
 ### Wails3 Drag Behavior
 

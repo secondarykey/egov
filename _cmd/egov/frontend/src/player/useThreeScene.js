@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { VR_RADIUS } from './utils'
+import { createVrQuad } from './vrShader'
 
 // Three.js シーンの生成・破棄と描画ループを担うフック。
 // マウント時に一度だけ初期化し、生成物は ref 経由で Player に公開する。
@@ -9,17 +9,17 @@ import { VR_RADIUS } from './utils'
 // effect が返却された ref を使って行う。
 //
 // onDuration / onVideoEl / onVideoError には setState 関数（安定参照）を渡すこと。
-export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, onVideoEl, onVideoError }) {
+export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoError }) {
   const mountRef       = useRef(null)
   const videoRef       = useRef(null)
   const cameraRef      = useRef(null)
   const controlsRef    = useRef(null)
-  const sphereRef      = useRef(null)
   const planeRef       = useRef(null)
   const textureRef     = useRef(null)
   const fitCameraRef   = useRef(null)
-  const headGroupRef   = useRef(null)
   const rendererRef    = useRef(null)
+  const vrUniformsRef  = useRef(null)     // VRシェーダの uniform（Player が視点を書き込む）
+  const syncVrSizeRef  = useRef(null)     // 画面・切り出しのアスペクトを uniform へ反映
   const requestRenderRef = useRef(null)   // 単発レンダーを要求（操作・状態変化時）
   const objectUrlRef   = useRef(null)     // loadFile で作成した Object URL（解放用）
   const detectedFpsRef = useRef(0)
@@ -37,11 +37,6 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
     const camera = new THREE.PerspectiveCamera(75, mount.clientWidth / mount.clientHeight, 0.1, 1000)
     camera.position.set(0, 0, 0.1)
     cameraRef.current = camera
-
-    const headGroup = new THREE.Group()
-    headGroup.add(camera)
-    scene.add(headGroup)
-    headGroupRef.current = headGroup
 
     // WebGLコンテキストの生成はドライバ・環境に依存して失敗しうる
     // （LinuxのWebKitGTKでGPUアクセラレーションが使えない場合など）。
@@ -80,13 +75,21 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
     texture.colorSpace = THREE.SRGBColorSpace
     textureRef.current = texture
 
-    // VR: 半球内側
-    const sGeo = new THREE.SphereGeometry(VR_RADIUS, 60, 40, 0, Math.PI)
-    sGeo.scale(-1, 1, 1)
-    const sphere = new THREE.Mesh(sGeo, new THREE.MeshBasicMaterial({ map: texture }))
-    sphere.rotation.y = -Math.PI / 2
-    sphereRef.current  = sphere
-    scene.add(sphere)
+    // VR: フルスクリーンquad へシェーダで直接投影する（vrShader.js 参照）。
+    // 平面モードとはシーンもカメラも別で、renderOnce が描画先を切り替える。
+    const vr = createVrQuad(texture)
+    vrUniformsRef.current = vr.uniforms
+
+    // 画面と切り出し領域のアスペクトを uniform へ反映する。
+    // 画面リサイズ・動画のメタデータ確定・VR始点の変更で呼ぶ必要がある。
+    const syncVrSize = () => {
+      const u = vr.uniforms
+      u.uAspect.value = mount.clientHeight > 0 ? mount.clientWidth / mount.clientHeight : 1
+      const vw = video.videoWidth  * u.uSrcRepeat.value.x
+      const vh = video.videoHeight * u.uSrcRepeat.value.y
+      u.uSrcAspect.value = vh > 0 ? vw / vh : 1
+    }
+    syncVrSizeRef.current = syncVrSize
 
     // 通常/フィット: 平面
     const plane = new THREE.Mesh(
@@ -105,8 +108,12 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
     // --- レンダーオンデマンド ---
     // 常時 60fps で回す代わりに、実フレーム到着時と操作・状態変化時だけ描画する。
     const renderOnce = () => {
-      controls.update()
-      renderer.render(scene, camera)
+      if (modeRef.current === 'vr') {
+        renderer.render(vr.scene, vr.camera)
+      } else {
+        controls.update()
+        renderer.render(scene, camera)
+      }
       renderCountRef.current++
     }
 
@@ -135,21 +142,13 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
     }
     fitCameraRef.current = fitCamera
 
-    const onWheel = (e) => {
-      if (modeRef.current !== 'vr') return
-      e.preventDefault()
-      camera.fov = Math.max(20, Math.min(100, camera.fov + e.deltaY * vrScrollSpeedRef.current))
-      camera.updateProjectionMatrix()
-      requestRender()
-    }
-    renderer.domElement.addEventListener('wheel', onWheel, { passive: false })
-
     const onResize = () => {
       camera.aspect = mount.clientWidth / mount.clientHeight
       camera.updateProjectionMatrix()
       // DPIの異なるモニタ間を移動するとデバイスピクセル比が変わるため毎回反映する
       renderer.setPixelRatio(window.devicePixelRatio)
       renderer.setSize(mount.clientWidth, mount.clientHeight)
+      syncVrSize()
       if (modeRef.current === 'normal') fitCamera()
       requestRender()
     }
@@ -162,6 +161,7 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
         plane.scale.set(aspect / (16 / 9), 1, 1)
         if (modeRef.current === 'normal') fitCamera()
       }
+      syncVrSize()
       requestRender()
     })
 
@@ -323,9 +323,10 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
       video.removeEventListener('seeked', onLoadedData)
       window.removeEventListener('resize', onResize)
       renderer.domElement.removeEventListener('webglcontextlost', onContextLost)
-      renderer.domElement.removeEventListener('wheel', onWheel)
       controls.removeEventListener('change', requestRender)
       controls.dispose()
+      vr.mesh.geometry.dispose()
+      vr.material.dispose()
       renderer.dispose()
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement)
       video.src = ''
@@ -334,8 +335,9 @@ export default function useThreeScene({ modeRef, vrScrollSpeedRef, onDuration, o
   }, [])
 
   return {
-    mountRef, videoRef, cameraRef, controlsRef, sphereRef, planeRef,
-    textureRef, fitCameraRef, headGroupRef, rendererRef,
+    mountRef, videoRef, cameraRef, controlsRef, planeRef,
+    textureRef, fitCameraRef, rendererRef,
+    vrUniformsRef, syncVrSizeRef,
     requestRenderRef, objectUrlRef, detectedFpsRef,
     frameCountRef, renderCountRef, renderPathRef,
   }

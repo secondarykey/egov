@@ -1,4 +1,4 @@
-import { Box, Button, IconButton, Slider, Stack, Tooltip, Typography } from '@mui/material'
+import { Box, Button, IconButton, Slider, Stack, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material'
 import ArrowUpwardIcon   from '@mui/icons-material/ArrowUpward'
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import ArrowBackIcon     from '@mui/icons-material/ArrowBack'
@@ -14,21 +14,65 @@ const startButtons = [
   { value: 'bottom', Icon: ArrowDownwardIcon, col: 2, row: 3 },
 ]
 
+// 投影方式の選択肢。ラベルと説明は locales の vr.srcProj / vr.dispProj から引く。
+const SRC_PROJECTIONS  = ['equirect', 'equidistant', 'equisolid']
+const DISP_PROJECTIONS = ['rectilinear', 'panini', 'stereographic']
+
 // VR始点選択＋視点調整オーバーレイ。
-// vrView（度・半径比）の変更は onChange で即時反映、onCommit で既定として保存する。
+// vrView（すべて度）の変更は onChange で即時反映、onCommit で既定として保存する。
 export default function VrViewpointOverlay({
   onClose, vrStart, onVrStartChange, vrView, onChange, onCommit,
 }) {
   const { t } = useTranslation()
 
+  const deg = v => `${v.toFixed(1)}°`
+
+  // 2列グリッドへ行優先で並ぶ。左列＝頭の向き、右列＝素材への当て込み。
   const sliderRows = [
-    { key: 'pitch', label: t('vr.pitch'), min: -90,  max: 90,  step: 0.5,   reset: 0,  format: v => `${v.toFixed(1)}°` },
-    { key: 'posY',  label: t('vr.posY'),  min: -0.9, max: 0.9, step: 0.005, reset: 0,  format: v => `${(v * 100).toFixed(1)}%` },
-    { key: 'yaw',   label: t('vr.yaw'),   min: -180, max: 180, step: 0.5,   reset: 0,  format: v => `${v.toFixed(1)}°` },
-    { key: 'posX',  label: t('vr.posX'),  min: -0.9, max: 0.9, step: 0.005, reset: 0,  format: v => `${(v * 100).toFixed(1)}%` },
-    { key: 'fov',   label: t('vr.fov'),   min: 20,   max: 100, step: 1,     reset: 75, format: v => `${v.toFixed(0)}°` },
-    { key: 'posZ',  label: t('vr.posZ'),  min: -0.9, max: 0.9, step: 0.005, reset: 0,  format: v => `${(v * 100).toFixed(1)}%` },
+    { key: 'pitch',  label: t('vr.pitch'),  min: -90,  max: 90,  step: 0.5, reset: 0,   format: deg },
+    { key: 'roll',   label: t('vr.roll'),   min: -45,  max: 45,  step: 0.1, reset: 0,   format: deg },
+    { key: 'yaw',    label: t('vr.yaw'),    min: -180, max: 180, step: 0.5, reset: 0,   format: deg },
+    { key: 'srcFov', label: t('vr.srcFov'), min: 120,  max: 240, step: 1,   reset: 180, format: v => `${v.toFixed(0)}°` },
+    { key: 'fov',    label: t('vr.fov'),    min: 20,   max: 100, step: 1,   reset: 75,  format: v => `${v.toFixed(0)}°` },
   ]
+
+  // 投影方式は排他選択。onChange 直後に onCommit して既定へ焼く。
+  const projectionRow = (key, label, hint, values, i18nPrefix) => (
+    <Box sx={{ gridColumn: '1 / -1', mb: 1 }}>
+      <Tooltip title={hint} placement="top">
+        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)', display: 'block', mb: 0.5 }}>
+          {label}
+        </Typography>
+      </Tooltip>
+      <ToggleButtonGroup
+        exclusive
+        fullWidth
+        size="small"
+        value={vrView[key]}
+        onChange={(_, v) => {
+          if (!v) return
+          onChange({ ...vrView, [key]: v })
+          onCommit()
+        }}
+        sx={{
+          '& .MuiToggleButton-root': {
+            color: 'rgba(255,255,255,0.7)',
+            borderColor: 'rgba(255,255,255,0.25)',
+            textTransform: 'none',
+            fontSize: 12,
+            py: 0.4,
+          },
+          '& .Mui-selected': { color: '#000 !important', bgcolor: '#4fc3f7 !important' },
+        }}
+      >
+        {values.map(v => (
+          <Tooltip key={v} title={t(`${i18nPrefix}.${v}Hint`)} placement="bottom">
+            <ToggleButton value={v}>{t(`${i18nPrefix}.${v}`)}</ToggleButton>
+          </Tooltip>
+        ))}
+      </ToggleButtonGroup>
+    </Box>
+  )
 
   return (
     <Box
@@ -117,6 +161,8 @@ export default function VrViewpointOverlay({
             />
           </Box>
         ))}
+        {projectionRow('srcProj',  t('vr.sourceProjection'),  t('vr.sourceProjectionHint'),  SRC_PROJECTIONS,  'vr.srcProj')}
+        {projectionRow('dispProj', t('vr.displayProjection'), t('vr.displayProjectionHint'), DISP_PROJECTIONS, 'vr.dispProj')}
         <Button
           fullWidth
           size="small"
