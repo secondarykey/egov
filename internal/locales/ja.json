@@ -33,6 +33,7 @@
       "stereographicHint": "非常に広い画角でも局所的な形が保たれる。直線は曲がる。"
     },
     "saveView": "現在の視点を既定として保存",
+    "saved": "保存しました",
     "resetToZero": "0にリセット",
     "clickToClose": "クリックで閉じる",
     "changeViewpoint": "視点変更",

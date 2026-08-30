@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from 'react'
 import { Box, Button, IconButton, Slider, Stack, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material'
+import CheckIcon from '@mui/icons-material/Check'
 import ArrowUpwardIcon   from '@mui/icons-material/ArrowUpward'
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import ArrowBackIcon     from '@mui/icons-material/ArrowBack'
@@ -20,11 +22,26 @@ const SRC_PROJECTIONS  = ['equirect', 'equidistant', 'equisolid']
 const DISP_PROJECTIONS = ['rectilinear', 'panini', 'stereographic']
 
 // VR始点選択＋視点調整オーバーレイ。
-// vrView（すべて度）の変更は onChange で即時反映、onCommit で既定として保存する。
+//
+// 変更は onChange で即時プレビューされるだけで、ディスクへは書かない。
+// 保存は「既定として保存」ボタン（onCommit）だけが行う。
+// スライダーやトグルから onCommit を呼ばないこと——保存した値は
+// Reset Camera の戻り先なので、触るたびに保存すると永久に戻れなくなる。
 export default function VrViewpointOverlay({
   onClose, vrStart, onVrStartChange, vrView, onChange, onCommit,
 }) {
   const { t } = useTranslation()
+
+  // 保存はこのボタンだけが行うため、押したことが分かるよう一時的に表示を変える
+  const [saved, setSaved] = useState(false)
+  const savedTimer = useRef(null)
+  useEffect(() => () => clearTimeout(savedTimer.current), [])
+  const handleSave = async () => {
+    await onCommit()
+    setSaved(true)
+    clearTimeout(savedTimer.current)
+    savedTimer.current = setTimeout(() => setSaved(false), 1600)
+  }
 
   const deg = v => `${v.toFixed(1)}°`
   // ずらし量はウィンドウの半分を 100% とする
@@ -41,7 +58,7 @@ export default function VrViewpointOverlay({
     { key: 'fov',    label: t('vr.fov'),    min: 20,   max: 100, step: 1,     reset: 75, format: v => `${v.toFixed(0)}°` },
   ]
 
-  // 投影方式は排他選択。onChange 直後に onCommit して既定へ焼く。
+  // 投影方式は排他選択。プレビューのみで保存はしない。
   const projectionRow = (key, label, hint, values, i18nPrefix) => (
     <Box sx={{ gridColumn: '1 / -1', mb: 1 }}>
       <Tooltip title={hint} placement="top">
@@ -57,7 +74,6 @@ export default function VrViewpointOverlay({
         onChange={(_, v) => {
           if (!v) return
           onChange({ ...vrView, [key]: v })
-          onCommit()
         }}
         sx={{
           '& .MuiToggleButton-root': {
@@ -144,10 +160,7 @@ export default function VrViewpointOverlay({
                   <IconButton
                     size="small"
                     sx={{ color: 'rgba(255,255,255,0.4)', width: 18, height: 18, '&:hover': { color: 'white' } }}
-                    onClick={() => {
-                      onChange({ ...vrView, [key]: reset })
-                      onCommit()
-                    }}
+                    onClick={() => onChange({ ...vrView, [key]: reset })}
                   >
                     <RestartAltIcon sx={{ fontSize: 14 }} />
                   </IconButton>
@@ -158,7 +171,6 @@ export default function VrViewpointOverlay({
               min={min} max={max} step={step}
               value={vrView[key] ?? 0}
               onChange={(_, v) => onChange({ ...vrView, [key]: v })}
-              onChangeCommitted={() => onCommit()}
               sx={{
                 color: '#4fc3f7',
                 '& .MuiSlider-thumb': { width: 16, height: 16 },
@@ -177,9 +189,10 @@ export default function VrViewpointOverlay({
             border: '1px solid rgba(255,255,255,0.25)',
             '&:hover': { bgcolor: 'rgba(255,255,255,0.18)' },
           }}
-          onClick={() => onCommit()}
+          onClick={handleSave}
+          startIcon={saved ? <CheckIcon sx={{ fontSize: 16 }} /> : null}
         >
-          {t('vr.saveView')}
+          {saved ? t('vr.saved') : t('vr.saveView')}
         </Button>
       </Box>
       <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.35)', mt: 1 }}>

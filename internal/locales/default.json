@@ -33,6 +33,7 @@
       "stereographicHint": "Preserves local shapes at very wide angles. Straight lines bend."
     },
     "saveView": "Save current view as default",
+    "saved": "Saved",
     "resetToZero": "Reset to 0",
     "clickToClose": "Click to close",
     "changeViewpoint": "Change Viewpoint",
