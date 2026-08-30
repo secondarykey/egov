@@ -163,7 +163,6 @@ export default function Player() {
       controls.enabled = false
       syncVrSizeRef.current?.()
       syncVrView()
-      planeRef.current.rotation.z = 0
     } else if (mode === 'free') {
       camera.position.set(0, 0, 9)
       camera.fov            = 60

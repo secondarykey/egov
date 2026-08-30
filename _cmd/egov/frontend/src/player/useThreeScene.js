@@ -96,7 +96,6 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
       new THREE.PlaneGeometry(16, 9),
       new THREE.MeshBasicMaterial({ map: texture }),
     )
-    plane.visible    = false
     planeRef.current = plane
     scene.add(plane)
 
