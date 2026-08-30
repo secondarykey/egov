@@ -5,6 +5,7 @@ import ArrowBackIcon     from '@mui/icons-material/ArrowBack'
 import ArrowForwardIcon  from '@mui/icons-material/ArrowForward'
 import RestartAltIcon    from '@mui/icons-material/RestartAlt'
 import { useTranslation } from 'react-i18next'
+import { VR_SHIFT_LIMIT } from './utils'
 
 // 始点選択オーバーレイ内のボタン定義（コンパス配置）
 const startButtons = [
@@ -35,8 +36,8 @@ export default function VrViewpointOverlay({
     { key: 'roll',   label: t('vr.roll'),   min: -45,  max: 45,  step: 0.1, reset: 0,   format: deg },
     { key: 'yaw',    label: t('vr.yaw'),    min: -180, max: 180, step: 0.5, reset: 0,   format: deg },
     { key: 'srcFov', label: t('vr.srcFov'), min: 120,  max: 240, step: 1,   reset: 180, format: v => `${v.toFixed(0)}°` },
-    { key: 'shiftX', label: t('vr.shiftX'), min: -1,   max: 1,   step: 0.005, reset: 0,  format: pct },
-    { key: 'shiftY', label: t('vr.shiftY'), min: -1,   max: 1,   step: 0.005, reset: 0,  format: pct },
+    { key: 'shiftX', label: t('vr.shiftX'), min: -VR_SHIFT_LIMIT, max: VR_SHIFT_LIMIT, step: 0.01, reset: 0, format: pct },
+    { key: 'shiftY', label: t('vr.shiftY'), min: -VR_SHIFT_LIMIT, max: VR_SHIFT_LIMIT, step: 0.01, reset: 0, format: pct },
     { key: 'fov',    label: t('vr.fov'),    min: 20,   max: 100, step: 1,     reset: 75, format: v => `${v.toFixed(0)}°` },
   ]
 

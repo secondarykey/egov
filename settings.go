@@ -26,7 +26,7 @@ type VRSettings struct {
 	// 引き伸ばされるため、"panini" / "stereographic" を選べるようにしている。
 	DisplayProjection string `json:"displayProjection"`
 	// ShiftX/ShiftY は描画結果の平行移動（ウィンドウの半分を 1.0 とする比率）。
-	// 視点そのものは動かさないので歪みは増えず、寄せた側は黒帯になる。
+	// 視点そのものは動かさないので歪みは増えない。
 	ShiftX float64 `json:"shiftX"`
 	ShiftY float64 `json:"shiftY"`
 
@@ -151,15 +151,21 @@ func defaultSettings() *Settings {
 // settings.json に不正な値（0 の FOV、空のモード名等）が含まれていても、
 // 呼び出し側（フロントエンド含む）がガードなしで使えるようにする。
 // 既定値の定義は defaultSettings() に一元化されている。
-// clampUnit は -1..1 の範囲へ丸める。NaN は 0 に落とす。
-func clampUnit(v float64) float64 {
+// vrShiftLimit は VR の平行移動の上限（ウィンドウの半分を 1.0 とする）。
+// 透視投影は視線角が90°に漸近するだけなので 180°素材では画が尽きないが、
+// Panini/ステレオ投影は fov75 で 300% を過ぎると画が残らない。
+// フロントエンド側の VR_SHIFT_LIMIT と一致させること。
+const vrShiftLimit = 3
+
+// clampShift は平行移動を上限内へ丸める。NaN は 0 に落とす。
+func clampShift(v float64) float64 {
 	switch {
 	case math.IsNaN(v):
 		return 0
-	case v < -1:
-		return -1
-	case v > 1:
-		return 1
+	case v < -vrShiftLimit:
+		return -vrShiftLimit
+	case v > vrShiftLimit:
+		return vrShiftLimit
 	}
 	return v
 }
@@ -175,8 +181,8 @@ func (s *Settings) normalize() {
 	if s.VR.ScrollSpeed <= 0 {
 		s.VR.ScrollSpeed = d.VR.ScrollSpeed
 	}
-	s.VR.ShiftX = clampUnit(s.VR.ShiftX)
-	s.VR.ShiftY = clampUnit(s.VR.ShiftY)
+	s.VR.ShiftX = clampShift(s.VR.ShiftX)
+	s.VR.ShiftY = clampShift(s.VR.ShiftY)
 	if s.VR.SourceFOV < 60 || s.VR.SourceFOV > 360 {
 		s.VR.SourceFOV = d.VR.SourceFOV
 	}

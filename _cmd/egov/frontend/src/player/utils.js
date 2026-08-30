@@ -18,6 +18,12 @@ export const rad2deg = (r) => (r * 180) / Math.PI
 
 export const clamp = (v, min, max) => Math.max(min, Math.min(max, v))
 
+// 描画結果の平行移動の上限（1.0 = ウィンドウの半分）。
+// 透視投影は画面座標をいくら伸ばしても視線角が90°に漸近するだけなので
+// 180°素材なら黒帯は出ないが、Panini/ステレオ投影は有限の画面座標で
+// 素材の範囲を超える（fov75 で 300% を過ぎると画が残らない）。そこで切る。
+export const VR_SHIFT_LIMIT = 3
+
 // 上下バー・サイドパネル共通の半透明スタイル
 export const barStyle = {
   background:     'rgba(0,0,0,0.6)',

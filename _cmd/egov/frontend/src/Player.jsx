@@ -18,7 +18,7 @@ import ThumbnailGrid from './player/ThumbnailGrid'
 import VrViewpointOverlay from './player/VrViewpointOverlay'
 import DiagnosticsOverlay from './player/DiagnosticsOverlay'
 import { ClickFeedback, DropHint, EmptyState, SeekFeedback, SeekZoneOverlay, VideoErrorOverlay } from './player/Overlays'
-import { VR_START, barStyle, clamp, deg2rad, fmt, rad2deg } from './player/utils'
+import { VR_SHIFT_LIMIT, VR_START, barStyle, clamp, deg2rad, fmt, rad2deg } from './player/utils'
 import { dispProjIndex, projScaleFor, setVrRotation, srcProjIndex } from './player/vrShader'
 
 // 押し込み中にこの距離（px）を超えて動いたらドラッグ操作とみなし、
@@ -233,8 +233,8 @@ export default function Player() {
         const { width, height } = canvas.getBoundingClientRect()
         const cur = vrShiftRef.current
         vrShiftRef.current = {
-          x: clamp(cur.x + (2 * dx) / width,  -1, 1),
-          y: clamp(cur.y - (2 * dy) / height, -1, 1),
+          x: clamp(cur.x + (2 * dx) / width,  -VR_SHIFT_LIMIT, VR_SHIFT_LIMIT),
+          y: clamp(cur.y - (2 * dy) / height, -VR_SHIFT_LIMIT, VR_SHIFT_LIMIT),
         }
       } else {
         const sensitivity = vrSensitivityRef.current

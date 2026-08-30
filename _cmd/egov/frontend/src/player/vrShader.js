@@ -37,7 +37,7 @@ uniform float uSrcHalfFov;   // ソースの半画角（ラジアン）
 uniform int   uSrcProj;      // 0:正距円筒 1:等距離魚眼 2:等立体角魚眼
 uniform int   uDispProj;     // 0:透視 1:Panini 2:ステレオ投影
 uniform float uAspect;       // 画面の 幅/高さ
-uniform vec2  uShift;        // 描画結果の平行移動（1.0 = 画面の半分）
+uniform vec2  uShift;        // 描画結果の平行移動（1.0 = 画面の半分、±3 まで）
 uniform float uProjScale;    // 表示投影ごとの画面スケール（projScaleFor で算出）
 uniform mat3  uRot;          // yaw/pitch/roll
 
