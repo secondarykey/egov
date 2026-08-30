@@ -26,6 +26,8 @@ export default function VrViewpointOverlay({
   const { t } = useTranslation()
 
   const deg = v => `${v.toFixed(1)}°`
+  // ずらし量はウィンドウの半分を 100% とする
+  const pct = v => `${(v * 100).toFixed(0)}%`
 
   // 2列グリッドへ行優先で並ぶ。左列＝頭の向き、右列＝素材への当て込み。
   const sliderRows = [
@@ -33,7 +35,9 @@ export default function VrViewpointOverlay({
     { key: 'roll',   label: t('vr.roll'),   min: -45,  max: 45,  step: 0.1, reset: 0,   format: deg },
     { key: 'yaw',    label: t('vr.yaw'),    min: -180, max: 180, step: 0.5, reset: 0,   format: deg },
     { key: 'srcFov', label: t('vr.srcFov'), min: 120,  max: 240, step: 1,   reset: 180, format: v => `${v.toFixed(0)}°` },
-    { key: 'fov',    label: t('vr.fov'),    min: 20,   max: 100, step: 1,   reset: 75,  format: v => `${v.toFixed(0)}°` },
+    { key: 'shiftX', label: t('vr.shiftX'), min: -1,   max: 1,   step: 0.005, reset: 0,  format: pct },
+    { key: 'shiftY', label: t('vr.shiftY'), min: -1,   max: 1,   step: 0.005, reset: 0,  format: pct },
+    { key: 'fov',    label: t('vr.fov'),    min: 20,   max: 100, step: 1,     reset: 75, format: v => `${v.toFixed(0)}°` },
   ]
 
   // 投影方式は排他選択。onChange 直後に onCommit して既定へ焼く。

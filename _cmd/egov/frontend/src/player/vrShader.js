@@ -37,6 +37,7 @@ uniform float uSrcHalfFov;   // ソースの半画角（ラジアン）
 uniform int   uSrcProj;      // 0:正距円筒 1:等距離魚眼 2:等立体角魚眼
 uniform int   uDispProj;     // 0:透視 1:Panini 2:ステレオ投影
 uniform float uAspect;       // 画面の 幅/高さ
+uniform vec2  uShift;        // 描画結果の平行移動（1.0 = 画面の半分）
 uniform float uProjScale;    // 表示投影ごとの画面スケール（projScaleFor で算出）
 uniform mat3  uRot;          // yaw/pitch/roll
 
@@ -94,7 +95,9 @@ vec3 dirToUv(vec3 dir) {
 }
 
 void main() {
-  vec2 p = (vUv - 0.5) * 2.0;
+  // 平行移動はアスペクト補正の前に引く。こうすると X/Y とも
+  // 「1.0 = ウィンドウの半分」で単位が揃う。
+  vec2 p = (vUv - 0.5) * 2.0 - uShift;
   p.x *= uAspect;
 
   vec3 hit = dirToUv(uRot * screenToDir(p));
@@ -127,6 +130,7 @@ export function createVrQuad(texture) {
     uSrcProj:    { value: 0 },
     uDispProj:   { value: 0 },
     uAspect:     { value: 1 },
+    uShift:      { value: new THREE.Vector2(0, 0) },
     uProjScale:  { value: Math.tan((75 * Math.PI) / 360) },
     uRot:        { value: new THREE.Matrix3() },
   }

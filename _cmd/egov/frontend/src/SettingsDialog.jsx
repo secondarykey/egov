@@ -68,6 +68,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
   const [vr, setVr] = useState({
     initialPitch: 0, initialYaw: 0, initialRoll: 0,
     sourceProjection: 'equirect', sourceFov: 180, displayProjection: 'rectilinear',
+    shiftX: 0, shiftY: 0,
     fov: 75, dragSensitivity: 0.004, scrollSpeed: 0.05, defaultStart: 'left',
   })
   const [controls, setControls] = useState({

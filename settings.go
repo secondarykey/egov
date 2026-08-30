@@ -2,6 +2,7 @@ package egov
 
 import (
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -23,11 +24,16 @@ type VRSettings struct {
 	SourceFOV float64 `json:"sourceFov"`
 	// DisplayProjection は画面への投影方式。"rectilinear"（透視）は画面端が
 	// 引き伸ばされるため、"panini" / "stereographic" を選べるようにしている。
-	DisplayProjection string  `json:"displayProjection"`
-	FOV               float64 `json:"fov"`
-	DragSensitivity   float64 `json:"dragSensitivity"`
-	ScrollSpeed       float64 `json:"scrollSpeed"`
-	DefaultStart      string  `json:"defaultStart"`
+	DisplayProjection string `json:"displayProjection"`
+	// ShiftX/ShiftY は描画結果の平行移動（ウィンドウの半分を 1.0 とする比率）。
+	// 視点そのものは動かさないので歪みは増えず、寄せた側は黒帯になる。
+	ShiftX float64 `json:"shiftX"`
+	ShiftY float64 `json:"shiftY"`
+
+	FOV             float64 `json:"fov"`
+	DragSensitivity float64 `json:"dragSensitivity"`
+	ScrollSpeed     float64 `json:"scrollSpeed"`
+	DefaultStart    string  `json:"defaultStart"`
 }
 
 type PlaybackSettings struct {
@@ -114,6 +120,8 @@ func defaultSettings() *Settings {
 			SourceProjection:  "equirect",
 			SourceFOV:         180,
 			DisplayProjection: "rectilinear",
+			ShiftX:            0,
+			ShiftY:            0,
 			FOV:               75,
 			DragSensitivity:   0.004,
 			ScrollSpeed:       0.05,
@@ -143,6 +151,19 @@ func defaultSettings() *Settings {
 // settings.json に不正な値（0 の FOV、空のモード名等）が含まれていても、
 // 呼び出し側（フロントエンド含む）がガードなしで使えるようにする。
 // 既定値の定義は defaultSettings() に一元化されている。
+// clampUnit は -1..1 の範囲へ丸める。NaN は 0 に落とす。
+func clampUnit(v float64) float64 {
+	switch {
+	case math.IsNaN(v):
+		return 0
+	case v < -1:
+		return -1
+	case v > 1:
+		return 1
+	}
+	return v
+}
+
 func (s *Settings) normalize() {
 	d := defaultSettings()
 	if s.VR.FOV <= 0 {
@@ -154,6 +175,8 @@ func (s *Settings) normalize() {
 	if s.VR.ScrollSpeed <= 0 {
 		s.VR.ScrollSpeed = d.VR.ScrollSpeed
 	}
+	s.VR.ShiftX = clampUnit(s.VR.ShiftX)
+	s.VR.ShiftY = clampUnit(s.VR.ShiftY)
 	if s.VR.SourceFOV < 60 || s.VR.SourceFOV > 360 {
 		s.VR.SourceFOV = d.VR.SourceFOV
 	}

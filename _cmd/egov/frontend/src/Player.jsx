@@ -44,6 +44,8 @@ export default function Player() {
   const vrInitYawRef    = useRef(0)   // 保存済みの既定の向き（ラジアン）
   const vrInitPitchRef  = useRef(0)
   const vrInitRollRef   = useRef(0)
+  const vrShiftRef      = useRef({ x: 0, y: 0 })   // 描画結果の平行移動（画面半分=1.0）
+  const vrInitShiftRef  = useRef({ x: 0, y: 0 })
   const feedbackKeyRef      = useRef(0)
   const clickTimerRef           = useRef(null)
   const holdTimerRef            = useRef(null)
@@ -97,6 +99,7 @@ export default function Player() {
   const [vrView, setVrView] = useState({
     pitch: 0, yaw: 0, roll: 0, fov: 75,
     srcFov: 180, srcProj: 'equirect', dispProj: 'rectilinear',
+    shiftX: 0, shiftY: 0,
   })
   const [availableLangs, setAvailableLangs] = useState([])
   const [serverUrl,      setServerUrl]      = useState('')
@@ -140,6 +143,7 @@ export default function Player() {
     u.uDispProj.value   = dispProjIndex(vrDispProjRef.current)
     u.uSrcProj.value    = srcProjIndex(vrSrcProjRef.current)
     u.uSrcHalfFov.value = deg2rad(vrSrcFovRef.current) / 2
+    u.uShift.value.set(vrShiftRef.current.x, vrShiftRef.current.y)
     requestRenderRef.current?.()
   }
 
@@ -253,6 +257,7 @@ export default function Player() {
     vrInitPitchRef.current = vrPitchRef.current
     vrInitYawRef.current   = vrYawRef.current
     vrInitRollRef.current  = vrRollRef.current
+    vrInitShiftRef.current = { ...vrShiftRef.current }
     const s = await GetSettings()
     UpdateVRSettings({
       ...s.vr,
@@ -263,6 +268,8 @@ export default function Player() {
       sourceFov:         vrSrcFovRef.current,
       sourceProjection:  vrSrcProjRef.current,
       displayProjection: vrDispProjRef.current,
+      shiftX:            vrShiftRef.current.x,
+      shiftY:            vrShiftRef.current.y,
     })
   }
 
@@ -276,6 +283,8 @@ export default function Player() {
       srcFov:   vrSrcFovRef.current,
       srcProj:  vrSrcProjRef.current,
       dispProj: vrDispProjRef.current,
+      shiftX:   vrShiftRef.current.x,
+      shiftY:   vrShiftRef.current.y,
     })
     setStartOpen(true)
   }
@@ -290,6 +299,7 @@ export default function Player() {
     vrSrcFovRef.current  = next.srcFov
     vrSrcProjRef.current = next.srcProj
     vrDispProjRef.current = next.dispProj
+    vrShiftRef.current    = { x: next.shiftX, y: next.shiftY }
     syncVrView()
   }
 
@@ -399,10 +409,14 @@ export default function Player() {
       vrPitchRef.current     = initPitch
       vrYawRef.current       = initYaw
       vrRollRef.current      = initRoll
+      const initShift = { x: s.vr.shiftX, y: s.vr.shiftY }
+      vrInitShiftRef.current = { ...initShift }
+      vrShiftRef.current     = { ...initShift }
       setVrView({
         pitch: s.vr.initialPitch, yaw: s.vr.initialYaw, roll: s.vr.initialRoll,
         fov: s.vr.fov, srcFov: s.vr.sourceFov,
         srcProj: s.vr.sourceProjection, dispProj: s.vr.displayProjection,
+        shiftX: initShift.x, shiftY: initShift.y,
       })
       setVrStart(s.vr.defaultStart)
       vrStartRef.current = s.vr.defaultStart
@@ -658,6 +672,7 @@ export default function Player() {
       vrPitchRef.current = vrInitPitchRef.current
       vrYawRef.current   = vrInitYawRef.current
       vrRollRef.current  = vrInitRollRef.current
+      vrShiftRef.current = { ...vrInitShiftRef.current }
       syncVrView()
     } else if (mode === 'normal') {
       const video = videoRef.current

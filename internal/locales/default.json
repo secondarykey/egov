@@ -8,6 +8,8 @@
     "pitch": "Pitch (Look Up/Down)",
     "yaw": "Yaw (Look Left/Right)",
     "roll": "Roll (Horizon Tilt)",
+    "shiftX": "Shift Horizontally",
+    "shiftY": "Shift Vertically",
     "fov": "Field of View",
     "srcFov": "Source FOV (lens angle)",
     "sourceProjection": "Source projection",
