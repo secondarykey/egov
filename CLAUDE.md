@@ -94,7 +94,10 @@ Key facts:
   `PerspectiveCamera` ＋ plane、VRモードは専用シーンのフルスクリーンquad＋シェーダ。
   両者は同じ `VideoTexture` を共有し、`renderOnce()` が `modeRef` で描画先を切り替える
 - **MUI** for all UI controls (title bar, control bar, sliders, menus)
-- Three view modes: `normal` (default, window-fit), `free` (pan/zoom), `vr` (spherical, right-click rotates) — internal names match the UI labels. Legacy `fit` in settings.json is migrated to `normal` by `Settings.normalize()`
+- Three view modes: `normal` (default, window-fit), `free` (pan/zoom), `vr` — internal names match the UI labels. Legacy `fit` in settings.json is migrated to `normal` by `Settings.normalize()`
+- マウス割り当ては free と vr で意味を揃えてある。**右ドラッグ＝平行移動、
+  ホイール＝寄る/引く**（free はパン＋ドリー、vr は `uShift`＋画角）。
+  VRの首振りは**中ドラッグ**。左ボタンは全モードで再生・シークが使う
 - VR split-screen: シェーダの `uSrcOffset` / `uSrcRepeat` uniform が左右／上下の半分を選ぶ。
   `texture.repeat/offset` は平面モードと共有しているので触らないこと（等倍のまま）
 

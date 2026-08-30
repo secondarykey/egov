@@ -206,31 +206,48 @@ export default function Player() {
     requestRenderRef.current?.()
   }, [mode, vrStart])
 
-  // VRモード: 右クリックドラッグで首振り、ホイールで画角
+  // VRモード: 右ドラッグで平行移動、中ドラッグで首振り、ホイールで画角。
+  // 右＝平行移動 / ホイール＝寄る引く は free モードと揃えてある。
   useEffect(() => {
     if (mode !== 'vr') return
     const canvas = mountRef.current?.querySelector('canvas')
     if (!canvas) return
 
-    let startX = 0, startY = 0, active = false
+    let startX = 0, startY = 0, drag = null   // 'shift' | 'look' | null
 
     const onPointerDown = (e) => {
-      if (e.button !== 2) return
-      startX = e.clientX; startY = e.clientY; active = true
+      const kind = e.button === 2 ? 'shift' : e.button === 1 ? 'look' : null
+      if (!kind) return
+      startX = e.clientX; startY = e.clientY; drag = kind
       canvas.setPointerCapture(e.pointerId)
       e.preventDefault()
     }
     const onPointerMove = (e) => {
-      if (!active) return
-      const sensitivity = vrSensitivityRef.current
-      // 向きは ref に保持し、モード切替やスライダー調整と整合させる
-      vrYawRef.current  -= (e.clientX - startX) * sensitivity
-      vrPitchRef.current = Math.max(-Math.PI / 2, Math.min(Math.PI / 2,
-        vrPitchRef.current - (e.clientY - startY) * sensitivity))
+      if (!drag) return
+      const dx = e.clientX - startX, dy = e.clientY - startY
       startX = e.clientX; startY = e.clientY
+
+      if (drag === 'shift') {
+        // uShift は「1.0 = ウィンドウの半分」。画面座標を同じ単位へ直すと
+        // 映像がカーソルに1:1で追従する。uShift.y は上が正なので dy は反転。
+        const { width, height } = canvas.getBoundingClientRect()
+        const cur = vrShiftRef.current
+        vrShiftRef.current = {
+          x: clamp(cur.x + (2 * dx) / width,  -1, 1),
+          y: clamp(cur.y - (2 * dy) / height, -1, 1),
+        }
+      } else {
+        const sensitivity = vrSensitivityRef.current
+        // 向きは ref に保持し、モード切替やスライダー調整と整合させる
+        vrYawRef.current   -= dx * sensitivity
+        vrPitchRef.current  = clamp(vrPitchRef.current - dy * sensitivity, -Math.PI / 2, Math.PI / 2)
+      }
       syncVrView()
     }
-    const onPointerUp = () => { active = false }
+    const onPointerUp = () => { drag = null }
+
+    // 中ボタンの既定動作（オートスクロール）を抑止する
+    const onAuxClick = (e) => { if (e.button === 1) e.preventDefault() }
 
     const onWheel = (e) => {
       e.preventDefault()
@@ -241,12 +258,16 @@ export default function Player() {
     canvas.addEventListener('pointerdown', onPointerDown)
     canvas.addEventListener('pointermove', onPointerMove)
     canvas.addEventListener('pointerup', onPointerUp)
+    canvas.addEventListener('pointercancel', onPointerUp)
+    canvas.addEventListener('auxclick', onAuxClick)
     canvas.addEventListener('wheel', onWheel, { passive: false })
 
     return () => {
       canvas.removeEventListener('pointerdown', onPointerDown)
       canvas.removeEventListener('pointermove', onPointerMove)
       canvas.removeEventListener('pointerup', onPointerUp)
+      canvas.removeEventListener('pointercancel', onPointerUp)
+      canvas.removeEventListener('auxclick', onAuxClick)
       canvas.removeEventListener('wheel', onWheel)
     }
   }, [mode])
