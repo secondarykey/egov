@@ -166,8 +166,15 @@ VR描画は球メッシュ＋`PerspectiveCamera` ではなく、**フルスク�
   平面モニタでは歪みとして残るため Panini / ステレオ投影を選べるようにしている
 - `uProjScale` は「画面上端／下端で視線角がちょうど `fov/2` になる係数」。
   投影方式を変えても画角の意味が揃うよう `projScaleFor()` で算出する
-- 出力は `#include <colorspace_fragment>` で再符号化する。`ShaderMaterial`（Rawではない）
-  なら `linearToOutputTexel` が `WebGLProgram` の prefixFragment に注入される
+- **色空間は自前で往復させる。** three.js は VideoTexture に限って sRGB の内部
+  フォーマットを使わない（`WebGLTextures.js` の `getInternalFormat()` に
+  `forceLinearTransfer = texture.isVideoTexture` が渡り `RGBA8` になる）。
+  サンプル結果は sRGB のままなので `sRGBTransferEOTF()` で明示的に復号し、
+  `#include <colorspace_fragment>` で再符号化する。組み込みマテリアルが
+  `DECODE_VIDEO_TEXTURE` で行っているのと同じこと。
+  **復号を省くと sRGB が二重にかかり、画が白っぽく浮く。**
+  どちらの関数も `ShaderMaterial`（Rawではない）なら `WebGLProgram` の
+  prefixFragment に注入されるので宣言不要
 - **視点の平行移動（旧 `positionX/Y/Z`）は撤去した。** 180°映像には視差情報が無く、
   投影中心から離れても「一歩前に出る」にはならず非一様な歪みが増えるだけで、
   これで位置を合わせようとしても収束しない

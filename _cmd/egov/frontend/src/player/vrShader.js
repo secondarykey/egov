@@ -104,8 +104,13 @@ void main() {
   }
   gl_FragColor = texture2D(uMap, uSrcOffset + hit.xy * uSrcRepeat);
 
-  // sRGBテクスチャはサンプル時にリニアへ復号されるため、出力側で再符号化する。
-  // MeshBasicMaterial 経由（旧実装）と同じ結果になる。
+  // three.js は VideoTexture に限って sRGB の内部フォーマットを使わない
+  // （WebGLTextures.js の getInternalFormat に forceLinearTransfer =
+  //  texture.isVideoTexture が渡るため RGBA8 になる）。サンプル結果は
+  // sRGB のままなので、組み込みマテリアルの DECODE_VIDEO_TEXTURE と同じく
+  // シェーダ内で明示的にリニアへ復号する。これを省くと出力側の再符号化と
+  // あわせて sRGB が二重にかかり、画が白っぽく浮く。
+  gl_FragColor = sRGBTransferEOTF(gl_FragColor);
   #include <colorspace_fragment>
 }
 `
