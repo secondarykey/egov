@@ -208,7 +208,7 @@ VR描画は球メッシュ＋`PerspectiveCamera` ではなく、**フルスク�
 
 WebKitGTK はミュートしていないメディアの自動再生にユーザー操作を要求するため、
 ファイルを開いた直後の `video.play()` は必ず `NotAllowedError` で拒否される。
-Wails v3 alpha2.114 時点で `EnableAutoplayWithoutUserAction`（`mediaTypesRequiringUserActionForPlayback`）は
+Wails v3 beta.16 時点でも `EnableAutoplayWithoutUserAction`（`mediaTypesRequiringUserActionForPlayback`）は
 **darwin/iOS 専用**で、Linux 側の `linux_cgo.go` は
 `webkit_settings_set_media_playback_requires_user_gesture` を一切呼んでいない。
 Windows の WebView2 は既定で自動再生を許可するため、この問題は Linux でのみ顕在化する。
