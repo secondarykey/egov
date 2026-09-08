@@ -18,7 +18,7 @@ import ThumbnailGrid from './player/ThumbnailGrid'
 import VrViewpointOverlay from './player/VrViewpointOverlay'
 import DiagnosticsOverlay from './player/DiagnosticsOverlay'
 import { ClickFeedback, DropHint, EmptyState, SeekFeedback, SeekZoneOverlay, VideoErrorOverlay } from './player/Overlays'
-import { VR_FOV_MAX, VR_FOV_MIN, VR_SHIFT_LIMIT, VR_START, barStyle, clamp, deg2rad, fmt, rad2deg } from './player/utils'
+import { VR_FOV_MAX, VR_FOV_MIN, VR_SHIFT_LIMIT, VR_START, barStyle, clamp, deg2rad, fmt, isResizeEdge, rad2deg } from './player/utils'
 import { dispProjIndex, projScaleFor, setVrRotation, srcProjIndex } from './player/vrShader'
 
 // 押し込み中にこの距離（px）を超えて動いたらドラッグ操作とみなし、
@@ -760,6 +760,10 @@ export default function Player() {
   // シングルクリックでも一定時間（800ms）保持し続けたらコントローラー（オーバーレイ）を表示する
   const handleCanvasMouseDown = (e) => {
     if (e.button !== 0) return
+    // ウィンドウ枠のリサイズ域では何もしない（utils.isResizeEdge 参照）。
+    // ここで長押しオーバーレイを開くと、リサイズ中は mouseup が
+    // ランタイムに握り潰されるため閉じられず、早送りが続いてしまう。
+    if (isResizeEdge(e.clientX, e.clientY)) return
     // 前回のジェスチャで click が来ないまま残った抑止フラグを引きずらない
     wasHoldRef.current = false
     const pos = { x: e.clientX, y: e.clientY }
@@ -795,6 +799,9 @@ export default function Player() {
   }
 
   const handleCanvasClick = (e) => {
+    // 枠を掴んだつもりの操作で再生/一時停止が切り替わらないよう、
+    // mousedown と同じ領域をクリックでも無視する
+    if (isResizeEdge(e.clientX, e.clientY)) return
     if (wasHoldRef.current) {
       wasHoldRef.current = false
       return

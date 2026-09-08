@@ -31,6 +31,42 @@ export const VR_SHIFT_LIMIT = 3
 export const VR_FOV_MIN = 20
 export const VR_FOV_MAX = 180
 
+// ウィンドウ枠のリサイズ判定域内か。
+// @wailsio/runtime の drag.js は window.outerWidth/outerHeight とマウス座標の
+// 比較だけでリサイズ端を決める（既定 5px、角は +10px）。そこで mousedown すると
+// canResize が立ち、続く mousemove で resizing に入って以降の mouseup/click は
+// capture 段で stopImmediatePropagation される。
+//
+// つまりリサイズ開始時、こちらの mousedown は届くのに mouseup が届かない。
+// 長押しの早送りオーバーレイがそこで開くと、離しても閉じず早送りが続く。
+// 映像側のクリック処理はこの領域を最初から無視する。
+//
+// しきい値は drag.js と揃える（フラグが読めない状況では既定値にフォールバック）。
+const resizeFlag = (key, fallback) => {
+  try {
+    const v = window._wails?.flags?.[key]
+    return typeof v === 'number' && v > 0 ? v : fallback
+  } catch {
+    return fallback
+  }
+}
+
+export const isResizeEdge = (clientX, clientY) => {
+  const hw    = resizeFlag('system.resizeHandleWidth', 5)
+  const hh    = resizeFlag('system.resizeHandleHeight', 5)
+  const extra = resizeFlag('resizeCornerExtra', 10)
+
+  const right  = window.outerWidth  - clientX
+  const bottom = window.outerHeight - clientY
+
+  // 角は判定域が広い。左右いずれかの角領域かつ上下いずれかの角領域なら角。
+  const inCornerX = clientX < hw + extra || right  < hw + extra
+  const inCornerY = clientY < hh + extra || bottom < hh + extra
+  if (inCornerX && inCornerY) return true
+
+  return clientX < hw || right < hw || clientY < hh || bottom < hh
+}
+
 // 上下バー・サイドパネル共通の半透明スタイル
 export const barStyle = {
   background:     'rgba(0,0,0,0.6)',

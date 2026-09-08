@@ -283,6 +283,14 @@ Window position/size restoration uses a **two-phase approach**:
 
 `@wailsio/runtime/dist/drag.js` のリサイズハンドル判定は `window.outerWidth/outerHeight` とマウス座標の比較のみで行われ、DOM要素のマージンには依存しない。そのため Three.js canvas 等の全面要素にマージンは不要で、`100vw`/`100vh` で映像を100%表示にしてもリサイズは機能する（以前は `calc(100vw - 10px)` + `margin: 5px` としていたが撤去済み）。
 
+⚠️ **リサイズ域では映像側のクリック処理を動かしてはいけない。** リサイズ開始は
+mousedown → mousemove の順なので、端で押した時点の `mousedown` はこちらへ届くが、
+`resizing` に入った後の `mouseup`/`click` は capture 段で
+`stopImmediatePropagation` され**届かない**。長押しの早送りオーバーレイをそこで
+開くと、ボタンを離しても閉じずに早送りが続く。`utils.isResizeEdge()` が
+drag.js と同じしきい値（既定 5px、角は +10px）で判定するので、
+`handleCanvasMouseDown` / `handleCanvasClick` はこれで早期 return する。
+
 ### Runtime Import
 
 `main.jsx` で `import '@wailsio/runtime'` をベア import しておくこと。個別の名前付き import（`import { Window } from '@wailsio/runtime'`）だけでは `drag.js` の副作用が有効化されない場合がある。
