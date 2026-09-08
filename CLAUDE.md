@@ -178,9 +178,12 @@ VR描画は球メッシュ＋`PerspectiveCamera` ではなく、**フルスク�
   **復号を省くと sRGB が二重にかかり、画が白っぽく浮く。**
   どちらの関数も `ShaderMaterial`（Rawではない）なら `WebGLProgram` の
   prefixFragment に注入されるので宣言不要
-- **表示画角の上限 `VR_FOV_MAX` / `vrFovMax` = 160° は透視投影で決まる。**
-  `projScaleFor()` の `tan(fov/2)` は fov=180° で発散するため 180 には届かせられない。
-  広角側は画面端の引き伸ばしが強いので Panini / ステレオ投影と組み合わせて使う
+- **表示画角は `VR_FOV_MIN`/`VR_FOV_MAX` = 20〜180°**（Go側は `vrFovMin`/`vrFovMax`）。
+  素材が 180° 級である以上 180° は設定したい値になりうるので、
+  「歪みが強いから」で手前で切らない。透視/Panini の `tan(fov/2)` は
+  fov=180° で発散し Infinity が uniform に入ると全面 NaN で黒くなるため、
+  `projScaleFor()` が半画角を 90° の直前へ丸めて潰す。
+  ステレオ投影は `2 tan(fov/4)` なので 180° でも有限で、広角側では実用になる
 - `uShift` は**描画結果の**平行移動（アスペクト補正の**前**に引くので X/Y とも
   「1.0 = ウィンドウの半分」で単位が揃う）。視点は動かさないので歪みは増えない。
   上限 `VR_SHIFT_LIMIT` / `vrShiftLimit` = 3（±300%）は**表示投影で決まる**。

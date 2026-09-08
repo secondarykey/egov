@@ -24,12 +24,12 @@ export const clamp = (v, min, max) => Math.max(min, Math.min(max, v))
 // 素材の範囲を超える（fov75 で 300% を過ぎると画が残らない）。そこで切る。
 export const VR_SHIFT_LIMIT = 3
 
-// 表示側の垂直画角（度）の範囲。上限は透視投影で決まる。
-// projScaleFor() の tan(fov/2) は fov=180° で発散するため 180 には届かせられない。
-// 160°（tan80° ≒ 5.7）でも画面端の引き伸ばしは相当なものだが、
-// Panini/ステレオ投影を選べば実用になる。
+// 表示側の垂直画角（度）の範囲。素材が 180° 級である以上 180° は
+// 「設定したい値」になりうるので、そこまで届かせる。
+// 透視/Panini は tan(fov/2) が 180° ちょうどで発散するが、それは
+// projScaleFor() 側で潰す（ステレオ投影なら 180° は普通に使える）。
 export const VR_FOV_MIN = 20
-export const VR_FOV_MAX = 160
+export const VR_FOV_MAX = 180
 
 // 上下バー・サイドパネル共通の半透明スタイル
 export const barStyle = {
