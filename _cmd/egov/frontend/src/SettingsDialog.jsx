@@ -62,7 +62,15 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
     GetDefaultSettings().then(setDefaults)
   }, [])
   const [playback, setPlayback] = useState({ defaultMode: 'normal', language: 'en', activeColor: '#4fc3f7', thumbnailEnabled: true })
-  const [vr, setVr] = useState({ initialPitch: 0, initialYaw: 0, positionX: 0, positionY: 0, positionZ: 0, fov: 75, dragSensitivity: 0.004, scrollSpeed: 0.05, defaultStart: 'left' })
+  // マウント直後に GetSettings() の値で置き換わるまでの暫定値。
+  // 視点・投影の調整は VR オーバーレイ側が担うため、ここでは編集しないが
+  // 保存時にフィールドを落とさないよう形は合わせておく。
+  const [vr, setVr] = useState({
+    initialPitch: 0, initialYaw: 0, initialRoll: 0,
+    sourceProjection: 'equirect', sourceFov: 180, displayProjection: 'rectilinear',
+    shiftX: 0, shiftY: 0,
+    fov: 75, dragSensitivity: 0.004, scrollSpeed: 0.05, defaultStart: 'left',
+  })
   const [controls, setControls] = useState({
     clickTimeoutMs: 300, doubleClickSeekSecs: 10, dragSeekSecs: 10,
     fastSeekSecs: 60, arrowSeekSecs: 5, thumbnailGridSize: 4,

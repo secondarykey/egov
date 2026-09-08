@@ -18,7 +18,8 @@ import ThumbnailGrid from './player/ThumbnailGrid'
 import VrViewpointOverlay from './player/VrViewpointOverlay'
 import DiagnosticsOverlay from './player/DiagnosticsOverlay'
 import { ClickFeedback, DropHint, EmptyState, SeekFeedback, SeekZoneOverlay, VideoErrorOverlay } from './player/Overlays'
-import { VR_START, applyHeadRotation, applySpherePosition, barStyle, deg2rad, fmt, rad2deg } from './player/utils'
+import { VR_SHIFT_LIMIT, VR_START, barStyle, clamp, deg2rad, fmt, rad2deg } from './player/utils'
+import { dispProjIndex, projScaleFor, setVrRotation, srcProjIndex } from './player/vrShader'
 
 // 押し込み中にこの距離（px）を超えて動いたらドラッグ操作とみなし、
 // シークコントローラーは表示しない（free/vr モードの視点操作を邪魔しないため）
@@ -39,10 +40,11 @@ export default function Player() {
   const vrStartRef      = useRef('left')
   const vrYawRef        = useRef(0)   // 現在の頭の向き（ラジアン、セッション中保持）
   const vrPitchRef      = useRef(0)
-  const vrInitYawRef    = useRef(0)   // 保存済みの既定の向き（ラジアン）
-  const vrInitPitchRef  = useRef(0)
-  const vrPosRef        = useRef({ x: 0, y: 0, z: 0 })   // 現在の視点位置（半径比）
-  const vrInitPosRef    = useRef({ x: 0, y: 0, z: 0 })   // 保存済みの既定位置
+  const vrRollRef       = useRef(0)   // 素材の水平傾き補正（ラジアン）
+  const vrShiftRef      = useRef({ x: 0, y: 0 })   // 描画結果の平行移動（画面半分=1.0）
+  // 保存済みの既定値。個別の ref に分けると保存・リセットのどちらかで
+  // 項目を取りこぼすため、currentVrView() が返す形のまま丸ごと持つ。
+  const vrDefaultsRef   = useRef(null)
   const feedbackKeyRef      = useRef(0)
   const clickTimerRef           = useRef(null)
   const holdTimerRef            = useRef(null)
@@ -63,7 +65,10 @@ export default function Player() {
   const justFocusedRef      = useRef(false)
   const focusTimerRef       = useRef(null)
   const acceptInactiveRef   = useRef(false)
-  const vrFovRef            = useRef(75)
+  const vrFovRef            = useRef(75)          // 表示側の垂直画角（度）
+  const vrSrcFovRef         = useRef(180)         // 素材の画角（度）
+  const vrSrcProjRef        = useRef('equirect')  // 素材の投影方式
+  const vrDispProjRef       = useRef('rectilinear')
   const vrSensitivityRef    = useRef(0.004)
   const vrScrollSpeedRef    = useRef(0.05)
   const uiHideDelayRef      = useRef(1500)
@@ -89,7 +94,12 @@ export default function Player() {
   const [seekFeedback,  setSeekFeedback]  = useState(null)
   const [thumbEnabled, setThumbEnabled] = useState(true)
   const [language,     setLanguage]     = useState('en')
-  const [vrView,         setVrView]         = useState({ pitch: 0, yaw: 0, fov: 75, posX: 0, posY: 0, posZ: 0 })   // オーバーレイ表示用（度・半径比）
+  // オーバーレイ表示用の視点パラメータ。角度はすべて度。
+  const [vrView, setVrView] = useState({
+    pitch: 0, yaw: 0, roll: 0, fov: 75,
+    srcFov: 180, srcProj: 'equirect', dispProj: 'rectilinear',
+    shiftX: 0, shiftY: 0,
+  })
   const [availableLangs, setAvailableLangs] = useState([])
   const [serverUrl,      setServerUrl]      = useState('')
   const [settingsOpen,   setSettingsOpen]   = useState(false)
@@ -110,29 +120,79 @@ export default function Player() {
 
   // Three.js シーン（生成・破棄・描画ループはフック側が担う）
   const {
-    mountRef, videoRef, cameraRef, controlsRef, sphereRef, planeRef,
-    textureRef, fitCameraRef, headGroupRef, rendererRef,
+    mountRef, videoRef, cameraRef, controlsRef, planeRef,
+    textureRef, fitCameraRef, rendererRef,
+    vrUniformsRef, syncVrSizeRef,
     requestRenderRef, objectUrlRef, detectedFpsRef,
     frameCountRef, renderCountRef, renderPathRef,
   } = useThreeScene({
     modeRef,
-    vrScrollSpeedRef,
     onDuration: setDuration,
     onVideoEl: setVideoEl,
     onVideoError: setVideoError,
   })
 
+  // VR視点の ref をすべてシェーダの uniform へ反映する。
+  // VRの状態は Player 側の ref を単一の真実とし、変更点はすべてここを通す。
+  const syncVrView = () => {
+    const u = vrUniformsRef.current
+    if (!u) return
+    setVrRotation(u.uRot.value, vrYawRef.current, vrPitchRef.current, vrRollRef.current)
+    u.uProjScale.value  = projScaleFor(vrDispProjRef.current, deg2rad(vrFovRef.current) / 2)
+    u.uDispProj.value   = dispProjIndex(vrDispProjRef.current)
+    u.uSrcProj.value    = srcProjIndex(vrSrcProjRef.current)
+    u.uSrcHalfFov.value = deg2rad(vrSrcFovRef.current) / 2
+    u.uShift.value.set(vrShiftRef.current.x, vrShiftRef.current.y)
+    requestRenderRef.current?.()
+  }
+
+  // VR視点の全パラメータを1つのオブジェクトにまとめる／書き戻す。
+  // 保存・リセット・オーバーレイはすべてこの形を経由するので、
+  // 項目を足したときに片側だけ忘れることがない。
+  const currentVrView = () => ({
+    pitch:    vrPitchRef.current,
+    yaw:      vrYawRef.current,
+    roll:     vrRollRef.current,
+    shift:    { ...vrShiftRef.current },
+    fov:      vrFovRef.current,
+    srcFov:   vrSrcFovRef.current,
+    srcProj:  vrSrcProjRef.current,
+    dispProj: vrDispProjRef.current,
+  })
+
+  const restoreVrView = (v) => {
+    if (!v) return
+    vrPitchRef.current    = v.pitch
+    vrYawRef.current      = v.yaw
+    vrRollRef.current     = v.roll
+    vrShiftRef.current    = { ...v.shift }
+    vrFovRef.current      = v.fov
+    vrSrcFovRef.current   = v.srcFov
+    vrSrcProjRef.current  = v.srcProj
+    vrDispProjRef.current = v.dispProj
+    syncVrView()
+  }
+
+  // オーバーレイのスライダーは度・比率なので単位を変換する
+  const toOverlay = (v) => ({
+    pitch: rad2deg(v.pitch), yaw: rad2deg(v.yaw), roll: rad2deg(v.roll),
+    fov: v.fov, srcFov: v.srcFov, srcProj: v.srcProj, dispProj: v.dispProj,
+    shiftX: v.shift.x, shiftY: v.shift.y,
+  })
+
+  const fromOverlay = (o) => ({
+    pitch: deg2rad(o.pitch), yaw: deg2rad(o.yaw), roll: deg2rad(o.roll),
+    shift: { x: o.shiftX, y: o.shiftY },
+    fov: o.fov, srcFov: o.srcFov, srcProj: o.srcProj, dispProj: o.dispProj,
+  })
+
   // カメラ・コントロール切替
   useEffect(() => {
     modeRef.current = mode
-    if (!sphereRef.current || !planeRef.current || !cameraRef.current || !controlsRef.current || !headGroupRef.current) return
+    if (!planeRef.current || !cameraRef.current || !controlsRef.current) return
 
-    const camera    = cameraRef.current
-    const controls  = controlsRef.current
-    const headGroup = headGroupRef.current
-
-    sphereRef.current.visible = mode === 'vr'
-    planeRef.current.visible  = mode !== 'vr'
+    const camera   = cameraRef.current
+    const controls = controlsRef.current
 
     const mount = mountRef.current
     if (mount) {
@@ -141,16 +201,12 @@ export default function Player() {
     }
 
     if (mode === 'vr') {
-      camera.position.set(0, 0, 0.1)
-      // セッション中の頭の向き・視点位置を維持して復帰する
-      applyHeadRotation(headGroup, vrYawRef.current, vrPitchRef.current)
-      applySpherePosition(sphereRef.current, vrPosRef.current)
-      camera.fov     = vrFovRef.current
+      // VRはシェーダ側で投影するため PerspectiveCamera は使わない。
+      // セッション中の頭の向きを維持して復帰する。
       controls.enabled = false
-      camera.updateProjectionMatrix()
-      planeRef.current.rotation.z = 0
+      syncVrSizeRef.current?.()
+      syncVrView()
     } else if (mode === 'free') {
-      headGroup.rotation.set(0, 0, 0)
       camera.position.set(0, 0, 9)
       camera.fov            = 60
       controls.enabled      = true
@@ -163,7 +219,6 @@ export default function Player() {
       controls.update()
       planeRef.current.rotation.z = -(rotation * Math.PI) / 180
     } else {
-      headGroup.rotation.set(0, 0, 0)
       camera.fov            = 60
       controls.enabled      = true
       controls.enableRotate = false
@@ -176,106 +231,116 @@ export default function Player() {
     requestRenderRef.current?.()
   }, [mode, vrStart, rotation])
 
-  // テクスチャ切替（モードまたはVR始点変更時）
+  // VR始点（SBSのどの半分を使うか）の切替。
+  // 平面モードは同じテクスチャを等倍で使うため、texture.repeat/offset は
+  // 触らず、切り出しはVRシェーダの uniform 側だけで行う。
   useEffect(() => {
     vrStartRef.current = vrStart
-    if (!textureRef.current) return
-    if (mode === 'vr') {
-      const { repeat, offset } = VR_START[vrStart]
-      textureRef.current.repeat.set(...repeat)
-      textureRef.current.offset.set(...offset)
-    } else {
-      textureRef.current.repeat.set(1, 1)
-      textureRef.current.offset.set(0, 0)
-    }
-    textureRef.current.needsUpdate = true
+    const u = vrUniformsRef.current
+    if (!u) return
+    const { repeat, offset } = VR_START[vrStart]
+    u.uSrcRepeat.value.set(...repeat)
+    u.uSrcOffset.value.set(...offset)
+    syncVrSizeRef.current?.()
     requestRenderRef.current?.()
   }, [mode, vrStart])
 
-  // VRモード: 右クリックドラッグでheadGroupを回転（首振り）
+  // VRモード: 右ドラッグで平行移動、中ドラッグで首振り、ホイールで画角。
+  // 右＝平行移動 / ホイール＝寄る引く は free モードと揃えてある。
   useEffect(() => {
     if (mode !== 'vr') return
     const canvas = mountRef.current?.querySelector('canvas')
     if (!canvas) return
 
-    let startX = 0, startY = 0, active = false
+    let startX = 0, startY = 0, drag = null   // 'shift' | 'look' | null
 
     const onPointerDown = (e) => {
-      if (e.button !== 2) return
-      startX = e.clientX; startY = e.clientY; active = true
+      const kind = e.button === 2 ? 'shift' : e.button === 1 ? 'look' : null
+      if (!kind) return
+      startX = e.clientX; startY = e.clientY; drag = kind
       canvas.setPointerCapture(e.pointerId)
       e.preventDefault()
     }
     const onPointerMove = (e) => {
-      if (!active) return
-      const sensitivity = vrSensitivityRef.current
-      // 向きは ref に保持し、モード切替やスライダー調整と整合させる
-      vrYawRef.current  -= (e.clientX - startX) * sensitivity
-      vrPitchRef.current = Math.max(-Math.PI / 2, Math.min(Math.PI / 2,
-        vrPitchRef.current - (e.clientY - startY) * sensitivity))
+      if (!drag) return
+      const dx = e.clientX - startX, dy = e.clientY - startY
       startX = e.clientX; startY = e.clientY
-      applyHeadRotation(headGroupRef.current, vrYawRef.current, vrPitchRef.current)
-      requestRenderRef.current?.()
+
+      if (drag === 'shift') {
+        // uShift は「1.0 = ウィンドウの半分」。画面座標を同じ単位へ直すと
+        // 映像がカーソルに1:1で追従する。uShift.y は上が正なので dy は反転。
+        const { width, height } = canvas.getBoundingClientRect()
+        const cur = vrShiftRef.current
+        vrShiftRef.current = {
+          x: clamp(cur.x + (2 * dx) / width,  -VR_SHIFT_LIMIT, VR_SHIFT_LIMIT),
+          y: clamp(cur.y - (2 * dy) / height, -VR_SHIFT_LIMIT, VR_SHIFT_LIMIT),
+        }
+      } else {
+        const sensitivity = vrSensitivityRef.current
+        // 向きは ref に保持し、モード切替やスライダー調整と整合させる
+        vrYawRef.current   -= dx * sensitivity
+        vrPitchRef.current  = clamp(vrPitchRef.current - dy * sensitivity, -Math.PI / 2, Math.PI / 2)
+      }
+      syncVrView()
     }
-    const onPointerUp = () => { active = false }
+    const onPointerUp = () => { drag = null }
+
+    // 中ボタンの既定動作（オートスクロール）を抑止する
+    const onAuxClick = (e) => { if (e.button === 1) e.preventDefault() }
+
+    const onWheel = (e) => {
+      e.preventDefault()
+      vrFovRef.current = clamp(vrFovRef.current + e.deltaY * vrScrollSpeedRef.current, 20, 100)
+      syncVrView()
+    }
 
     canvas.addEventListener('pointerdown', onPointerDown)
     canvas.addEventListener('pointermove', onPointerMove)
     canvas.addEventListener('pointerup', onPointerUp)
+    canvas.addEventListener('pointercancel', onPointerUp)
+    canvas.addEventListener('auxclick', onAuxClick)
+    canvas.addEventListener('wheel', onWheel, { passive: false })
 
     return () => {
       canvas.removeEventListener('pointerdown', onPointerDown)
       canvas.removeEventListener('pointermove', onPointerMove)
       canvas.removeEventListener('pointerup', onPointerUp)
+      canvas.removeEventListener('pointercancel', onPointerUp)
+      canvas.removeEventListener('auxclick', onAuxClick)
+      canvas.removeEventListener('wheel', onWheel)
     }
   }, [mode])
 
-  // 現在の頭の向き・視点位置・FOVを既定として保存する。
+  // 現在の視点・投影設定を既定として保存する。
   // 他のVR設定（感度等）は保存済みの値を維持する。
   const persistVRView = async () => {
-    const fov = cameraRef.current?.fov ?? vrFovRef.current
-    vrInitPitchRef.current = vrPitchRef.current
-    vrInitYawRef.current   = vrYawRef.current
-    vrInitPosRef.current   = { ...vrPosRef.current }
-    vrFovRef.current       = fov
+    const v = currentVrView()
+    vrDefaultsRef.current = v
     const s = await GetSettings()
     UpdateVRSettings({
       ...s.vr,
-      initialPitch: rad2deg(vrPitchRef.current),
-      initialYaw:   rad2deg(vrYawRef.current),
-      positionX:    vrPosRef.current.x,
-      positionY:    vrPosRef.current.y,
-      positionZ:    vrPosRef.current.z,
-      fov,
+      initialPitch:      rad2deg(v.pitch),
+      initialYaw:        rad2deg(v.yaw),
+      initialRoll:       rad2deg(v.roll),
+      fov:               v.fov,
+      sourceFov:         v.srcFov,
+      sourceProjection:  v.srcProj,
+      displayProjection: v.dispProj,
+      shiftX:            v.shift.x,
+      shiftY:            v.shift.y,
     })
   }
 
-  // VR視点オーバーレイを開く。スライダーへ現在の向き・位置を反映する。
+  // VR視点オーバーレイを開く。スライダーへ現在値を反映する。
   const openVrOverlay = () => {
-    setVrView({
-      pitch: rad2deg(vrPitchRef.current),
-      yaw:   rad2deg(vrYawRef.current),
-      fov:   cameraRef.current?.fov ?? vrFovRef.current,
-      posX:  vrPosRef.current.x,
-      posY:  vrPosRef.current.y,
-      posZ:  vrPosRef.current.z,
-    })
+    setVrView(toOverlay(currentVrView()))
     setStartOpen(true)
   }
 
-  // オーバーレイのスライダー変更を即時反映する
+  // オーバーレイの変更を即時反映する
   const applyVrView = (next) => {
     setVrView(next)
-    vrPitchRef.current = deg2rad(next.pitch)
-    vrYawRef.current   = deg2rad(next.yaw)
-    vrPosRef.current   = { x: next.posX, y: next.posY, z: next.posZ }
-    applyHeadRotation(headGroupRef.current, vrYawRef.current, vrPitchRef.current)
-    applySpherePosition(sphereRef.current, vrPosRef.current)
-    if (cameraRef.current && cameraRef.current.fov !== next.fov) {
-      cameraRef.current.fov = next.fov
-      cameraRef.current.updateProjectionMatrix()
-    }
-    requestRenderRef.current?.()
+    restoreVrView(fromOverlay(next))
   }
 
   // 範囲の解除・初期化は SeekBarArea 側の effect が行う
@@ -369,22 +434,21 @@ export default function Player() {
       acceptInactiveRef.current  = s.app.acceptInactiveClick
       applyControlSettings(s.controls)
       // VR設定と起動時モードを反映
-      vrFovRef.current         = s.vr.fov
       vrSensitivityRef.current = s.vr.dragSensitivity
       vrScrollSpeedRef.current = s.vr.scrollSpeed
-      const initPitch = deg2rad(s.vr.initialPitch)
-      const initYaw   = deg2rad(s.vr.initialYaw)
-      const initPos   = { x: s.vr.positionX, y: s.vr.positionY, z: s.vr.positionZ }
-      vrInitPitchRef.current = initPitch
-      vrInitYawRef.current   = initYaw
-      vrInitPosRef.current   = { ...initPos }
-      vrPitchRef.current     = initPitch
-      vrYawRef.current       = initYaw
-      vrPosRef.current       = { ...initPos }
-      setVrView({
-        pitch: s.vr.initialPitch, yaw: s.vr.initialYaw, fov: s.vr.fov,
-        posX: initPos.x, posY: initPos.y, posZ: initPos.z,
-      })
+      const saved = {
+        pitch:    deg2rad(s.vr.initialPitch),
+        yaw:      deg2rad(s.vr.initialYaw),
+        roll:     deg2rad(s.vr.initialRoll),
+        shift:    { x: s.vr.shiftX, y: s.vr.shiftY },
+        fov:      s.vr.fov,
+        srcFov:   s.vr.sourceFov,
+        srcProj:  s.vr.sourceProjection,
+        dispProj: s.vr.displayProjection,
+      }
+      vrDefaultsRef.current = saved
+      restoreVrView(saved)
+      setVrView(toOverlay(saved))
       setVrStart(s.vr.defaultStart)
       vrStartRef.current = s.vr.defaultStart
       setMode(p.defaultMode)
@@ -635,14 +699,9 @@ export default function Player() {
     if (!camera || !controls) return
 
     if (mode === 'vr') {
-      // 保存済みの既定の向き・位置に戻す
-      vrPitchRef.current = vrInitPitchRef.current
-      vrYawRef.current   = vrInitYawRef.current
-      vrPosRef.current   = { ...vrInitPosRef.current }
-      applyHeadRotation(headGroupRef.current, vrYawRef.current, vrPitchRef.current)
-      applySpherePosition(sphereRef.current, vrPosRef.current)
-      camera.fov = vrFovRef.current
-      camera.updateProjectionMatrix()
+      // 保存済みの既定へ全項目を戻す。向き・平行移動・画角だけでなく
+      // 素材／表示の投影方式も含める（保存が全項目を焼くので対称にする）。
+      restoreVrView(vrDefaultsRef.current)
     } else if (mode === 'normal') {
       const video = videoRef.current
       if (video?.videoWidth && video?.videoHeight) {
