@@ -123,7 +123,7 @@ export default function Player() {
     mountRef, videoRef, cameraRef, controlsRef, planeRef,
     textureRef, fitCameraRef, rendererRef,
     vrUniformsRef, syncVrSizeRef,
-    requestRenderRef, objectUrlRef, detectedFpsRef,
+    requestRenderRef, captureRef, objectUrlRef, detectedFpsRef,
     frameCountRef, renderCountRef, renderPathRef,
   } = useThreeScene({
     modeRef,
@@ -822,25 +822,19 @@ export default function Player() {
     }, clickTimeoutMsRef.current)
   }
 
-  const handleSnapshot = () => {
+  // VRは投影し直した「見えている画」を、平面モードは動画フレームそのものを保存する。
+  // VRで元フレームを保存すると、正距円筒／魚眼の歪んだ半分がそのまま出てくるだけで、
+  // 視点・画角・投影方式をどう合わせたかが一切残らない。
+  const snapshotCanvas = () => {
     const video = videoRef.current
-    if (!video?.videoWidth) return
+    if (!video?.videoWidth) return null
+    if (modeRef.current === 'vr') return captureRef.current?.() ?? null
+
     const vw = video.videoWidth, vh = video.videoHeight
-    const m = modeRef.current
     const rot = rotation
-
-    let sx = 0, sy = 0, sw = vw, sh = vh
-    if (m === 'vr') {
-      const cfg = VR_START[vrStartRef.current] ?? VR_START.left
-      sw = vw * cfg.repeat[0]
-      sh = vh * cfg.repeat[1]
-      sx = vw * cfg.offset[0]
-      sy = vh * (1 - cfg.offset[1] - cfg.repeat[1])
-    }
-
     const rotated = rot % 180 !== 0
-    const dw = rotated ? sh : sw
-    const dh = rotated ? sw : sh
+    const dw = rotated ? vh : vw
+    const dh = rotated ? vw : vh
 
     const c = document.createElement('canvas')
     c.width = dw; c.height = dh
@@ -848,9 +842,15 @@ export default function Player() {
     if (rot) {
       ctx.translate(dw / 2, dh / 2)
       ctx.rotate((rot * Math.PI) / 180)
-      ctx.translate(-sw / 2, -sh / 2)
+      ctx.translate(-vw / 2, -vh / 2)
     }
-    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh)
+    ctx.drawImage(video, 0, 0, vw, vh, 0, 0, vw, vh)
+    return c
+  }
+
+  const handleSnapshot = () => {
+    const c = snapshotCanvas()
+    if (!c) return
 
     // toDataURL の巨大な base64 文字列を避け、Blob 経由で保存する
     c.toBlob((blob) => {

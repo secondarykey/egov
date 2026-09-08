@@ -184,6 +184,12 @@ VR描画は球メッシュ＋`PerspectiveCamera` ではなく、**フルスク�
   fov=180° で発散し Infinity が uniform に入ると全面 NaN で黒くなるため、
   `projScaleFor()` が半画角を 90° の直前へ丸めて潰す。
   ステレオ投影は `2 tan(fov/4)` なので 180° でも有限で、広角側では実用になる
+- **スナップショットは VR では描画結果を保存する。** `video` 要素を drawImage しても
+  投影前の（正距円筒／魚眼の）半分が出てくるだけなので、`useThreeScene` の
+  `captureRef` が `renderOnce()` 直後に WebGL キャンバスを2Dキャンバスへコピーする。
+  `preserveDrawingBuffer` は使わない（常時コピーで描画が重くなる）。
+  描画バッファのクリアは合成時＝現在のタスクの終わりなので、
+  **同期で drawImage する限り内容は残っている**（間に await を挟まないこと）
 - `uShift` は**描画結果の**平行移動（アスペクト補正の**前**に引くので X/Y とも
   「1.0 = ウィンドウの半分」で単位が揃う）。視点は動かさないので歪みは増えない。
   上限 `VR_SHIFT_LIMIT` / `vrShiftLimit` = 3（±300%）は**表示投影で決まる**。
