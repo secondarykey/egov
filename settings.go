@@ -157,6 +157,14 @@ func defaultSettings() *Settings {
 // フロントエンド側の VR_SHIFT_LIMIT と一致させること。
 const vrShiftLimit = 3
 
+// vrFovMin/vrFovMax は表示側の垂直画角（度）の範囲。上限は透視投影で決まる。
+// 画面スケール tan(fov/2) は fov=180° で発散するため 180 には届かせられない。
+// フロントエンド側の VR_FOV_MIN / VR_FOV_MAX と一致させること。
+const (
+	vrFovMin = 20
+	vrFovMax = 160
+)
+
 // clampShift は平行移動を上限内へ丸める。NaN は 0 に落とす。
 func clampShift(v float64) float64 {
 	switch {
@@ -172,7 +180,7 @@ func clampShift(v float64) float64 {
 
 func (s *Settings) normalize() {
 	d := defaultSettings()
-	if s.VR.FOV <= 0 {
+	if s.VR.FOV < vrFovMin || s.VR.FOV > vrFovMax {
 		s.VR.FOV = d.VR.FOV
 	}
 	if s.VR.DragSensitivity <= 0 {

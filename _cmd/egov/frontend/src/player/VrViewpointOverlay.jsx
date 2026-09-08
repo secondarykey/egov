@@ -7,7 +7,7 @@ import ArrowBackIcon     from '@mui/icons-material/ArrowBack'
 import ArrowForwardIcon  from '@mui/icons-material/ArrowForward'
 import RestartAltIcon    from '@mui/icons-material/RestartAlt'
 import { useTranslation } from 'react-i18next'
-import { VR_SHIFT_LIMIT } from './utils'
+import { VR_FOV_MAX, VR_FOV_MIN, VR_SHIFT_LIMIT } from './utils'
 
 // 始点選択オーバーレイ内のボタン定義（コンパス配置）
 const startButtons = [
@@ -55,7 +55,7 @@ export default function VrViewpointOverlay({
     { key: 'srcFov', label: t('vr.srcFov'), min: 120,  max: 240, step: 1,   reset: 180, format: v => `${v.toFixed(0)}°` },
     { key: 'shiftX', label: t('vr.shiftX'), min: -VR_SHIFT_LIMIT, max: VR_SHIFT_LIMIT, step: 0.01, reset: 0, format: pct },
     { key: 'shiftY', label: t('vr.shiftY'), min: -VR_SHIFT_LIMIT, max: VR_SHIFT_LIMIT, step: 0.01, reset: 0, format: pct },
-    { key: 'fov',    label: t('vr.fov'),    min: 20,   max: 100, step: 1,     reset: 75, format: v => `${v.toFixed(0)}°` },
+    { key: 'fov',    label: t('vr.fov'),    min: VR_FOV_MIN, max: VR_FOV_MAX, step: 1,     reset: 75, format: v => `${v.toFixed(0)}°` },
   ]
 
   // 投影方式は排他選択。プレビューのみで保存はしない。

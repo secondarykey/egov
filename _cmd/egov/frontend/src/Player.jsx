@@ -18,7 +18,7 @@ import ThumbnailGrid from './player/ThumbnailGrid'
 import VrViewpointOverlay from './player/VrViewpointOverlay'
 import DiagnosticsOverlay from './player/DiagnosticsOverlay'
 import { ClickFeedback, DropHint, EmptyState, SeekFeedback, SeekZoneOverlay, VideoErrorOverlay } from './player/Overlays'
-import { VR_SHIFT_LIMIT, VR_START, barStyle, clamp, deg2rad, fmt, rad2deg } from './player/utils'
+import { VR_FOV_MAX, VR_FOV_MIN, VR_SHIFT_LIMIT, VR_START, barStyle, clamp, deg2rad, fmt, rad2deg } from './player/utils'
 import { dispProjIndex, projScaleFor, setVrRotation, srcProjIndex } from './player/vrShader'
 
 // 押し込み中にこの距離（px）を超えて動いたらドラッグ操作とみなし、
@@ -290,7 +290,7 @@ export default function Player() {
 
     const onWheel = (e) => {
       e.preventDefault()
-      vrFovRef.current = clamp(vrFovRef.current + e.deltaY * vrScrollSpeedRef.current, 20, 100)
+      vrFovRef.current = clamp(vrFovRef.current + e.deltaY * vrScrollSpeedRef.current, VR_FOV_MIN, VR_FOV_MAX)
       syncVrView()
     }
 
