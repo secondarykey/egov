@@ -8,6 +8,7 @@ import CloseIcon from '@mui/icons-material/Close'
 import Draggable from 'react-draggable'
 import { GetDefaultSettings, GetSettings, GetVersion, UpdateActiveColor, UpdateAppSettings, UpdateControlSettings, UpdateDefaultMode, UpdateVRSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
+import { VR_FOV_MAX, VR_FOV_MIN } from './player/utils'
 
 function DraggablePaper(props) {
   const nodeRef = useRef(null)
@@ -203,7 +204,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
         <TabPanel value={tab} index={1}>
           <SliderRow label={t('settings.vr.fov')}
             value={vr.fov} onChange={setV('fov')}
-            min={30} max={120} step={1}
+            min={VR_FOV_MIN} max={VR_FOV_MAX} step={1}
             format={v => `${v}°`}
           />
           <SliderRow label={t('settings.vr.dragSensitivity')}

@@ -153,10 +153,17 @@ export function createVrQuad(texture) {
 }
 
 // 画面上端／下端で視線角がちょうど halfFov になる画面スケール。
+// 透視/Panini の tan(halfFov) は halfFov=90°（fov=180°）で発散し、
+// Infinity がそのまま uniform に入ると画面全体が NaN で黒くなる。
+// 画角の上限は 180° まで開けてあるので、ここで 90° の直前へ丸めて潰す
+// （その付近は原理的に引き伸ばしが極端になるだけで、破綻はしない）。
+// ステレオ投影は 2 tan(halfFov/2) なので 180° でも有限。
+const MAX_HALF_FOV = (Math.PI / 2) * 0.999
+
 export function projScaleFor(displayProjection, halfFovRad) {
   return displayProjection === 'stereographic'
     ? 2 * Math.tan(halfFovRad / 2)
-    : Math.tan(halfFovRad)
+    : Math.tan(Math.min(halfFovRad, MAX_HALF_FOV))
 }
 
 const _euler = new THREE.Euler()

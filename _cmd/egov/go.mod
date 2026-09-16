@@ -1,6 +1,6 @@
 module github.com/secondarykey/egov/cmd/egov
 
-go 1.26.1
+go 1.27.0
 
 require (
 	egov v0.0.0-00010101000000-000000000000

@@ -178,6 +178,18 @@ VR描画は球メッシュ＋`PerspectiveCamera` ではなく、**フルスク�
   **復号を省くと sRGB が二重にかかり、画が白っぽく浮く。**
   どちらの関数も `ShaderMaterial`（Rawではない）なら `WebGLProgram` の
   prefixFragment に注入されるので宣言不要
+- **表示画角は `VR_FOV_MIN`/`VR_FOV_MAX` = 20〜180°**（Go側は `vrFovMin`/`vrFovMax`）。
+  素材が 180° 級である以上 180° は設定したい値になりうるので、
+  「歪みが強いから」で手前で切らない。透視/Panini の `tan(fov/2)` は
+  fov=180° で発散し Infinity が uniform に入ると全面 NaN で黒くなるため、
+  `projScaleFor()` が半画角を 90° の直前へ丸めて潰す。
+  ステレオ投影は `2 tan(fov/4)` なので 180° でも有限で、広角側では実用になる
+- **スナップショットは VR では描画結果を保存する。** `video` 要素を drawImage しても
+  投影前の（正距円筒／魚眼の）半分が出てくるだけなので、`useThreeScene` の
+  `captureRef` が `renderOnce()` 直後に WebGL キャンバスを2Dキャンバスへコピーする。
+  `preserveDrawingBuffer` は使わない（常時コピーで描画が重くなる）。
+  描画バッファのクリアは合成時＝現在のタスクの終わりなので、
+  **同期で drawImage する限り内容は残っている**（間に await を挟まないこと）
 - `uShift` は**描画結果の**平行移動（アスペクト補正の**前**に引くので X/Y とも
   「1.0 = ウィンドウの半分」で単位が揃う）。視点は動かさないので歪みは増えない。
   上限 `VR_SHIFT_LIMIT` / `vrShiftLimit` = 3（±300%）は**表示投影で決まる**。
@@ -208,7 +220,7 @@ VR描画は球メッシュ＋`PerspectiveCamera` ではなく、**フルスク�
 
 WebKitGTK はミュートしていないメディアの自動再生にユーザー操作を要求するため、
 ファイルを開いた直後の `video.play()` は必ず `NotAllowedError` で拒否される。
-Wails v3 alpha2.114 時点で `EnableAutoplayWithoutUserAction`（`mediaTypesRequiringUserActionForPlayback`）は
+Wails v3 beta.16 時点でも `EnableAutoplayWithoutUserAction`（`mediaTypesRequiringUserActionForPlayback`）は
 **darwin/iOS 専用**で、Linux 側の `linux_cgo.go` は
 `webkit_settings_set_media_playback_requires_user_gesture` を一切呼んでいない。
 Windows の WebView2 は既定で自動再生を許可するため、この問題は Linux でのみ顕在化する。
@@ -270,6 +282,14 @@ Window position/size restoration uses a **two-phase approach**:
 ### Frameless Window Resize Handles
 
 `@wailsio/runtime/dist/drag.js` のリサイズハンドル判定は `window.outerWidth/outerHeight` とマウス座標の比較のみで行われ、DOM要素のマージンには依存しない。そのため Three.js canvas 等の全面要素にマージンは不要で、`100vw`/`100vh` で映像を100%表示にしてもリサイズは機能する（以前は `calc(100vw - 10px)` + `margin: 5px` としていたが撤去済み）。
+
+⚠️ **リサイズ域では映像側のクリック処理を動かしてはいけない。** リサイズ開始は
+mousedown → mousemove の順なので、端で押した時点の `mousedown` はこちらへ届くが、
+`resizing` に入った後の `mouseup`/`click` は capture 段で
+`stopImmediatePropagation` され**届かない**。長押しの早送りオーバーレイをそこで
+開くと、ボタンを離しても閉じずに早送りが続く。`utils.isResizeEdge()` が
+drag.js と同じしきい値（既定 5px、角は +10px）で判定するので、
+`handleCanvasMouseDown` / `handleCanvasClick` はこれで早期 return する。
 
 ### Runtime Import
 

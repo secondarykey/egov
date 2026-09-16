@@ -21,6 +21,7 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
   const vrUniformsRef  = useRef(null)     // VRシェーダの uniform（Player が視点を書き込む）
   const syncVrSizeRef  = useRef(null)     // 画面・切り出しのアスペクトを uniform へ反映
   const requestRenderRef = useRef(null)   // 単発レンダーを要求（操作・状態変化時）
+  const captureRef     = useRef(null)     // 表示中の描画結果を2Dキャンバスへ取り出す
   const objectUrlRef   = useRef(null)     // loadFile で作成した Object URL（解放用）
   const detectedFpsRef = useRef(0)
   const frameCountRef  = useRef(0)        // テクスチャに取り込んだ動画フレーム数（診断用）
@@ -115,6 +116,25 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
       }
       renderCountRef.current++
     }
+
+    // 画面に出ているのと同じ絵を2Dキャンバスへ取り出す（VRのスナップショット用）。
+    // VRは動画フレームをそのまま貼るのではなくシェーダで投影し直しているので、
+    // video 要素を drawImage しても「見えている画」にはならない。
+    //
+    // preserveDrawingBuffer は使わない（常時コピーが走り描画が重くなる）。
+    // 描画バッファがクリアされるのは合成時＝現在のタスクの終わりなので、
+    // renderOnce() の直後に同期で drawImage すれば内容は残っている。
+    const capture = () => {
+      texture.needsUpdate = true       // 最新フレームで描き直す
+      renderOnce()
+      const src = renderer.domElement
+      const c = document.createElement('canvas')
+      c.width  = src.width             // デバイスピクセル比込みの実解像度
+      c.height = src.height
+      c.getContext('2d').drawImage(src, 0, 0)
+      return c
+    }
+    captureRef.current = capture
 
     let renderScheduled = false
     const requestRender = () => {
@@ -337,7 +357,7 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
     mountRef, videoRef, cameraRef, controlsRef, planeRef,
     textureRef, fitCameraRef, rendererRef,
     vrUniformsRef, syncVrSizeRef,
-    requestRenderRef, objectUrlRef, detectedFpsRef,
+    requestRenderRef, captureRef, objectUrlRef, detectedFpsRef,
     frameCountRef, renderCountRef, renderPathRef,
   }
 }
