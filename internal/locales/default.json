@@ -90,7 +90,6 @@
     "resetDefaults": "Reset to defaults",
     "tab": {
       "playback": "General",
-      "vr": "VR",
       "controls": "Controls",
       "app": "Application"
     },
@@ -98,10 +97,6 @@
       "language": "Language",
       "defaultMode": "Default Mode",
       "activeColor": "Active Color"
-    },
-    "vr": {
-      "dragSensitivity": "Drag Sensitivity",
-      "scrollSpeed": "Scroll Speed"
     },
     "controls": {
       "clickTimeout": "Click Timeout",
@@ -111,7 +106,9 @@
       "arrowSeek": "Arrow Key Seek",
       "thumbnailGrid": "Thumbnail Grid (N×N)",
       "uiHideDelay": "UI Hide Delay",
-      "uiHideOnLeave": "UI Hide on Leave"
+      "uiHideOnLeave": "UI Hide on Leave",
+      "vrDragSensitivity": "VR Drag Sensitivity",
+      "vrScrollSpeed": "VR Scroll Speed"
     },
     "app": {
       "thumbnailEnabled": "Seek Thumbnail Preview",

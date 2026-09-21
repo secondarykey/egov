@@ -90,7 +90,6 @@
     "resetDefaults": "デフォルトに戻す",
     "tab": {
       "playback": "基本",
-      "vr": "VR",
       "controls": "操作",
       "app": "アプリ"
     },
@@ -98,10 +97,6 @@
       "language": "言語",
       "defaultMode": "デフォルトモード",
       "activeColor": "アクティブ色"
-    },
-    "vr": {
-      "dragSensitivity": "ドラッグ感度",
-      "scrollSpeed": "スクロール速度"
     },
     "controls": {
       "clickTimeout": "クリックタイムアウト",
@@ -111,7 +106,9 @@
       "arrowSeek": "十字キーシーク",
       "thumbnailGrid": "サムネイル分割数 (N×N)",
       "uiHideDelay": "UI非表示遅延",
-      "uiHideOnLeave": "離脱時UI非表示遅延"
+      "uiHideOnLeave": "離脱時UI非表示遅延",
+      "vrDragSensitivity": "VRドラッグ感度",
+      "vrScrollSpeed": "VRスクロール速度"
     },
     "app": {
       "thumbnailEnabled": "シークサムネイルプレビュー",

@@ -148,7 +148,6 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
       <DialogContent sx={{ pt: 0, flex: 1, overflow: 'auto' }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="fullWidth" sx={{ borderBottom: 1, borderColor: 'divider', mb: 0 }}>
           <Tab label={t('settings.tab.playback')} />
-          <Tab label={t('settings.tab.vr')} />
           <Tab label={t('settings.tab.controls')} />
           <Tab label={t('settings.tab.app')} />
         </Tabs>
@@ -199,28 +198,8 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
           </Box>
         </TabPanel>
 
-        {/* VR */}
-        <TabPanel value={tab} index={1}>
-          <SliderRow label={t('settings.vr.dragSensitivity')}
-            value={vr.dragSensitivity} onChange={setV('dragSensitivity')}
-            min={0.001} max={0.02} step={0.001}
-            format={v => v.toFixed(3)}
-          />
-          <SliderRow label={t('settings.vr.scrollSpeed')}
-            value={vr.scrollSpeed} onChange={setV('scrollSpeed')}
-            min={0.01} max={0.3} step={0.01}
-            format={v => v.toFixed(2)}
-          />
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-            {/* 視点・投影・FOV は VRオーバーレイ側が持つので、ここでリセットするのは操作感の2つだけ */}
-            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => defaults && setVr(s => ({ ...s, dragSensitivity: defaults.vr.dragSensitivity, scrollSpeed: defaults.vr.scrollSpeed }))}>
-              {t('settings.resetDefaults')}
-            </Button>
-          </Box>
-        </TabPanel>
-
         {/* Controls */}
-        <TabPanel value={tab} index={2}>
+        <TabPanel value={tab} index={1}>
           <SliderRow label={t('settings.controls.clickTimeout')}
             value={controls.clickTimeoutMs} onChange={setC('clickTimeoutMs')}
             min={100} max={1000} step={50}
@@ -261,14 +240,31 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             min={100} max={3000} step={100}
             format={v => `${v} ms`}
           />
+          {/* VRモード専用の操作感。値の保存先は settings.vr のままだが、
+              オーバーレイ（見え方）と分けるため UI はこちらに置いている。 */}
+          <SliderRow label={t('settings.controls.vrDragSensitivity')}
+            value={vr.dragSensitivity} onChange={setV('dragSensitivity')}
+            min={0.001} max={0.02} step={0.001}
+            format={v => v.toFixed(3)}
+          />
+          <SliderRow label={t('settings.controls.vrScrollSpeed')}
+            value={vr.scrollSpeed} onChange={setV('scrollSpeed')}
+            min={0.01} max={0.3} step={0.01}
+            format={v => v.toFixed(2)}
+          />
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => defaults && setControls(defaults.controls)}>
+            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => {
+              if (!defaults) return
+              setControls(defaults.controls)
+              // 視点・投影は VRオーバーレイ側が持つので、ここで戻すのは操作感の2つだけ
+              setVr(s => ({ ...s, dragSensitivity: defaults.vr.dragSensitivity, scrollSpeed: defaults.vr.scrollSpeed }))
+            }}>
               {t('settings.resetDefaults')}
             </Button>
           </Box>
         </TabPanel>
         {/* App */}
-        <TabPanel value={tab} index={3}>
+        <TabPanel value={tab} index={2}>
           <Row label={t('settings.app.thumbnailEnabled')}>
             <FormControlLabel
               control={
