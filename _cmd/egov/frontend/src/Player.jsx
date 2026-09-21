@@ -1091,6 +1091,7 @@ export default function Player() {
         onVolumeChange={handleVolumeChange}
         onVolumeCommitted={handleVolumeCommitted}
         fileName={fileName}
+        filePath={filePathRef.current}
         fullscreen={fullscreen}
         onFullscreenToggle={handleFullscreenToggle}
         loop={loop}

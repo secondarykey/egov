@@ -122,5 +122,14 @@
       "singleInstance": "Single Instance",
       "restartRequired": "* Takes effect after restart"
     }
+  },
+  "info": {
+    "title": "Video info",
+    "fileName": "File name",
+    "path": "Path",
+    "resolution": "Resolution",
+    "aspect": "Aspect ratio",
+    "duration": "Duration",
+    "frameRate": "Frame rate"
   }
 }

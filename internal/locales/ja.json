@@ -122,5 +122,14 @@
       "singleInstance": "シングルインスタンス",
       "restartRequired": "* 再起動後に有効になります"
     }
+  },
+  "info": {
+    "title": "動画情報",
+    "fileName": "ファイル名",
+    "path": "パス",
+    "resolution": "解像度",
+    "aspect": "アスペクト比",
+    "duration": "長さ",
+    "frameRate": "フレームレート"
   }
 }
