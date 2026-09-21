@@ -100,10 +100,8 @@
       "activeColor": "Active Color"
     },
     "vr": {
-      "fov": "Field of View",
       "dragSensitivity": "Drag Sensitivity",
-      "scrollSpeed": "Scroll Speed",
-      "defaultStart": "Default Viewpoint"
+      "scrollSpeed": "Scroll Speed"
     },
     "controls": {
       "clickTimeout": "Click Timeout",

@@ -8,7 +8,6 @@ import CloseIcon from '@mui/icons-material/Close'
 import Draggable from 'react-draggable'
 import { GetDefaultSettings, GetSettings, GetVersion, UpdateActiveColor, UpdateAppSettings, UpdateControlSettings, UpdateDefaultMode, UpdateVRSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
-import { VR_FOV_MAX, VR_FOV_MIN } from './player/utils'
 
 function DraggablePaper(props) {
   const nodeRef = useRef(null)
@@ -202,11 +201,6 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
 
         {/* VR */}
         <TabPanel value={tab} index={1}>
-          <SliderRow label={t('settings.vr.fov')}
-            value={vr.fov} onChange={setV('fov')}
-            min={VR_FOV_MIN} max={VR_FOV_MAX} step={1}
-            format={v => `${v}°`}
-          />
           <SliderRow label={t('settings.vr.dragSensitivity')}
             value={vr.dragSensitivity} onChange={setV('dragSensitivity')}
             min={0.001} max={0.02} step={0.001}
@@ -217,18 +211,9 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
             min={0.01} max={0.3} step={0.01}
             format={v => v.toFixed(2)}
           />
-          <Row label={t('settings.vr.defaultStart')}>
-            <FormControl size="small" fullWidth>
-              <Select value={vr.defaultStart} onChange={e => setVr(s => ({ ...s, defaultStart: e.target.value }))}>
-                <MenuItem value="left">{t('vr.side.left')}</MenuItem>
-                <MenuItem value="right">{t('vr.side.right')}</MenuItem>
-                <MenuItem value="top">{t('vr.side.top')}</MenuItem>
-                <MenuItem value="bottom">{t('vr.side.bottom')}</MenuItem>
-              </Select>
-            </FormControl>
-          </Row>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => defaults && setVr(defaults.vr)}>
+            {/* 視点・投影・FOV は VRオーバーレイ側が持つので、ここでリセットするのは操作感の2つだけ */}
+            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => defaults && setVr(s => ({ ...s, dragSensitivity: defaults.vr.dragSensitivity, scrollSpeed: defaults.vr.scrollSpeed }))}>
               {t('settings.resetDefaults')}
             </Button>
           </Box>

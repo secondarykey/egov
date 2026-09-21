@@ -100,10 +100,8 @@
       "activeColor": "アクティブ色"
     },
     "vr": {
-      "fov": "視野角 (FOV)",
       "dragSensitivity": "ドラッグ感度",
-      "scrollSpeed": "スクロール速度",
-      "defaultStart": "デフォルト視点"
+      "scrollSpeed": "スクロール速度"
     },
     "controls": {
       "clickTimeout": "クリックタイムアウト",
