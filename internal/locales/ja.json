@@ -90,7 +90,6 @@
     "resetDefaults": "デフォルトに戻す",
     "tab": {
       "playback": "基本",
-      "vr": "VR",
       "controls": "操作",
       "app": "アプリ"
     },
@@ -98,12 +97,6 @@
       "language": "言語",
       "defaultMode": "デフォルトモード",
       "activeColor": "アクティブ色"
-    },
-    "vr": {
-      "fov": "視野角 (FOV)",
-      "dragSensitivity": "ドラッグ感度",
-      "scrollSpeed": "スクロール速度",
-      "defaultStart": "デフォルト視点"
     },
     "controls": {
       "clickTimeout": "クリックタイムアウト",
@@ -113,7 +106,9 @@
       "arrowSeek": "十字キーシーク",
       "thumbnailGrid": "サムネイル分割数 (N×N)",
       "uiHideDelay": "UI非表示遅延",
-      "uiHideOnLeave": "離脱時UI非表示遅延"
+      "uiHideOnLeave": "離脱時UI非表示遅延",
+      "vrDragSensitivity": "VRドラッグ感度",
+      "vrScrollSpeed": "VRスクロール速度"
     },
     "app": {
       "thumbnailEnabled": "シークサムネイルプレビュー",
@@ -122,5 +117,14 @@
       "singleInstance": "シングルインスタンス",
       "restartRequired": "* 再起動後に有効になります"
     }
+  },
+  "info": {
+    "title": "動画情報",
+    "fileName": "ファイル名",
+    "path": "パス",
+    "resolution": "解像度",
+    "aspect": "アスペクト比",
+    "duration": "長さ",
+    "frameRate": "フレームレート"
   }
 }

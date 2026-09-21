@@ -90,7 +90,6 @@
     "resetDefaults": "Reset to defaults",
     "tab": {
       "playback": "General",
-      "vr": "VR",
       "controls": "Controls",
       "app": "Application"
     },
@@ -98,12 +97,6 @@
       "language": "Language",
       "defaultMode": "Default Mode",
       "activeColor": "Active Color"
-    },
-    "vr": {
-      "fov": "Field of View",
-      "dragSensitivity": "Drag Sensitivity",
-      "scrollSpeed": "Scroll Speed",
-      "defaultStart": "Default Viewpoint"
     },
     "controls": {
       "clickTimeout": "Click Timeout",
@@ -113,7 +106,9 @@
       "arrowSeek": "Arrow Key Seek",
       "thumbnailGrid": "Thumbnail Grid (N×N)",
       "uiHideDelay": "UI Hide Delay",
-      "uiHideOnLeave": "UI Hide on Leave"
+      "uiHideOnLeave": "UI Hide on Leave",
+      "vrDragSensitivity": "VR Drag Sensitivity",
+      "vrScrollSpeed": "VR Scroll Speed"
     },
     "app": {
       "thumbnailEnabled": "Seek Thumbnail Preview",
@@ -122,5 +117,14 @@
       "singleInstance": "Single Instance",
       "restartRequired": "* Takes effect after restart"
     }
+  },
+  "info": {
+    "title": "Video info",
+    "fileName": "File name",
+    "path": "Path",
+    "resolution": "Resolution",
+    "aspect": "Aspect ratio",
+    "duration": "Duration",
+    "frameRate": "Frame rate"
   }
 }

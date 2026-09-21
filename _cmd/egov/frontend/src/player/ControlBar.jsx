@@ -9,6 +9,7 @@ import RepeatIcon         from '@mui/icons-material/Repeat'
 import LinearScaleIcon    from '@mui/icons-material/LinearScale'
 import { useTranslation } from 'react-i18next'
 import SeekBarArea from './SeekBarArea'
+import VideoInfoPanel from './VideoInfoPanel'
 import TimeDisplay from './TimeDisplay'
 import { barStyle } from './utils'
 
@@ -16,7 +17,7 @@ import { barStyle } from './utils'
 export default function ControlBar({
   showUI, video, duration, paused, onPlayPause,
   muted, onMuteToggle, volume, onVolumeChange, onVolumeCommitted,
-  fileName, fullscreen, onFullscreenToggle,
+  fileName, filePath, fullscreen, onFullscreenToggle,
   loop, onLoopToggle, rangeLoop, onRangeLoopToggle, activeColor,
   thumbVideoRef, thumbCanvasRef, thumbEnabledRef, modeRef, vrStartRef,
   rangeRef,
@@ -79,6 +80,7 @@ export default function ControlBar({
         }}>
           {fileName}
         </Typography>
+        <VideoInfoPanel video={video} duration={duration} fileName={fileName} filePath={filePath} />
         <Tooltip title={loop ? t('controls.loopOn') : t('controls.loopOff')} placement="top">
           <IconButton onClick={onLoopToggle} sx={{ color: loop ? activeColor : 'rgba(255,255,255,0.3)', width: 28, height: 28 }}>
             <RepeatIcon fontSize="small" />

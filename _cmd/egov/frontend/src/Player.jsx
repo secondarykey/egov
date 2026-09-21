@@ -311,7 +311,7 @@ export default function Player() {
     }
   }, [mode])
 
-  // 現在の視点・投影設定を既定として保存する。
+  // 現在の始点・視点・投影設定を既定として保存する。
   // 他のVR設定（感度等）は保存済みの値を維持する。
   const persistVRView = async () => {
     const v = currentVrView()
@@ -319,6 +319,7 @@ export default function Player() {
     const s = await GetSettings()
     UpdateVRSettings({
       ...s.vr,
+      defaultStart:      vrStartRef.current,
       initialPitch:      rad2deg(v.pitch),
       initialYaw:        rad2deg(v.yaw),
       initialRoll:       rad2deg(v.roll),
@@ -1091,6 +1092,7 @@ export default function Player() {
         onVolumeChange={handleVolumeChange}
         onVolumeCommitted={handleVolumeCommitted}
         fileName={fileName}
+        filePath={filePathRef.current}
         fullscreen={fullscreen}
         onFullscreenToggle={handleFullscreenToggle}
         loop={loop}
