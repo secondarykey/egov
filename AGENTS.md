@@ -118,7 +118,10 @@ VR 中に開いたら normal へ落とす）。
   サンプル時点で線形化済み。VRシェーダは VideoTexture 前提で `sRGBTransferEOTF()` を
   自前でかけているので、そのまま通すと二重復号で暗く沈む。対応するなら uniform で切り替える
 - GPU の `maxTextureSize` を超える画像はキャンバスで縮小してから渡す
-- ウィンドウのフィット（Reset）は `mediaSizeRef`（動画／画像共通の画素数）を使う
+- ウィンドウのフィット（Reset）は `mediaSizeRef`（動画／画像共通の画素数）を使う。
+  作業領域（`Window.GetScreen().WorkArea`）に収まらない素材は、縦横比を保って縮めた
+  サイズにし、何%表示かを Snackbar で出す（`fitWindowToMedia()`）。そのまま `SetSize` すると
+  OS が片方の辺だけクランプし、ウィンドウは最大近くなのに画は余白付きという状態になる
 - アニメーション GIF は先頭フレームのみ
 
 ### 範囲切り出し（無劣化カット）

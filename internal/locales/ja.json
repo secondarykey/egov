@@ -75,7 +75,8 @@
     "exitFullscreen": "全画面解除",
     "rotate": "回転",
     "resetCamera": "カメラをリセット（保存済みのVR設定へ全項目を戻す）",
-    "fitWindow": "ウィンドウを動画サイズに合わせる",
+    "fitWindow": "ウィンドウを動画・画像のサイズに合わせる",
+    "fitTooLarge": "画面に収まらないため {{percent}}% で表示しています",
     "resetView": "表示をリセット"
   },
   "extract": {

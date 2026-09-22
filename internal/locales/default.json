@@ -75,7 +75,8 @@
     "exitFullscreen": "Exit Fullscreen",
     "rotate": "Rotate",
     "resetCamera": "Reset Camera (restore all saved VR settings)",
-    "fitWindow": "Fit window to video size",
+    "fitWindow": "Fit window to media size",
+    "fitTooLarge": "Too large for the screen — showing at {{percent}}%",
     "resetView": "Reset View"
   },
   "extract": {

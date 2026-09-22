@@ -121,7 +121,7 @@ export default function Player() {
   const [diagOpen,       setDiagOpen]       = useState(false)   // Ctrl+Shift+D の診断オーバーレイ
   const [canExtract,     setCanExtract]     = useState(false)   // 無劣化切り出しが可能なコンテナか
   const [extracting,     setExtracting]     = useState(false)
-  const [extractMsg,     setExtractMsg]     = useState(null)    // { severity, text }
+  const [notice,         setNotice]         = useState(null)    // Snackbar 通知 { severity, text, busy? }
   const [isImage,        setIsImage]        = useState(false)   // 静止画を表示中か（VR・再生系UIを無効にする）
 
   // Three.js シーン（生成・破棄・描画ループはフック側が担う）
@@ -767,6 +767,31 @@ export default function Player() {
     UpdatePlaybackSettings(v, muted, thumbEnabledRef.current, language)
   }
 
+  // ウィンドウを素材の画素数（CSSピクセル）に合わせる。作業領域に収まらないときは
+  // 縦横比を保ったまま収まる大きさへ縮め、何%表示になったかを通知する。
+  // そのまま SetSize すると OS 側で片方の辺だけがクランプされ、
+  // 「ウィンドウは画面いっぱいでも画像は余白付き」という中途半端な状態になる。
+  const fitWindowToMedia = async (w, h) => {
+    let wa = null
+    try {
+      wa = (await Window.GetScreen())?.WorkArea
+    } catch (err) {
+      console.warn('GetScreen failed:', err)
+    }
+    const scale = wa?.Width && wa?.Height ? Math.min(1, wa.Width / w, wa.Height / h) : 1
+    const tw = Math.floor(w * scale)
+    const th = Math.floor(h * scale)
+    await Window.SetSize(tw, th)
+    if (scale >= 1) return
+    // 縮めても位置によっては画面外にはみ出すので作業領域の内側へ寄せる
+    const pos = await Window.Position()
+    await Window.SetPosition(
+      clamp(pos.x, wa.X, wa.X + wa.Width  - tw),
+      clamp(pos.y, wa.Y, wa.Y + wa.Height - th),
+    )
+    setNotice({ severity: 'info', text: t('controls.fitTooLarge', { percent: Math.floor(scale * 100) }) })
+  }
+
   const handleReset = () => {
     const camera   = cameraRef.current
     const controls = controlsRef.current
@@ -780,11 +805,8 @@ export default function Player() {
     } else if (mode === 'normal') {
       const { w, h } = mediaSizeRef.current
       if (w && h) {
-        if (rotation % 180) {
-          Window.SetSize(h, w)
-        } else {
-          Window.SetSize(w, h)
-        }
+        if (rotation % 180) fitWindowToMedia(h, w)
+        else                fitWindowToMedia(w, h)
       }
     } else {
       camera.position.set(0, 0, 9)
@@ -957,7 +979,7 @@ export default function Player() {
     const range = rangeRef.current ? { ...rangeRef.current } : null
     if (!canExtract || !path || !range || extracting) return
     if (range.end - range.start < 0.1) {
-      setExtractMsg({ severity: 'warning', text: t('extract.rangeTooShort') })
+      setNotice({ severity: 'warning', text: t('extract.rangeTooShort') })
       return
     }
     try {
@@ -971,15 +993,15 @@ export default function Player() {
       })
       if (!dst) return   // キャンセル
       setExtracting(true)
-      setExtractMsg({ severity: 'info', text: t('extract.running'), busy: true })
+      setNotice({ severity: 'info', text: t('extract.running'), busy: true })
       const res = await ExtractRange(path, range.start, range.end, dst)
-      setExtractMsg({
+      setNotice({
         severity: 'success',
         text: t('extract.done', { name: res.fileName, start: fmt(res.startSec), end: fmt(res.endSec) }),
       })
     } catch (err) {
       console.error('extract failed:', err)
-      setExtractMsg({ severity: 'error', text: t('extract.failed', { msg: err?.message ?? String(err) }) })
+      setNotice({ severity: 'error', text: t('extract.failed', { msg: err?.message ?? String(err) }) })
     } finally {
       setExtracting(false)
     }
@@ -1189,20 +1211,20 @@ export default function Player() {
 
       {/* 切り出しの進行中／結果通知。busy の間は自分では閉じない */}
       <Snackbar
-        open={!!extractMsg}
-        autoHideDuration={extractMsg?.busy ? null : extractMsg?.severity === 'error' ? 8000 : 5000}
-        onClose={() => setExtractMsg(null)}
+        open={!!notice}
+        autoHideDuration={notice?.busy ? null : notice?.severity === 'error' ? 8000 : 5000}
+        onClose={() => setNotice(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
         sx={{ bottom: { xs: 120, sm: 120 } }}
       >
         <Alert
-          severity={extractMsg?.severity ?? 'info'}
+          severity={notice?.severity ?? 'info'}
           variant="filled"
-          icon={extractMsg?.busy ? <CircularProgress size={18} color="inherit" /> : undefined}
-          onClose={extractMsg?.busy ? undefined : () => setExtractMsg(null)}
+          icon={notice?.busy ? <CircularProgress size={18} color="inherit" /> : undefined}
+          onClose={notice?.busy ? undefined : () => setNotice(null)}
           sx={{ maxWidth: '70vw' }}
         >
-          {extractMsg?.text}
+          {notice?.text}
         </Alert>
       </Snackbar>
 
