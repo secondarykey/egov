@@ -1,3 +1,7 @@
 .*
 !.gitignore
 !.github
+
+# _cmd/egov で go build した出力（正規のビルドは bin/ へ出る）
+/_cmd/egov/egov
+/_cmd/egov/egov.exe
