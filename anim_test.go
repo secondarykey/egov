@@ -44,3 +44,16 @@ func TestAnimStoreServeFrame(t *testing.T) {
 		t.Errorf("after close: code=%d", rec.Code)
 	}
 }
+
+func TestAnimStoreAVIF(t *testing.T) {
+	s := NewAnimStore()
+	dir := filepath.Join("internal", "animimage", "testdata")
+	info, err := s.open(filepath.Join(dir, "anim.avif"))
+	if err != nil || !info.AsVideo || info.Animated {
+		t.Errorf("anim.avif: info=%+v err=%v", info, err)
+	}
+	info, err = s.open(filepath.Join(dir, "still.avif"))
+	if err != nil || info.AsVideo || info.Animated {
+		t.Errorf("still.avif: info=%+v err=%v", info, err)
+	}
+}

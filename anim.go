@@ -23,8 +23,10 @@ func NewAnimStore() *AnimStore { return &AnimStore{} }
 
 // AnimInfo はフロントエンドへ返すアニメーションの概要。
 // Animated=false なら静止画として扱う（アニメーションでない WebP / GIF / PNG など）。
+// AsVideo=true はアニメーション AVIF で、フレームは展開せず video 要素でそのまま再生させる。
 type AnimInfo struct {
 	Animated    bool  `json:"animated"`
+	AsVideo     bool  `json:"asVideo"`
 	ID          int   `json:"id"`
 	Width       int   `json:"width"`
 	Height      int   `json:"height"`
@@ -32,6 +34,10 @@ type AnimInfo struct {
 }
 
 func (s *AnimStore) open(path string) (AnimInfo, error) {
+	if animimage.IsAVIFSequence(path) {
+		s.close()
+		return AnimInfo{AsVideo: true}, nil
+	}
 	if !animimage.IsAnimated(path) {
 		s.close()
 		return AnimInfo{}, nil
@@ -95,7 +101,8 @@ func (s *AnimStore) ServeFrame(w http.ResponseWriter, r *http.Request) {
 
 // OpenAnimation は path がアニメーション画像なら全フレームを合成して保持し、
 // 再生に必要な情報を返す。アニメーションでなければ Animated=false を返す
-// （前に開いていたアニメーションは解放する）。
+// （前に開いていたアニメーションは解放する）。アニメーション AVIF は展開せず
+// AsVideo=true を返す（WebView の video 要素がそのまま再生できるため）。
 func (a *API) OpenAnimation(path string) (AnimInfo, error) {
 	return a.anims.open(path)
 }

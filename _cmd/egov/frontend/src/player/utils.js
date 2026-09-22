@@ -83,7 +83,8 @@ export const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.a
 
 // アニメーションの可能性がある拡張子。実際にアニメーションかは Go 側
 // （API.OpenAnimation）が中身で判定し、違えば静止画として表示する。
-const ANIM_EXTS = ['.webp', '.gif', '.png', '.apng']
+// AVIF はアニメーションなら video 要素でそのまま再生する（asVideo）。
+const ANIM_EXTS = ['.webp', '.gif', '.png', '.apng', '.avif']
 
 const extOf = (path) => {
   const i = path.lastIndexOf('.')

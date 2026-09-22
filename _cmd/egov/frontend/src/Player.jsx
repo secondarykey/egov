@@ -426,6 +426,8 @@ export default function Player() {
       try {
         const info = await OpenAnimation(path)
         if (info?.animated) anim = info
+        // アニメーション AVIF は中身が MP4 と同じ構造で、video 要素がそのまま再生できる
+        if (info?.asVideo) image = false
       } catch (err) {
         console.warn('OpenAnimation failed:', err)
         setNotice({ severity: 'warning', text: t('anim.fallback', { msg: err?.message ?? String(err) }) })
