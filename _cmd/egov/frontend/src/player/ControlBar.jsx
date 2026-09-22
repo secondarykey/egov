@@ -59,7 +59,7 @@ export default function ControlBar({
           {paused ? <PlayArrowIcon sx={{ fontSize: 28 }} /> : <PauseIcon sx={{ fontSize: 28 }} />}
         </IconButton>
         <TimeDisplay video={video} duration={duration} visible={showUI} />
-        {/* 音声の無い素材（アニメーションWebP）では音量を出さない */}
+        {/* 音声の無い素材（アニメーション画像）では音量を出さない */}
         {!silent && (<>
         <IconButton onClick={onMuteToggle} sx={{ color: muted ? 'rgba(255,255,255,0.3)' : 'white', width: 28, height: 28, ml: '20px !important' }}>
           {muted ? <VolumeOffIcon /> : <VolumeUpIcon />}

@@ -1,4 +1,4 @@
-package animwebp
+package animimage
 
 import (
 	"bytes"
@@ -20,6 +20,11 @@ func TestIsAnimated(t *testing.T) {
 		{"anim_lossless.webp", true},
 		{"anim_lossy.webp", true},
 		{"still.webp", false},
+		{"anim.gif", true},
+		{"still.gif", false},
+		{"anim.apng", true},
+		{"still.png", false},
+		{"anim_expected.rgba", false}, // 未対応形式
 		{"missing.webp", false},
 	}
 	for _, tt := range tests {
@@ -30,7 +35,15 @@ func TestIsAnimated(t *testing.T) {
 }
 
 func TestLoadLossless(t *testing.T) {
-	anim, err := Load(filepath.Join("testdata", "anim_lossless.webp"))
+	for _, file := range []string{"anim_lossless.webp", "anim.apng"} {
+		t.Run(file, func(t *testing.T) { testLossless(t, file) })
+	}
+}
+
+// 可逆形式（WebP lossless / APNG）は正解画素と完全一致するはず。
+// ffmpeg の APNG エンコーダも2枚目以降を差分矩形＋ブレンド／破棄で格納する。
+func testLossless(t *testing.T, file string) {
+	anim, err := Load(filepath.Join("testdata", file))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +93,9 @@ func TestLoadLossy(t *testing.T) {
 }
 
 func TestLoadStillIsError(t *testing.T) {
-	if _, err := Load(filepath.Join("testdata", "still.webp")); err == nil {
-		t.Fatal("expected error for non-animated WebP")
+	for _, file := range []string{"still.webp", "still.gif", "still.png"} {
+		if _, err := Load(filepath.Join("testdata", file)); err == nil {
+			t.Errorf("%s: expected error for non-animated image", file)
+		}
 	}
 }

@@ -25,7 +25,7 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
   const captureRef     = useRef(null)     // 表示中の描画結果を2Dキャンバスへ取り出す
   const showImageRef   = useRef(null)     // 平面に静止画を貼る（読み込み済みの HTMLImageElement を渡す）
   const showVideoRef   = useRef(null)     // 平面を動画テクスチャへ戻す
-  const showCanvasRef  = useRef(null)     // 平面に canvas を貼る（アニメーションWebP。描き換えごとに refreshCanvasRef）
+  const showCanvasRef  = useRef(null)     // 平面に canvas を貼る（アニメーション画像。描き換えごとに refreshCanvasRef）
   const refreshCanvasRef = useRef(null)   // canvas の描き換えをテクスチャへ反映して再描画する
   const mediaSizeRef   = useRef({ w: 0, h: 0 })   // 表示中の動画／画像の画素数
   const objectUrlRef   = useRef(null)     // loadFile で作成した Object URL（解放用）

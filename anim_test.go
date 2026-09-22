@@ -9,7 +9,7 @@ import (
 
 func TestAnimStoreServeFrame(t *testing.T) {
 	s := NewAnimStore()
-	info, err := s.open(filepath.Join("internal", "animwebp", "testdata", "anim_lossless.webp"))
+	info, err := s.open(filepath.Join("internal", "animimage", "testdata", "anim_lossless.webp"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func TestAnimStoreServeFrame(t *testing.T) {
 	}
 
 	// 静止画の WebP は Animated=false で、保持していたフレームも解放する
-	info, err = s.open(filepath.Join("internal", "animwebp", "testdata", "still.webp"))
+	info, err = s.open(filepath.Join("internal", "animimage", "testdata", "still.webp"))
 	if err != nil || info.Animated {
 		t.Fatalf("still: info=%+v err=%v", info, err)
 	}

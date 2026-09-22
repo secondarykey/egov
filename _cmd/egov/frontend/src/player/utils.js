@@ -79,9 +79,16 @@ export const barStyle = {
 
 // 静止画として開く拡張子。Go 側 api.go の imageExts と揃えること。
 // ローカルパス経由（ドロップ・起動引数）では MIME が無いので拡張子で判定する。
-export const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.avif']
+export const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.avif', '.apng']
 
-export const isImagePath = (path) => {
+// アニメーションの可能性がある拡張子。実際にアニメーションかは Go 側
+// （API.OpenAnimation）が中身で判定し、違えば静止画として表示する。
+const ANIM_EXTS = ['.webp', '.gif', '.png', '.apng']
+
+const extOf = (path) => {
   const i = path.lastIndexOf('.')
-  return i >= 0 && IMAGE_EXTS.includes(path.slice(i).toLowerCase())
+  return i >= 0 ? path.slice(i).toLowerCase() : ''
 }
+
+export const isImagePath = (path) => IMAGE_EXTS.includes(extOf(path))
+export const mayBeAnimatedPath = (path) => ANIM_EXTS.includes(extOf(path))

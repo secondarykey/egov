@@ -19,7 +19,7 @@ import ThumbnailGrid from './player/ThumbnailGrid'
 import VrViewpointOverlay from './player/VrViewpointOverlay'
 import DiagnosticsOverlay from './player/DiagnosticsOverlay'
 import { ClickFeedback, DropHint, EmptyState, SeekFeedback, SeekZoneOverlay, VideoErrorOverlay } from './player/Overlays'
-import { VR_FOV_MAX, VR_FOV_MIN, VR_SHIFT_LIMIT, VR_START, barStyle, clamp, deg2rad, fmt, isImagePath, isResizeEdge, rad2deg } from './player/utils'
+import { VR_FOV_MAX, VR_FOV_MIN, VR_SHIFT_LIMIT, VR_START, barStyle, clamp, deg2rad, fmt, isImagePath, isResizeEdge, mayBeAnimatedPath, rad2deg } from './player/utils'
 import { dispProjIndex, fitSrcFov, projScaleFor, setVrRotation, srcProjIndex } from './player/vrShader'
 
 // 押し込み中にこの距離（px）を超えて動いたらドラッグ操作とみなし、
@@ -82,7 +82,7 @@ export default function Player() {
   const lastPlayErrorRef    = useRef(null)   // 直近の play() 拒否理由（診断用）
   const filePathRef         = useRef('')     // 再生中ファイルのローカルパス（切り出し元）
   const rangeRef            = useRef(null)   // SeekBarArea が公開する { start, end }
-  const mediaKindRef        = useRef('video')   // 'video' | 'image' | 'anim'（アニメーションWebP）
+  const mediaKindRef        = useRef('video')   // 'video' | 'image' | 'anim'（アニメーション画像）
   const animRef             = useRef(null)   // 再生中の AnimPlayer
   const thumbHoverRef       = useRef(true)   // シークバーのホバーサムネイルを出すか（設定 ON かつ本物の動画）
   const [miniProgress, setMiniProgress] = useState(false)
@@ -127,7 +127,7 @@ export default function Player() {
   const [extracting,     setExtracting]     = useState(false)
   const [notice,         setNotice]         = useState(null)    // Snackbar 通知 { severity, text, busy? }
   const [isImage,        setIsImage]        = useState(false)   // 静止画を表示中か（VR・再生系UIを無効にする）
-  const [isAnim,         setIsAnim]         = useState(false)   // アニメーションWebPを再生中か（VR・サムネイル系を無効にする）
+  const [isAnim,         setIsAnim]         = useState(false)   // アニメーション画像を再生中か（VR・サムネイル系を無効にする）
 
   // Three.js シーン（生成・破棄・描画ループはフック側が担う）
   const {
@@ -411,7 +411,7 @@ export default function Player() {
   // 画像のときは video 要素を空にする。以後の再生・シーク・コマ送り・サムネイルは
   // すべて video.src の有無で早期 return するので、個別に分岐しなくて済む。
   //
-  // アニメーションWebP は Go 側で全フレームを展開し、AnimPlayer（video 要素と同じ
+  // アニメーション画像（WebP / GIF / APNG）は Go 側で全フレームを展開し、AnimPlayer（video 要素と同じ
   // インターフェース）を videoRef.current に差し替えて動画として扱う。
   // ローカルパスが無い Blob 読み込みでは展開できないので静止画（先頭フレーム）になる。
   const openMedia = async ({ url, name, path, image }) => {
@@ -422,7 +422,7 @@ export default function Player() {
     const seq = ++loadSeqRef.current
 
     let anim = null
-    if (image && path && /\.webp$/i.test(path)) {
+    if (image && path && mayBeAnimatedPath(path)) {
       try {
         const info = await OpenAnimation(path)
         if (info?.animated) anim = info
@@ -659,7 +659,7 @@ export default function Player() {
       e.preventDefault()
       const forward = e.key === 'ArrowRight'
       if (media.paused && media.stepFrame) {
-        // アニメーションWebP はフレームの境界が分かっているのでそれを使う
+        // アニメーション画像 はフレームの境界が分かっているのでそれを使う
         media.stepFrame(forward ? 1 : -1)
       } else if (media.paused) {
         if (frameSeeking) return

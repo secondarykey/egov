@@ -34,7 +34,7 @@ var videoExts = map[string]struct{}{
 // フロントエンドの utils.IMAGE_EXTS と揃えること。
 var imageExts = map[string]struct{}{
 	".jpg": {}, ".jpeg": {}, ".png": {}, ".gif": {}, ".webp": {},
-	".bmp": {}, ".avif": {},
+	".bmp": {}, ".avif": {}, ".apng": {},
 }
 
 // IsVideoFile reports whether path looks like a playable video file.

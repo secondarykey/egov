@@ -122,21 +122,32 @@ VR 中に開いたら normal へ落とす）。
   作業領域（`Window.GetScreen().WorkArea`）に収まらない素材は、縦横比を保って縮めた
   サイズにし、何%表示かを Snackbar で出す（`fitWindowToMedia()`）。そのまま `SetSize` すると
   OS が片方の辺だけクランプし、ウィンドウは最大近くなのに画は余白付きという状態になる
-- アニメーション GIF は先頭フレームのみ
+- アニメーションする WebP / GIF / APNG は次節の方式で動画として扱う
 
-### アニメーションWebP（動画として扱う）
+### アニメーション画像（WebP / GIF / APNG を動画として扱う）
 
-WebView は `<img>` ならアニメーションWebPを再生できるが、WebGL へ渡せるのは先頭フレームだけで
+WebView は `<img>` ならアニメーション画像を再生できるが、WebGL へ渡せるのは先頭フレームだけで
 シークもできない。そこで **Go 側で全フレームを合成して保持し、フロントは video 要素と同じ顔の
 `player/AnimPlayer.js` で再生する**。
 
-- デコードは `golang.org/x/image` の fork（`github.com/secondarykey/image` の
-  `feature/webp-animated`、`webp.DecodeAnimated`）。ルートと `_cmd/egov` の **両方の go.mod** に
-  `replace` がある（replace はメインモジュールでしか効かないため）。fork を更新したら両方の
-  擬似バージョンを上げること
-- `internal/animwebp` がオフセット・ブレンド・破棄を処理してキャンバスサイズの非乗算 RGBA に
-  合成する。破棄は背景色ではなく透明（libwebp / ブラウザと同じ）。10ms 以下の表示時間は 100ms 扱い
-  （これもブラウザと同じ）。合計 `MaxBytes`（1GB）を超える素材は展開せず静止画で出す
+- デコーダ:
+  - WebP: `golang.org/x/image` の fork（`github.com/secondarykey/image` の
+    `feature/webp-animated`、`webp.DecodeAnimated`）。ルートと `_cmd/egov` の **両方の go.mod** に
+    `replace` がある（replace はメインモジュールでしか効かないため）。fork を更新したら両方の
+    擬似バージョンを上げること
+  - GIF: 標準の `image/gif`（`DecodeAll`）
+  - APNG: `github.com/kettek/apng`（タグ無し、擬似バージョンで取り込み）。先頭の既定画像
+    （`IsDefault`）はアニメーションに含めない
+- `internal/animimage` の構成: 形式ごとの差（位置・重ね方・消し方・表示時間の単位）は
+  `formats.go` で共通の `frame` に揃え、合成は `compose()` だけが行う。消し方は
+  「そのまま / 透明に戻す / 直前に戻す（GIF・APNG のみ）」の3種。背景色ではなく透明に戻すのは
+  libwebp / ブラウザと同じ。10ms 以下の表示時間は 100ms 扱い（これもブラウザと同じ、GIF の
+  `delay=0` 対策）。合計 `MaxBytes`（1GB）を超える素材は展開せず静止画で出す
+- **形式もアニメーションかどうかも拡張子ではなく中身で判定する**（`IsAnimated`）。
+  `.png` の APNG があるため。軽い判定で済ませる: WebP は VP8X のフラグ、APNG は IDAT より前の
+  `acTL`、GIF は画像記述子が2つあるか（LZW は展開しない）。acTL があっても1フレームの APNG は
+  `ErrNotAnimated` → 静止画。フロントは `utils.mayBeAnimatedPath()`（webp/gif/png/apng）の
+  ときだけ `OpenAnimation` を呼ぶ
 - `API.OpenAnimation(path)` が展開して `AnimStore` に1本だけ保持し、フレームはローカルファイル
   サーバの `/animframe?token=&id=&i=` で生の RGBA として配る（バインディングで []byte を返すと
   base64 の JSON になり毎フレームには重い）。`id` は開き直すたびに増え、古い id の要求は 410

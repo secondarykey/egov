@@ -1,4 +1,4 @@
-// アニメーション WebP を HTMLVideoElement と同じ顔で再生するプレーヤー。
+// アニメーション画像（WebP / GIF / APNG）を HTMLVideoElement と同じ顔で再生するプレーヤー。
 //
 // フレームは Go 側（API.OpenAnimation）で合成済みの RGBA として保持されており、
 // /animframe から1枚ずつ取り寄せて自前の canvas へ描く。Player は videoRef.current を

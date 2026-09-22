@@ -6,23 +6,23 @@ import (
 	"strconv"
 	"sync"
 
-	"egov/internal/animwebp"
+	"egov/internal/animimage"
 )
 
-// AnimStore は開いているアニメーション WebP の合成済みフレームを保持し、
+// AnimStore は開いているアニメーション画像（WebP / GIF / APNG）の合成済みフレームを保持し、
 // ローカルファイルサーバ経由でフロントエンドへ1枚ずつ渡す。
 // バインディングで []byte を返すと JSON(base64) になり毎フレームには重すぎるため、
 // フレームの転送だけは HTTP で行う。同時に保持するのは1本だけ。
 type AnimStore struct {
 	mu   sync.RWMutex
 	id   int
-	anim *animwebp.Animation
+	anim *animimage.Animation
 }
 
 func NewAnimStore() *AnimStore { return &AnimStore{} }
 
 // AnimInfo はフロントエンドへ返すアニメーションの概要。
-// Animated=false なら静止画として扱う（アニメーションでない WebP など）。
+// Animated=false なら静止画として扱う（アニメーションでない WebP / GIF / PNG など）。
 type AnimInfo struct {
 	Animated    bool  `json:"animated"`
 	ID          int   `json:"id"`
@@ -32,14 +32,17 @@ type AnimInfo struct {
 }
 
 func (s *AnimStore) open(path string) (AnimInfo, error) {
-	if !animwebp.IsAnimated(path) {
+	if !animimage.IsAnimated(path) {
 		s.close()
 		return AnimInfo{}, nil
 	}
-	anim, err := animwebp.Load(path)
+	anim, err := animimage.Load(path)
 	if err != nil {
 		s.close()
-		if errors.Is(err, animwebp.ErrTooLarge) {
+		if errors.Is(err, animimage.ErrNotAnimated) {
+			return AnimInfo{}, nil
+		}
+		if errors.Is(err, animimage.ErrTooLarge) {
 			return AnimInfo{}, errors.New("animation is too large to play")
 		}
 		return AnimInfo{}, err
@@ -90,7 +93,7 @@ func (s *AnimStore) ServeFrame(w http.ResponseWriter, r *http.Request) {
 	w.Write(anim.Frames[i])
 }
 
-// OpenAnimation は path がアニメーション WebP なら全フレームを合成して保持し、
+// OpenAnimation は path がアニメーション画像なら全フレームを合成して保持し、
 // 再生に必要な情報を返す。アニメーションでなければ Animated=false を返す
 // （前に開いていたアニメーションは解放する）。
 func (a *API) OpenAnimation(path string) (AnimInfo, error) {
