@@ -5,6 +5,8 @@ This file provides guidance to coding agents (Claude Code など) when working w
 ## Project Overview
 
 **egov** is a desktop VR video player built with [Wails3](https://v3.wails.io/) — a framework that pairs a Go backend with a React + TypeScript frontend compiled into a single native binary. The app focuses on split-screen VR video playback with zoom support.
+It also opens still images (image viewer, normal/free modes only) and plays animated images
+(WebP / GIF / APNG / AVIF) with the same controls as video — see「静止画の表示」and「アニメーション画像」below.
 
 ## Commands
 
@@ -57,6 +59,18 @@ The project uses **two Go modules**:
 
 The command module imports the root module as a local `replace` directive in its `go.mod`.
 
+Root module packages:
+
+| Path | Purpose |
+|------|---------|
+| `api.go` / `settings.go` / `locales.go` | `API`（Wails Binding）・設定・ロケール |
+| `localfiles.go` | ローカルファイル配信の許可リスト・トークン・URL（`LocalFiles`）、`OpenLocalFile` |
+| `media.go` | ローカルファイルの配信（アニメーション AVIF の読み替えを含む） |
+| `anim.go` | アニメーション画像の展開結果の保持とフレーム配信（`AnimStore`）、`OpenAnimation` |
+| `internal/animimage` | WebP / GIF / APNG の展開・合成、AVIF シーケンスの判定と読み替え |
+| `internal/mp4cut` | MP4 の無劣化切り出し |
+| `internal/vrformat` | メタデータ・ファイル名からの VR 素材形式の推定 |
+
 ### Go ↔ Frontend Binding Pattern
 
 Methods on the `API` struct (`api.go`) are automatically callable from React via auto-generated TypeScript clients in `_cmd/egov/frontend/bindings/`. Adding a new backend method requires:
@@ -79,20 +93,25 @@ Vite builds to `_cmd/egov/frontend/dist/`. The Go binary embeds that directory w
 
 | File | Role |
 |------|------|
-| `player/useThreeScene.js` | Three.js scene setup + render-on-demand loop (rVFC), exposes refs |
+| `player/useThreeScene.js` | Three.js scene setup + render-on-demand loop (rVFC), exposes refs。平面に貼る素材を動画／画像／canvas で差し替える（`showVideo` / `showImage` / `showCanvas`） |
+| `player/AnimPlayer.js` | アニメーション画像を video 要素と同じインターフェースで再生するプレーヤー（Player が `videoRef.current` に差し込む） |
 | `player/vrShader.js` | VR投影のフルスクリーンquad＋GLSL（投影方式の変換一式） |
 | `player/TitleBar.jsx` | Title bar (drag region, mode toggle, window controls) |
 | `player/ControlBar.jsx` | Bottom bar (seek, play/pause, volume, fullscreen) |
 | `player/SeekBarArea.jsx` / `TimeDisplay.jsx` / `MiniProgressBar.jsx` | `memo`-isolated high-frequency updates (`timeupdate`, thumbnail hover) |
 | `player/VrViewpointOverlay.jsx` | VR start-point + 視点/投影の調整オーバーレイ |
 | `player/Overlays.jsx` | Feedback/error/drop/empty-state overlays |
+| `player/VideoInfoPanel.jsx` | 情報パネル（解像度・長さ・フレームレート、アニメーション画像はフレーム数と平均 FPS） |
+| `player/ThumbnailGrid.jsx` | サムネイル一覧（normal モード、動画のみ） |
+| `player/DiagnosticsOverlay.jsx` | `Ctrl+Shift+D` の診断オーバーレイ |
 | `player/utils.js` | Shared constants (`VR_START`, `barStyle`) and helpers |
 
 Key facts:
 
 - **Three.js** (`r0.184`) + `OrbitControls` for rendering. 平面モード（normal/free）は
   `PerspectiveCamera` ＋ plane、VRモードは専用シーンのフルスクリーンquad＋シェーダ。
-  両者は同じ `VideoTexture` を共有し、`renderOnce()` が `modeRef` で描画先を切り替える
+  動画のときは両者が同じ `VideoTexture` を共有し、`renderOnce()` が `modeRef` で描画先を切り替える。
+  画像・アニメーション画像のときは平面だけが別テクスチャ（`imageTexture`）を使い、VR は無効
 - **MUI** for all UI controls (title bar, control bar, sliders, menus)
 - Three view modes: `normal` (default, window-fit), `free` (pan/zoom), `vr` — internal names match the UI labels. Legacy `fit` in settings.json is migrated to `normal` by `Settings.normalize()`
 - マウス割り当ては free と vr で意味を揃えてある。**右ドラッグ＝平行移動、
