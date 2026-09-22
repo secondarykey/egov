@@ -133,6 +133,8 @@
     "resolution": "Resolution",
     "aspect": "Aspect ratio",
     "duration": "Duration",
-    "frameRate": "Frame rate"
+    "frameRate": "Frame rate",
+    "frameCount": "Frames",
+    "averageFps": "{{fps}} (average)"
   }
 }

@@ -133,6 +133,8 @@
     "resolution": "解像度",
     "aspect": "アスペクト比",
     "duration": "長さ",
-    "frameRate": "フレームレート"
+    "frameRate": "フレームレート",
+    "frameCount": "フレーム数",
+    "averageFps": "{{fps}}（平均）"
   }
 }

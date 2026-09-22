@@ -29,8 +29,14 @@ const aspectRatio = (w, h) => {
 const COMMON_FPS = [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60, 72, 90, 100, 119.88, 120]
 const fmtFps = (fps) => {
   if (!fps) return '—'
-  const near = COMMON_FPS.find(c => Math.abs(c - fps) < c * 0.005)
-  return `${(near ?? fps).toFixed(near && Number.isInteger(near) ? 0 : 2)} fps`
+  // 許容差内で「最も近い」ものを選ぶ。最初に見つかったものにすると
+  // 24 と 23.976 はどちらも許容差内なので、ちょうど 24 でも 23.98 と出てしまう
+  const near = COMMON_FPS
+    .filter(c => Math.abs(c - fps) < c * 0.005)
+    .sort((a, b) => Math.abs(a - fps) - Math.abs(b - fps))[0]
+  if (near) return `${near.toFixed(Number.isInteger(near) ? 0 : 2)} fps`
+  // 候補外（GIF に多い 10 / 12.5 fps など）は小数2桁まで、末尾の 0 は落とす
+  return `${Number(fps.toFixed(2))} fps`
 }
 
 // フレームレートは video 要素からは読めないので requestVideoFrameCallback の
@@ -79,6 +85,14 @@ export default function VideoInfoPanel({ video, duration, fileName, filePath }) 
   const width  = video?.videoWidth  ?? 0
   const height = video?.videoHeight ?? 0
 
+  // アニメーション画像（AnimPlayer）はコマごとに表示時間を持ち、一定の FPS が無い。
+  // フレーム数は分かっているので、実測ではなく「フレーム数 ÷ 長さ」の平均を出す。
+  const frameCount = video?.frameCount ?? 0
+  const fpsRows = frameCount && duration > 0
+    ? [[t('info.frameCount'), frameCount.toLocaleString()],
+       [t('info.frameRate'),  t('info.averageFps', { fps: fmtFps(frameCount / duration) })]]
+    : [[t('info.frameRate'),  fmtFps(fps)]]
+
   const rows = [
     [t('info.fileName'),   fileName || '—'],
     // ドロップで開いたファイルはローカルパスが取れないので、その場合は行ごと出さない
@@ -86,7 +100,7 @@ export default function VideoInfoPanel({ video, duration, fileName, filePath }) 
     [t('info.resolution'), width && height ? `${width} × ${height}` : '—'],
     [t('info.aspect'),     aspectRatio(width, height)],
     [t('info.duration'),   fmtDuration(duration)],
-    [t('info.frameRate'),  fmtFps(fps)],
+    ...fpsRows,
   ]
 
   return (
