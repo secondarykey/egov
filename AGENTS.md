@@ -162,19 +162,28 @@ WebView は `<img>` ならアニメーション画像を再生できるが、Web
   静止画（先頭フレーム）になる。** ドロップ・起動引数・二重起動の転送は動く
 
 **アニメーション AVIF は展開しない。** 中身は ISOBMFF（moov/trak、ハンドラ `pict`、`av01`
-サンプル）で MP4 と同じ構造をしており、**Chromium（WebView2）の `<video>` は `.avif` を
-そのまま動画として再生できる**（ヘッドレスの Chrome / Edge 153 で、480x270・1080p の両方で
-再生・シーク・フレーム取得を確認。拡張子やブランド・ハンドラの書き換えは不要だった）。
-そのため `API.OpenAnimation` は ftyp に `avis` ブランドがあれば `AsVideo=true` を返し、
+サンプル）で MP4 と同じ構造をしており、Chromium（WebView2）の `<video>` で動画として再生できる。
+`API.OpenAnimation` は ftyp に `avis` ブランドがあれば `AsVideo=true` を返し、
 フロントは通常の動画として開く（VR・サムネイル・範囲ループなども動画と同じく使える）。
 
+- ⚠️ **そのままでは再生できない。** AVIF シーケンスはトップレベルの `meta` に代表画像（静止画
+  1枚）を持ち、Chromium のデマクサ（FFmpeg）はこれを moov のトラックより前の映像ストリームとして
+  見せる。video 要素はその1フレームの方を選ぶため、読み込み直後に末尾（duration）へ飛んで
+  ended になる（`loadeddata` の時点で `currentTime == duration`）。
+  ローカルファイルサーバの `egov.ServeLocalFile()` が、配信時に **`meta` の box type だけを
+  同じ長さの `free` に読み替える**（`animimage.AVIFVideo`、ファイルは書き換えない）。
+  サイズが変わらないので stco のオフセットは直さなくてよい。ブランドや hdlr（`pict`）は
+  そのままで再生できる
+- ⚠️ 検証の落とし穴: 読み込み後にすぐシークするテストでは上の症状が見えない（シーク先は
+  正しく出る）。再生開始位置と `currentTime` の進みで確かめること
+- 実機の WebView2 を外から調べるには、`application.Options.Windows.AdditionalBrowserArgs` に
+  `--remote-debugging-port=<port>` を足した一時ビルドを使い、CDP の `Runtime.evaluate` で
+  状態を読む（環境変数 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` は Wails が引数を渡すため効かない）
 - 静止画の AVIF（`avif` ブランドのみ）は画像ビューアで表示する
 - AV1 を WebAssembly でデコードして展開する案（`gen2brain/avif`）は、バイナリ +7MB・
   1080p/5秒で展開6秒・約1GB と重いので採らなかった
 - 透過（アルファ用の補助トラック）は video 要素では反映されない
-- WebKitGTK / WKWebView での再生は未確認。GStreamer の qtdemux 等が `pict` ハンドラを
-  受け付けない場合は、ftyp のブランドと hdlr を同じ長さで `isom` / `vide` に書き換えて配れば
-  オフセットを直さずに MP4 にできる（Chromium ではこの書き換え版も再生できることを確認済み）
+- WebKitGTK / WKWebView での再生は未確認
 
 ### 範囲切り出し（無劣化カット）
 

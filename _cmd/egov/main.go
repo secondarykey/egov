@@ -156,7 +156,7 @@ func main() {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
-		http.ServeFile(w, r, path)
+		egov.ServeLocalFile(w, r, path)
 	}))
 
 	version := strings.TrimSpace(appVersion)
