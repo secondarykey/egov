@@ -53,6 +53,8 @@
   },
   "menu": {
     "openFile": "ファイルを開く",
+    "mediaFiles": "動画・画像",
+    "openFailed": "ファイルを開けませんでした: {{msg}}",
     "settings": "設定"
   },
   "mode": {
@@ -133,6 +135,8 @@
     "resolution": "解像度",
     "aspect": "アスペクト比",
     "duration": "長さ",
-    "frameRate": "フレームレート"
+    "frameRate": "フレームレート",
+    "frameCount": "フレーム数",
+    "averageFps": "{{fps}}（平均）"
   }
 }

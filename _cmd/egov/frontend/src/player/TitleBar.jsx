@@ -25,7 +25,7 @@ import { barStyle } from './utils'
 export default function TitleBar({
   showUI, resizeCursor, mode, onModeChange, rotation, onRotate,
   alwaysOnTop, onAlwaysOnTopToggle, activeColor,
-  onOpenSettings, onOpenVrOverlay, vrDisabled,
+  onOpenSettings, onOpenFile, onOpenVrOverlay, vrDisabled,
 }) {
   const { t } = useTranslation()
   const [menuAnchor, setMenuAnchor] = useState(null)
@@ -57,7 +57,7 @@ export default function TitleBar({
           open={Boolean(menuAnchor)}
           onClose={() => setMenuAnchor(null)}
         >
-          <MenuItem onClick={() => { setMenuAnchor(null); document.getElementById('file-input').click() }}>
+          <MenuItem onClick={() => { setMenuAnchor(null); onOpenFile() }}>
             <FolderOpenIcon fontSize="small" sx={{ mr: 1 }} />
             {t('menu.openFile')}
           </MenuItem>

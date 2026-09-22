@@ -53,6 +53,8 @@
   },
   "menu": {
     "openFile": "Open File",
+    "mediaFiles": "Videos and images",
+    "openFailed": "Could not open the file: {{msg}}",
     "settings": "Settings"
   },
   "mode": {
@@ -133,6 +135,8 @@
     "resolution": "Resolution",
     "aspect": "Aspect ratio",
     "duration": "Duration",
-    "frameRate": "Frame rate"
+    "frameRate": "Frame rate",
+    "frameCount": "Frames",
+    "averageFps": "{{fps}} (average)"
   }
 }
