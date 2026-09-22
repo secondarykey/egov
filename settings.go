@@ -16,11 +16,14 @@ type VRSettings struct {
 	InitialRoll  float64 `json:"initialRoll"`
 	// SourceProjection は素材の投影方式。"equirect"（正距円筒）のほか、
 	// 未変換のデュアル魚眼素材向けに "equidistant"（等距離）/
-	// "equisolid"（等立体角）を選べる。方式が合っていないと、
+	// "equisolid"（等立体角）を、普通のカメラ映像向けに "flat"（透視投影の
+	// 平面映像を正面に置く）を選べる。方式が合っていないと、
 	// 中央は合うのに首を振ると周辺が伸び縮みする。
 	SourceProjection string `json:"sourceProjection"`
 	// SourceFOV は素材の（片目分の）水平画角（度）。撮影機は 190°/200° が
 	// 多く、180°決め打ちだと首振り角と画の動きが一致しない。
+	// 縦の画角は切り出し後のアスペクトから求まる（360°モノラル 2:1 なら 180°）。
+	// 意味のある範囲は投影方式で変わる（sourceFovRange）。
 	SourceFOV float64 `json:"sourceFov"`
 	// DisplayProjection は画面への投影方式。"rectilinear"（透視）は画面端が
 	// 引き伸ばされるため、"panini" / "stereographic" を選べるようにしている。
@@ -33,7 +36,9 @@ type VRSettings struct {
 	FOV             float64 `json:"fov"`
 	DragSensitivity float64 `json:"dragSensitivity"`
 	ScrollSpeed     float64 `json:"scrollSpeed"`
-	DefaultStart    string  `json:"defaultStart"`
+	// DefaultStart はフレームのどこを使うか。"left"/"right"/"top"/"bottom" は
+	// ステレオ素材の片目分を切り出す。"full" はモノラル素材で切り出さない。
+	DefaultStart string `json:"defaultStart"`
 }
 
 type PlaybackSettings struct {
@@ -166,6 +171,19 @@ const (
 	vrFovMax = 180
 )
 
+// sourceFovRange は素材の水平画角（度）として意味のある範囲と、範囲外のときの値。
+// flat は tan で広がるため 180° 未満、正距円筒は 360°モノラルまで。
+// フロントエンド側の SRC_FOV_RANGE と一致させること。
+func sourceFovRange(proj string) (lo, hi, def float64) {
+	switch proj {
+	case "flat":
+		return 10, 170, 70
+	case "equidistant", "equisolid":
+		return 120, 240, 180
+	}
+	return 60, 360, 180
+}
+
 // clampShift は平行移動を上限内へ丸める。NaN は 0 に落とす。
 func clampShift(v float64) float64 {
 	switch {
@@ -192,13 +210,13 @@ func (s *Settings) normalize() {
 	}
 	s.VR.ShiftX = clampShift(s.VR.ShiftX)
 	s.VR.ShiftY = clampShift(s.VR.ShiftY)
-	if s.VR.SourceFOV < 60 || s.VR.SourceFOV > 360 {
-		s.VR.SourceFOV = d.VR.SourceFOV
-	}
 	switch s.VR.SourceProjection {
-	case "equirect", "equidistant", "equisolid":
+	case "equirect", "equidistant", "equisolid", "flat":
 	default:
 		s.VR.SourceProjection = d.VR.SourceProjection
+	}
+	if lo, hi, def := sourceFovRange(s.VR.SourceProjection); s.VR.SourceFOV < lo || s.VR.SourceFOV > hi {
+		s.VR.SourceFOV = def
 	}
 	switch s.VR.DisplayProjection {
 	case "rectilinear", "panini", "stereographic":
@@ -206,7 +224,7 @@ func (s *Settings) normalize() {
 		s.VR.DisplayProjection = d.VR.DisplayProjection
 	}
 	switch s.VR.DefaultStart {
-	case "left", "right", "top", "bottom":
+	case "left", "right", "top", "bottom", "full":
 	default:
 		s.VR.DefaultStart = d.VR.DefaultStart
 	}

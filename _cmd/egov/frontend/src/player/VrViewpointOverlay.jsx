@@ -5,9 +5,11 @@ import ArrowUpwardIcon   from '@mui/icons-material/ArrowUpward'
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import ArrowBackIcon     from '@mui/icons-material/ArrowBack'
 import ArrowForwardIcon  from '@mui/icons-material/ArrowForward'
+import CropFreeIcon      from '@mui/icons-material/CropFree'
 import RestartAltIcon    from '@mui/icons-material/RestartAlt'
 import { useTranslation } from 'react-i18next'
 import { VR_FOV_MAX, VR_FOV_MIN, VR_SHIFT_LIMIT } from './utils'
+import { SOURCE_PROJECTIONS, SRC_FOV_RANGE, fitSrcFov } from './vrShader'
 
 // 始点選択オーバーレイ内のボタン定義（コンパス配置）
 const startButtons = [
@@ -15,10 +17,12 @@ const startButtons = [
   { value: 'left',   Icon: ArrowBackIcon,     col: 1, row: 2 },
   { value: 'right',  Icon: ArrowForwardIcon,  col: 3, row: 2 },
   { value: 'bottom', Icon: ArrowDownwardIcon, col: 2, row: 3 },
+  // 中央＝切り出さない（モノラル素材）
+  { value: 'full',   Icon: CropFreeIcon,      col: 2, row: 2 },
 ]
 
 // 投影方式の選択肢。ラベルと説明は locales の vr.srcProj / vr.dispProj から引く。
-const SRC_PROJECTIONS  = ['equirect', 'equidistant', 'equisolid']
+const SRC_PROJECTIONS  = SOURCE_PROJECTIONS
 const DISP_PROJECTIONS = ['rectilinear', 'panini', 'stereographic']
 
 // VR始点選択＋視点調整オーバーレイ。
@@ -47,12 +51,15 @@ export default function VrViewpointOverlay({
   // ずらし量はウィンドウの半分を 100% とする
   const pct = v => `${(v * 100).toFixed(0)}%`
 
+  // 素材の画角として意味のある範囲は投影方式で変わる（flat は 180° 未満）
+  const srcFovRange = SRC_FOV_RANGE[vrView.srcProj] ?? SRC_FOV_RANGE.equirect
+
   // 2列グリッドへ行優先で並ぶ。左列＝頭の向き、右列＝素材への当て込み。
   const sliderRows = [
     { key: 'pitch',  label: t('vr.pitch'),  min: -90,  max: 90,  step: 0.5, reset: 0,   format: deg },
     { key: 'roll',   label: t('vr.roll'),   min: -45,  max: 45,  step: 0.1, reset: 0,   format: deg },
     { key: 'yaw',    label: t('vr.yaw'),    min: -180, max: 180, step: 0.5, reset: 0,   format: deg },
-    { key: 'srcFov', label: t('vr.srcFov'), min: 120,  max: 240, step: 1,   reset: 180, format: v => `${v.toFixed(0)}°` },
+    { key: 'srcFov', label: t('vr.srcFov'), min: srcFovRange.min, max: srcFovRange.max, step: 1, reset: srcFovRange.def, format: v => `${v.toFixed(0)}°` },
     { key: 'shiftX', label: t('vr.shiftX'), min: -VR_SHIFT_LIMIT, max: VR_SHIFT_LIMIT, step: 0.01, reset: 0, format: pct },
     { key: 'shiftY', label: t('vr.shiftY'), min: -VR_SHIFT_LIMIT, max: VR_SHIFT_LIMIT, step: 0.01, reset: 0, format: pct },
     { key: 'fov',    label: t('vr.fov'),    min: VR_FOV_MIN, max: VR_FOV_MAX, step: 1,     reset: 75, format: v => `${v.toFixed(0)}°` },
@@ -73,7 +80,10 @@ export default function VrViewpointOverlay({
         value={vrView[key]}
         onChange={(_, v) => {
           if (!v) return
-          onChange({ ...vrView, [key]: v })
+          const next = { ...vrView, [key]: v }
+          // 方式を切り替えたら画角をその方式の範囲へ収める
+          if (key === 'srcProj') next.srcFov = fitSrcFov(v, vrView.srcFov)
+          onChange(next)
         }}
         sx={{
           '& .MuiToggleButton-root': {
@@ -119,8 +129,8 @@ export default function VrViewpointOverlay({
         onClick={e => e.stopPropagation()}
       >
         {startButtons.map(({ value, Icon, col, row }) => (
+          <Tooltip key={value} title={t(`vr.side.${value}`)} placement="top">
           <Button
-            key={value}
             onClick={() => onVrStartChange(value)}
             sx={{
               gridColumn: col, gridRow: row,
@@ -137,6 +147,7 @@ export default function VrViewpointOverlay({
           >
             <Icon sx={{ fontSize: 40 }} />
           </Button>
+          </Tooltip>
         ))}
       </Box>
       <Box

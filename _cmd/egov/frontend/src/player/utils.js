@@ -4,6 +4,8 @@ export const VR_START = {
   right:  { repeat: [0.5, 1],   offset: [0.5, 0  ] },
   top:    { repeat: [1,   0.5], offset: [0,   0.5] },
   bottom: { repeat: [1,   0.5], offset: [0,   0  ] },
+  // モノラル素材（360°正距円筒、変換済みの平面映像など）は切り出さない
+  full:   { repeat: [1,   1  ], offset: [0,   0  ] },
 }
 
 export const fmt = (s) => {

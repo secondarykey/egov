@@ -11,7 +11,7 @@
     "shiftX": "Shift Horizontally",
     "shiftY": "Shift Vertically",
     "fov": "Field of View",
-    "srcFov": "Source FOV (lens angle)",
+    "srcFov": "Source horizontal FOV",
     "sourceProjection": "Source projection",
     "sourceProjectionHint": "How the footage stores angles. If this is wrong, the centre looks fine but the edges stretch as you look around.",
     "displayProjection": "Display projection",
@@ -22,7 +22,9 @@
       "equidistant": "Fisheye (equidistant)",
       "equidistantHint": "Unconverted dual-fisheye footage. Image height is proportional to angle.",
       "equisolid": "Fisheye (equisolid)",
-      "equisolidHint": "Unconverted dual-fisheye footage. Image height follows sin(angle/2)."
+      "equisolidHint": "Unconverted dual-fisheye footage. Image height follows sin(angle/2).",
+      "flat": "Flat",
+      "flatHint": "Ordinary camera footage. Placed as a single picture in front of you so you can look around it without re-encoding."
     },
     "dispProj": {
       "rectilinear": "Rectilinear",
@@ -41,7 +43,8 @@
       "left": "Left",
       "right": "Right",
       "top": "Top",
-      "bottom": "Bottom"
+      "bottom": "Bottom",
+      "full": "Whole frame (mono)"
     }
   },
   "menu": {

@@ -19,7 +19,7 @@ import VrViewpointOverlay from './player/VrViewpointOverlay'
 import DiagnosticsOverlay from './player/DiagnosticsOverlay'
 import { ClickFeedback, DropHint, EmptyState, SeekFeedback, SeekZoneOverlay, VideoErrorOverlay } from './player/Overlays'
 import { VR_FOV_MAX, VR_FOV_MIN, VR_SHIFT_LIMIT, VR_START, barStyle, clamp, deg2rad, fmt, isResizeEdge, rad2deg } from './player/utils'
-import { dispProjIndex, projScaleFor, setVrRotation, srcProjIndex } from './player/vrShader'
+import { dispProjIndex, fitSrcFov, projScaleFor, setVrRotation, srcProjIndex } from './player/vrShader'
 
 // 押し込み中にこの距離（px）を超えて動いたらドラッグ操作とみなし、
 // シークコントローラーは表示しない（free/vr モードの視点操作を邪魔しないため）
@@ -167,7 +167,7 @@ export default function Player() {
     vrRollRef.current     = v.roll
     vrShiftRef.current    = { ...v.shift }
     vrFovRef.current      = v.fov
-    vrSrcFovRef.current   = v.srcFov
+    vrSrcFovRef.current   = fitSrcFov(v.srcProj, v.srcFov)
     vrSrcProjRef.current  = v.srcProj
     vrDispProjRef.current = v.dispProj
     syncVrView()
