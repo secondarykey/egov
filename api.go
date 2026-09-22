@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"egov/internal/mp4cut"
+	"egov/internal/vrformat"
 )
 
 // LocalFileURL builds a playable URL for path on the local file server.
@@ -157,6 +158,27 @@ func (a *API) Quit() {
 // extractableExts は無劣化切り出し（ExtractRange）に対応する拡張子。
 // いずれも ISOBMFF なのでサンプルのバイトコピーだけで切り出せる。
 // mkv/webm/ts などはコンテナ構造が異なるため対象外。
+// VRFormat は動画ファイルから推定した VR 素材の形式。空文字列／0 の項目は
+// 推定できなかったもので、フロントエンドは保存済みの既定値を使う。
+type VRFormat struct {
+	// Start は "left" / "top" / "full"。
+	Start string `json:"start"`
+	// Projection は "equirect" / "equidistant"。
+	Projection string `json:"projection"`
+	// FOV は片目分の水平画角（度）。
+	FOV float64 `json:"fov"`
+	// Source は判定の根拠（"metadata" / "filename" / "metadata+filename" / ""）。
+	Source string `json:"source"`
+}
+
+// DetectVRFormat は path のメタデータ（Spherical Video V1/V2）とファイル名から
+// VR 素材の形式を推定する。ファイルが開けない場合はファイル名だけで推定する
+// （ローカルパスの無い Blob 読み込みでもファイル名を渡せば使える）。
+func (a *API) DetectVRFormat(path string) VRFormat {
+	f := vrformat.Detect(path)
+	return VRFormat{Start: f.Start, Projection: f.Projection, FOV: f.FOV, Source: f.Source}
+}
+
 var extractableExts = map[string]struct{}{
 	".mp4": {}, ".m4v": {}, ".mov": {},
 }

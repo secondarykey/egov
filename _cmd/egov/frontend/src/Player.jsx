@@ -6,7 +6,7 @@ import ContentCutIcon from '@mui/icons-material/ContentCut'
 import GridViewIcon from '@mui/icons-material/GridView'
 import FitScreenIcon from '@mui/icons-material/FitScreen'
 import { Dialogs, Events, Window } from '@wailsio/runtime'
-import { CanExtract, ExtractRange, SuggestExtractTarget, GetInitialFile, GetServerURL, GetSettings, UpdateAlwaysOnTop, UpdatePlaybackSettings, UpdateVRSettings } from '../bindings/egov/api'
+import { CanExtract, DetectVRFormat, ExtractRange, SuggestExtractTarget, GetInitialFile, GetServerURL, GetSettings, UpdateAlwaysOnTop, UpdatePlaybackSettings, UpdateVRSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
 import { loadLanguages } from './languages'
 import SettingsDialog from './SettingsDialog'
@@ -42,9 +42,14 @@ export default function Player() {
   const vrPitchRef      = useRef(0)
   const vrRollRef       = useRef(0)   // 素材の水平傾き補正（ラジアン）
   const vrShiftRef      = useRef({ x: 0, y: 0 })   // 描画結果の平行移動（画面半分=1.0）
-  // 保存済みの既定値。個別の ref に分けると保存・リセットのどちらかで
-  // 項目を取りこぼすため、currentVrView() が返す形のまま丸ごと持つ。
+  // 個別の ref に分けると保存・リセットのどちらかで項目を取りこぼすため、
+  // どちらも currentVrView() が返す形のまま丸ごと持つ。
+  //   vrSavedRef    … settings.json に保存されている既定値
+  //   vrDefaultsRef … Reset Camera の戻り先。保存済みの既定値に、開いている
+  //                   ファイルから推定した素材の形式（DetectVRFormat）を重ねたもの
+  const vrSavedRef      = useRef(null)
   const vrDefaultsRef   = useRef(null)
+  const loadSeqRef      = useRef(0)     // 形式推定の応答が前のファイルのものでないかの判定用
   const feedbackKeyRef      = useRef(0)
   const clickTimerRef           = useRef(null)
   const holdTimerRef            = useRef(null)
@@ -150,6 +155,7 @@ export default function Player() {
   // 保存・リセット・オーバーレイはすべてこの形を経由するので、
   // 項目を足したときに片側だけ忘れることがない。
   const currentVrView = () => ({
+    start:    vrStartRef.current,
     pitch:    vrPitchRef.current,
     yaw:      vrYawRef.current,
     roll:     vrRollRef.current,
@@ -162,6 +168,8 @@ export default function Player() {
 
   const restoreVrView = (v) => {
     if (!v) return
+    vrStartRef.current    = v.start
+    setVrStart(v.start)
     vrPitchRef.current    = v.pitch
     vrYawRef.current      = v.yaw
     vrRollRef.current     = v.roll
@@ -180,7 +188,9 @@ export default function Player() {
     shiftX: v.shift.x, shiftY: v.shift.y,
   })
 
+  // 始点はオーバーレイのスライダーではなくボタン（onVrStartChange）で変わる
   const fromOverlay = (o) => ({
+    start: vrStartRef.current,
     pitch: deg2rad(o.pitch), yaw: deg2rad(o.yaw), roll: deg2rad(o.roll),
     shift: { x: o.shiftX, y: o.shiftY },
     fov: o.fov, srcFov: o.srcFov, srcProj: o.srcProj, dispProj: o.dispProj,
@@ -315,11 +325,12 @@ export default function Player() {
   // 他のVR設定（感度等）は保存済みの値を維持する。
   const persistVRView = async () => {
     const v = currentVrView()
+    vrSavedRef.current    = v
     vrDefaultsRef.current = v
     const s = await GetSettings()
     UpdateVRSettings({
       ...s.vr,
-      defaultStart:      vrStartRef.current,
+      defaultStart:      v.start,
       initialPitch:      rad2deg(v.pitch),
       initialYaw:        rad2deg(v.yaw),
       initialRoll:       rad2deg(v.roll),
@@ -363,6 +374,32 @@ export default function Player() {
     })
   }
 
+  // ファイルから推定した素材の形式（始点・投影方式・画角）を反映する。
+  // 推定できた項目だけを保存済みの既定値に重ね、それを Reset Camera の戻り先にする。
+  // 向き・表示画角などの見方の好みには触れない。ディスクへは書かない。
+  // 推定できなかった項目は保存済みの既定値へ戻す——前のファイルの推定結果
+  // （例: 360°モノラル）を次のファイルへ持ち越さないため。
+  const applyDetectedFormat = async (pathOrName) => {
+    const seq = ++loadSeqRef.current
+    let f = {}
+    try {
+      f = await DetectVRFormat(pathOrName) ?? {}
+    } catch (err) {
+      console.warn('DetectVRFormat failed:', err)
+    }
+    if (seq !== loadSeqRef.current || !vrSavedRef.current) return
+    const saved   = vrSavedRef.current
+    const srcProj = f.projection || saved.srcProj
+    const format  = {
+      start:   f.start || saved.start,
+      srcProj,
+      srcFov:  fitSrcFov(srcProj, f.fov || saved.srcFov),
+    }
+    vrDefaultsRef.current = { ...saved, ...format }
+    restoreVrView({ ...currentVrView(), ...format })
+    setVrView(toOverlay(currentVrView()))
+  }
+
   const loadFile = (file) => {
     if (!file || !file.type.startsWith('video/')) return
     const video = videoRef.current
@@ -380,9 +417,11 @@ export default function Player() {
     safePlay(video)
     setPaused(false)
     setFileName(file.name)
-    // Blob 経由なのでローカルパスが無く、Go 側で切り出せない
+    // Blob 経由なのでローカルパスが無く、Go 側で切り出せない。
+    // 形式の推定もメタデータは読めずファイル名だけになる
     filePathRef.current = ''
     setCanExtract(false)
+    applyDetectedFormat(file.name)
     resetRangeLoop()
   }
 
@@ -405,6 +444,7 @@ export default function Player() {
     filePathRef.current = filePath
     setCanExtract(false)
     if (filePath) CanExtract(filePath).then(setCanExtract)
+    applyDetectedFormat(filePath)
     resetRangeLoop()
   }
 
@@ -438,6 +478,7 @@ export default function Player() {
       vrSensitivityRef.current = s.vr.dragSensitivity
       vrScrollSpeedRef.current = s.vr.scrollSpeed
       const saved = {
+        start:    s.vr.defaultStart,
         pitch:    deg2rad(s.vr.initialPitch),
         yaw:      deg2rad(s.vr.initialYaw),
         roll:     deg2rad(s.vr.initialRoll),
@@ -447,11 +488,10 @@ export default function Player() {
         srcProj:  s.vr.sourceProjection,
         dispProj: s.vr.displayProjection,
       }
+      vrSavedRef.current    = saved
       vrDefaultsRef.current = saved
       restoreVrView(saved)
       setVrView(toOverlay(saved))
-      setVrStart(s.vr.defaultStart)
-      vrStartRef.current = s.vr.defaultStart
       setMode(p.defaultMode)
       setMiniProgress(s.app.miniProgressBar)
       setServerUrl(url)
@@ -700,8 +740,9 @@ export default function Player() {
     if (!camera || !controls) return
 
     if (mode === 'vr') {
-      // 保存済みの既定へ全項目を戻す。向き・平行移動・画角だけでなく
+      // 既定へ全項目を戻す。向き・平行移動・画角だけでなく始点や
       // 素材／表示の投影方式も含める（保存が全項目を焼くので対称にする）。
+      // 戻り先は保存済みの既定値に、開いているファイルの推定結果を重ねたもの。
       restoreVrView(vrDefaultsRef.current)
     } else if (mode === 'normal') {
       const video = videoRef.current
