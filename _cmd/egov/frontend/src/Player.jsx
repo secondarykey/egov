@@ -18,7 +18,7 @@ import ThumbnailGrid from './player/ThumbnailGrid'
 import VrViewpointOverlay from './player/VrViewpointOverlay'
 import DiagnosticsOverlay from './player/DiagnosticsOverlay'
 import { ClickFeedback, DropHint, EmptyState, SeekFeedback, SeekZoneOverlay, VideoErrorOverlay } from './player/Overlays'
-import { VR_FOV_MAX, VR_FOV_MIN, VR_SHIFT_LIMIT, VR_START, barStyle, clamp, deg2rad, fmt, isResizeEdge, rad2deg } from './player/utils'
+import { VR_FOV_MAX, VR_FOV_MIN, VR_SHIFT_LIMIT, VR_START, barStyle, clamp, deg2rad, fmt, isImagePath, isResizeEdge, rad2deg } from './player/utils'
 import { dispProjIndex, fitSrcFov, projScaleFor, setVrRotation, srcProjIndex } from './player/vrShader'
 
 // 押し込み中にこの距離（px）を超えて動いたらドラッグ操作とみなし、
@@ -122,6 +122,7 @@ export default function Player() {
   const [canExtract,     setCanExtract]     = useState(false)   // 無劣化切り出しが可能なコンテナか
   const [extracting,     setExtracting]     = useState(false)
   const [extractMsg,     setExtractMsg]     = useState(null)    // { severity, text }
+  const [isImage,        setIsImage]        = useState(false)   // 静止画を表示中か（VR・再生系UIを無効にする）
 
   // Three.js シーン（生成・破棄・描画ループはフック側が担う）
   const {
@@ -130,6 +131,7 @@ export default function Player() {
     vrUniformsRef, syncVrSizeRef,
     requestRenderRef, captureRef, objectUrlRef, detectedFpsRef,
     frameCountRef, renderCountRef, renderPathRef,
+    showImageRef, showVideoRef, mediaSizeRef,
   } = useThreeScene({
     modeRef,
     onDuration: setDuration,
@@ -379,8 +381,7 @@ export default function Player() {
   // 向き・表示画角などの見方の好みには触れない。ディスクへは書かない。
   // 推定できなかった項目は保存済みの既定値へ戻す——前のファイルの推定結果
   // （例: 360°モノラル）を次のファイルへ持ち越さないため。
-  const applyDetectedFormat = async (pathOrName) => {
-    const seq = ++loadSeqRef.current
+  const applyDetectedFormat = async (pathOrName, seq) => {
     let f = {}
     try {
       f = await DetectVRFormat(pathOrName) ?? {}
@@ -400,52 +401,84 @@ export default function Player() {
     setVrView(toOverlay(currentVrView()))
   }
 
-  const loadFile = (file) => {
-    if (!file || !file.type.startsWith('video/')) return
+  // 動画・画像の読み込みの共通部分。
+  // 画像のときは video 要素を空にする。以後の再生・シーク・コマ送り・サムネイルは
+  // すべて video.src の有無で早期 return するので、個別に分岐しなくて済む。
+  const openMedia = ({ url, name, path, image }) => {
     const video = videoRef.current
     // Three.js の初期化に失敗している場合は video 要素が存在しない。
     // ここで例外にせず、初期化失敗のエラー表示をそのまま残す。
     if (!video) return
-    const url   = URL.createObjectURL(file)
-    // 前のファイルの Object URL を解放（Blob 参照のリーク防止）
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
-    objectUrlRef.current = url
+    const seq = ++loadSeqRef.current
     setVideoError(null)
     thumbCacheRef.current = null
+    setFileName(name)
+    filePathRef.current = path
+    setCanExtract(false)
+    setIsImage(image)
+    resetRangeLoop()
+
+    if (image) {
+      video.pause()
+      video.removeAttribute('src')
+      video.load()
+      const thumb = thumbVideoRef.current
+      if (thumb?.getAttribute('src')) {
+        thumb.removeAttribute('src')
+        thumb.load()
+      }
+      setPaused(true)
+      setDuration(0)
+      setThumbGridOpen(false)
+      // 画像は VR に対応しない（VRシェーダは VideoTexture 前提）
+      setMode(m => (m === 'vr' ? 'normal' : m))
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      img.src = url
+      img.decode().then(
+        () => { if (seq === loadSeqRef.current) showImageRef.current?.(img) },
+        () => { if (seq === loadSeqRef.current) setVideoError('IMAGE_DECODE_FAILED') },
+      )
+      return
+    }
+
+    showVideoRef.current?.()
     video.src = url
     if (thumbEnabledRef.current && thumbVideoRef.current) thumbVideoRef.current.src = url
     safePlay(video)
     setPaused(false)
-    setFileName(file.name)
+    if (path) CanExtract(path).then(setCanExtract)
+    applyDetectedFormat(path || name, seq)
+  }
+
+  const loadFile = (file) => {
+    if (!file) return
+    const image = file.type.startsWith('image/')
+    if (!image && !file.type.startsWith('video/')) return
+    if (!videoRef.current) return
+    const url = URL.createObjectURL(file)
+    // 前のファイルの Object URL を解放（Blob 参照のリーク防止）
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
+    objectUrlRef.current = url
     // Blob 経由なのでローカルパスが無く、Go 側で切り出せない。
     // 形式の推定もメタデータは読めずファイル名だけになる
-    filePathRef.current = ''
-    setCanExtract(false)
-    applyDetectedFormat(file.name)
-    resetRangeLoop()
+    openMedia({ url, name: file.name, path: '', image })
   }
 
   const loadFilePath = (fileUrl) => {
     if (!fileUrl) return
-    const video = videoRef.current
-    if (!video) return
+    if (!videoRef.current) return
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current)
       objectUrlRef.current = null
     }
-    setVideoError(null)
-    thumbCacheRef.current = null
-    video.src = fileUrl
-    if (thumbEnabledRef.current && thumbVideoRef.current) thumbVideoRef.current.src = fileUrl
-    safePlay(video)
-    setPaused(false)
     const filePath = new URL(fileUrl).searchParams.get('path') ?? ''
-    setFileName(filePath.split(/[\\/]/).pop())
-    filePathRef.current = filePath
-    setCanExtract(false)
-    if (filePath) CanExtract(filePath).then(setCanExtract)
-    applyDetectedFormat(filePath)
-    resetRangeLoop()
+    openMedia({
+      url: fileUrl,
+      name: filePath.split(/[\\/]/).pop(),
+      path: filePath,
+      image: isImagePath(filePath),
+    })
   }
 
   // 操作系設定を ref に反映する。起動時と設定ダイアログ保存時の両方から呼ばれる。
@@ -745,12 +778,12 @@ export default function Player() {
       // 戻り先は保存済みの既定値に、開いているファイルの推定結果を重ねたもの。
       restoreVrView(vrDefaultsRef.current)
     } else if (mode === 'normal') {
-      const video = videoRef.current
-      if (video?.videoWidth && video?.videoHeight) {
+      const { w, h } = mediaSizeRef.current
+      if (w && h) {
         if (rotation % 180) {
-          Window.SetSize(video.videoHeight, video.videoWidth)
+          Window.SetSize(h, w)
         } else {
-          Window.SetSize(video.videoWidth, video.videoHeight)
+          Window.SetSize(w, h)
         }
       }
     } else {
@@ -802,6 +835,8 @@ export default function Player() {
   // シングルクリックでも一定時間（800ms）保持し続けたらコントローラー（オーバーレイ）を表示する
   const handleCanvasMouseDown = (e) => {
     if (e.button !== 0) return
+    // 動画が無い（未選択・画像表示中）ときは長押しシークもダブルクリックシークも無い
+    if (!videoRef.current?.src) return
     // ウィンドウ枠のリサイズ域では何もしない（utils.isResizeEdge 参照）。
     // ここで長押しオーバーレイを開くと、リサイズ中は mouseup が
     // ランタイムに握り潰されるため閉じられず、早送りが続いてしまう。
@@ -996,6 +1031,7 @@ export default function Player() {
   }
 
   const handleModeChange = (v) => {
+    if (v === 'vr' && isImage) return
     if (v === 'vr' && rotation) setRotation(0)
     if (v !== 'normal') setThumbGridOpen(false)
     setMode(v)
@@ -1081,13 +1117,13 @@ export default function Player() {
         <ClickFeedback feedback={clickFeedback} onDone={() => setClickFeedback(null)} />
       )}
 
-      {videoError && <VideoErrorOverlay error={videoError} />}
+      {videoError && <VideoErrorOverlay error={videoError} image={isImage} />}
 
       {!fileName && <EmptyState resizeCursor={resizeCursor} />}
 
       {dragging && <DropHint />}
 
-      <input id="file-input" type="file" accept="video/*" style={{ display: 'none' }} onChange={handleFileChange} />
+      <input id="file-input" type="file" accept="video/*,image/*" style={{ display: 'none' }} onChange={handleFileChange} />
       <video ref={thumbVideoRef} muted preload="metadata" crossOrigin="anonymous" style={{ display: 'none' }} />
       <canvas ref={thumbCanvasRef} style={{ display: 'none' }} />
 
@@ -1114,6 +1150,7 @@ export default function Player() {
         activeColor={activeColor}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenVrOverlay={openVrOverlay}
+        vrDisabled={isImage}
       />
 
       {/* ミニプログレスバー */}
@@ -1123,6 +1160,7 @@ export default function Player() {
 
       <ControlBar
         showUI={showUI}
+        image={isImage}
         video={videoEl}
         duration={duration}
         paused={paused}
@@ -1187,6 +1225,7 @@ export default function Player() {
       >
         {/* 範囲切り出し。範囲ループのマーカーを in/out 点として使うため、
             範囲ループが有効なときだけ押せる */}
+        {!isImage && (<>
         <Tooltip
           title={!canExtract ? t('controls.extractUnsupported')
             : !rangeLoop     ? t('controls.extractNeedsRange')
@@ -1220,7 +1259,8 @@ export default function Player() {
             <CameraAltIcon sx={{ fontSize: 40 }} />
           </IconButton>
         </Tooltip>
-        {mode === 'normal' && (
+        </>)}
+        {mode === 'normal' && !isImage && (
           <Tooltip title={t('controls.thumbnailGrid')} placement="left">
             <IconButton onClick={handleThumbGridToggle} sx={{ color: 'white', width: 56, height: 56 }}>
               <GridViewIcon sx={{ fontSize: 36 }} />

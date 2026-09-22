@@ -76,3 +76,12 @@ export const barStyle = {
   transition:     'opacity 0.3s ease',
   color:          'white',
 }
+
+// 静止画として開く拡張子。Go 側 api.go の imageExts と揃えること。
+// ローカルパス経由（ドロップ・起動引数）では MIME が無いので拡張子で判定する。
+export const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.avif']
+
+export const isImagePath = (path) => {
+  const i = path.lastIndexOf('.')
+  return i >= 0 && IMAGE_EXTS.includes(path.slice(i).toLowerCase())
+}

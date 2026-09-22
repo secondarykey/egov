@@ -15,7 +15,7 @@ import { barStyle } from './utils'
 
 // 下部コントロールバー（シークバー・再生操作・音量・ファイル名・全画面）。
 export default function ControlBar({
-  showUI, video, duration, paused, onPlayPause,
+  showUI, image, video, duration, paused, onPlayPause,
   muted, onMuteToggle, volume, onVolumeChange, onVolumeCommitted,
   fileName, filePath, fullscreen, onFullscreenToggle,
   loop, onLoopToggle, rangeLoop, onRangeLoopToggle, activeColor,
@@ -32,6 +32,8 @@ export default function ControlBar({
       opacity: showUI ? 1 : 0,
       pointerEvents: showUI ? 'auto' : 'none',
     }}>
+      {/* 静止画のときは再生系（シーク・再生・音量・ループ）を出さない */}
+      {!image && (<>
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
         <SeekBarArea
           video={video}
@@ -50,7 +52,9 @@ export default function ControlBar({
       <Collapse in={rangeLoop}>
         <Box sx={{ mt: 0.25, height: 16 }} />
       </Collapse>
-      <Stack direction="row" sx={{ alignItems: 'center', mt: 1 }} spacing={1}>
+      </>)}
+      <Stack direction="row" sx={{ alignItems: 'center', mt: image ? 0 : 1 }} spacing={1}>
+        {!image && (<>
         <IconButton onClick={onPlayPause} sx={{ color: 'white', width: 36, height: 36 }}>
           {paused ? <PlayArrowIcon sx={{ fontSize: 28 }} /> : <PauseIcon sx={{ fontSize: 28 }} />}
         </IconButton>
@@ -73,6 +77,7 @@ export default function ControlBar({
             '& .MuiSlider-thumb': { width: 16, height: 16 },
           }}
         />
+        </>)}
         <Typography noWrap sx={{
           flex: 1, fontSize: '1.2rem', lineHeight: 1,
           color: 'rgba(255,255,255,0.6)',
@@ -80,6 +85,7 @@ export default function ControlBar({
         }}>
           {fileName}
         </Typography>
+        {!image && (<>
         <VideoInfoPanel video={video} duration={duration} fileName={fileName} filePath={filePath} />
         <Tooltip title={loop ? t('controls.loopOn') : t('controls.loopOff')} placement="top">
           <IconButton onClick={onLoopToggle} sx={{ color: loop ? activeColor : 'rgba(255,255,255,0.3)', width: 28, height: 28 }}>
@@ -91,6 +97,7 @@ export default function ControlBar({
             <LinearScaleIcon fontSize="small" />
           </IconButton>
         </Tooltip>
+        </>)}
         <Tooltip title={fullscreen ? t('controls.exitFullscreen') : t('controls.fullscreen')} placement="top">
           <IconButton onClick={onFullscreenToggle} sx={{ color: 'white', width: 28, height: 28, ml: '20px !important' }}>
             {fullscreen

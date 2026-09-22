@@ -152,7 +152,7 @@ export function ClickFeedback({ feedback, onDone }) {
 }
 
 // 動画読み込みエラー表示。error はエラーコード文字列。
-export function VideoErrorOverlay({ error }) {
+export function VideoErrorOverlay({ error, image }) {
   const { t } = useTranslation()
   return (
     <Box sx={{
@@ -163,7 +163,7 @@ export function VideoErrorOverlay({ error }) {
     }}>
       <ReportProblemIcon sx={{ fontSize: 64, color: 'rgba(255,80,80,0.8)' }} />
       <Typography sx={{ color: 'rgba(255,255,255,0.8)', fontSize: 16 }}>
-        {t('error.videoLoad')}
+        {image ? t('error.imageLoad') : t('error.videoLoad')}
       </Typography>
       <Typography sx={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>
         {error}

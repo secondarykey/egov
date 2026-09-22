@@ -22,6 +22,9 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
   const syncVrSizeRef  = useRef(null)     // 画面・切り出しのアスペクトを uniform へ反映
   const requestRenderRef = useRef(null)   // 単発レンダーを要求（操作・状態変化時）
   const captureRef     = useRef(null)     // 表示中の描画結果を2Dキャンバスへ取り出す
+  const showImageRef   = useRef(null)     // 平面に静止画を貼る（読み込み済みの HTMLImageElement を渡す）
+  const showVideoRef   = useRef(null)     // 平面を動画テクスチャへ戻す
+  const mediaSizeRef   = useRef({ w: 0, h: 0 })   // 表示中の動画／画像の画素数
   const objectUrlRef   = useRef(null)     // loadFile で作成した Object URL（解放用）
   const detectedFpsRef = useRef(0)
   const frameCountRef  = useRef(0)        // テクスチャに取り込んだ動画フレーム数（診断用）
@@ -92,11 +95,15 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
     }
     syncVrSizeRef.current = syncVrSize
 
+    // 静止画用。VideoTexture と違い sRGB の内部フォーマットで持たれるので、
+    // 平面の MeshBasicMaterial に貼る限り色空間の扱いは three.js に任せてよい。
+    // VRシェーダは VideoTexture 前提で自前復号しているため、画像は VR に通さない。
+    const imageTexture = new THREE.Texture()
+    imageTexture.colorSpace = THREE.SRGBColorSpace
+
     // 通常/フィット: 平面
-    const plane = new THREE.Mesh(
-      new THREE.PlaneGeometry(16, 9),
-      new THREE.MeshBasicMaterial({ map: texture }),
-    )
+    const planeMaterial = new THREE.MeshBasicMaterial({ map: texture })
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(16, 9), planeMaterial)
     planeRef.current = plane
     scene.add(plane)
 
@@ -173,16 +180,58 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
     }
     window.addEventListener('resize', onResize)
 
+    // 平面の縦横比を素材に合わせる（PlaneGeometry は 16:9 基準）
+    const applyMediaSize = (w, h) => {
+      mediaSizeRef.current = { w, h }
+      if (!w || !h) return
+      plane.scale.set((w / h) / (16 / 9), 1, 1)
+      if (modeRef.current === 'normal') fitCamera()
+    }
+
     video.addEventListener('loadedmetadata', () => {
       onDuration(video.duration)
-      if (video.videoWidth && video.videoHeight) {
-        const aspect = video.videoWidth / video.videoHeight
-        plane.scale.set(aspect / (16 / 9), 1, 1)
-        if (modeRef.current === 'normal') fitCamera()
-      }
+      applyMediaSize(video.videoWidth, video.videoHeight)
       syncVrSize()
       requestRender()
     })
+
+    // 静止画は読み込み時に一度アップロードすれば済むので、描画ループは使わない。
+    // 以後の再描画は操作・リサイズ時の requestRender だけで足りる。
+    const showImage = (img) => {
+      const w = img.naturalWidth, h = img.naturalHeight
+      // GPU のテクスチャ上限（多くは 16384px）を超えるとアップロードに失敗して
+      // 黒くなるため、収まる大きさへ縮小してから渡す。
+      const max = renderer.capabilities.maxTextureSize
+      let source = img
+      if (w > max || h > max) {
+        const k = max / Math.max(w, h)
+        const c = document.createElement('canvas')
+        c.width  = Math.floor(w * k)
+        c.height = Math.floor(h * k)
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height)
+        source = c
+      }
+      imageTexture.dispose()              // 前の画像の GPU メモリを解放
+      imageTexture.image = source
+      imageTexture.needsUpdate = true
+      planeMaterial.map = imageTexture
+      planeMaterial.transparent = true    // 透過 PNG の抜けを黒背景に合成する
+      planeMaterial.needsUpdate = true
+      applyMediaSize(w, h)
+      requestRender()
+    }
+    showImageRef.current = showImage
+
+    const showVideo = () => {
+      if (planeMaterial.map === texture) return
+      planeMaterial.map = texture
+      planeMaterial.transparent = false
+      planeMaterial.needsUpdate = true
+      imageTexture.dispose()
+      imageTexture.image = null
+      mediaSizeRef.current = { w: 0, h: 0 }
+    }
+    showVideoRef.current = showVideo
 
     // loadedmetadata 時点は readyState=HAVE_METADATA でフレーム実体がまだ無く、
     // ここで描画しても黒画のままになる。最初のフレームが揃う loadeddata で
@@ -346,6 +395,7 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
       controls.dispose()
       vr.mesh.geometry.dispose()
       vr.material.dispose()
+      imageTexture.dispose()
       renderer.dispose()
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement)
       video.src = ''
@@ -359,5 +409,6 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
     vrUniformsRef, syncVrSizeRef,
     requestRenderRef, captureRef, objectUrlRef, detectedFpsRef,
     frameCountRef, renderCountRef, renderPathRef,
+    showImageRef, showVideoRef, mediaSizeRef,
   }
 }

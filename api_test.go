@@ -114,3 +114,30 @@ func TestTimeTag(t *testing.T) {
 		}
 	}
 }
+
+func TestIsMediaFile(t *testing.T) {
+	tests := []struct {
+		path         string
+		video, image bool
+	}{
+		{"a.mp4", true, false},
+		{"a.MKV", true, false},
+		{"a.jpg", false, true},
+		{"a.JPEG", false, true},
+		{"a.png", false, true},
+		{"a.webp", false, true},
+		{"a.txt", false, false},
+		{"noext", false, false},
+	}
+	for _, tt := range tests {
+		if got := IsVideoFile(tt.path); got != tt.video {
+			t.Errorf("IsVideoFile(%q) = %v, want %v", tt.path, got, tt.video)
+		}
+		if got := IsImageFile(tt.path); got != tt.image {
+			t.Errorf("IsImageFile(%q) = %v, want %v", tt.path, got, tt.image)
+		}
+		if got := IsMediaFile(tt.path); got != (tt.video || tt.image) {
+			t.Errorf("IsMediaFile(%q) = %v", tt.path, got)
+		}
+	}
+}

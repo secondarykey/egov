@@ -30,10 +30,28 @@ var videoExts = map[string]struct{}{
 	".m2ts": {}, ".mts": {}, ".ts": {}, ".ogv": {}, ".3gp": {},
 }
 
+// imageExts は静止画として開く拡張子。WebView がデコードできる形式に限る。
+// フロントエンドの utils.IMAGE_EXTS と揃えること。
+var imageExts = map[string]struct{}{
+	".jpg": {}, ".jpeg": {}, ".png": {}, ".gif": {}, ".webp": {},
+	".bmp": {}, ".avif": {},
+}
+
 // IsVideoFile reports whether path looks like a playable video file.
 func IsVideoFile(path string) bool {
 	_, ok := videoExts[strings.ToLower(filepath.Ext(path))]
 	return ok
+}
+
+// IsImageFile reports whether path looks like a displayable image file.
+func IsImageFile(path string) bool {
+	_, ok := imageExts[strings.ToLower(filepath.Ext(path))]
+	return ok
+}
+
+// IsMediaFile reports whether path can be opened (video or image).
+func IsMediaFile(path string) bool {
+	return IsVideoFile(path) || IsImageFile(path)
 }
 
 type API struct {

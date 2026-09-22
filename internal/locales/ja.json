@@ -1,7 +1,8 @@
 {
-  "drop": "動画をドロップ",
+  "drop": "動画・画像をドロップ",
   "error": {
-    "videoLoad": "動画を読み込めませんでした"
+    "videoLoad": "動画を読み込めませんでした",
+    "imageLoad": "画像を読み込めませんでした"
   },
   "vr": {
     "selectViewpoint": "視点を選択",

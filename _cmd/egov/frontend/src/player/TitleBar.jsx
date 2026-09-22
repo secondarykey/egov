@@ -25,7 +25,7 @@ import { barStyle } from './utils'
 export default function TitleBar({
   showUI, resizeCursor, mode, onModeChange, rotation, onRotate,
   alwaysOnTop, onAlwaysOnTopToggle, activeColor,
-  onOpenSettings, onOpenVrOverlay,
+  onOpenSettings, onOpenVrOverlay, vrDisabled,
 }) {
   const { t } = useTranslation()
   const [menuAnchor, setMenuAnchor] = useState(null)
@@ -92,8 +92,9 @@ export default function TitleBar({
           <Tooltip title={t('mode.free')} placement="bottom">
             <ToggleButton value="free"><OpenWithIcon fontSize="small" /></ToggleButton>
           </Tooltip>
-          <Tooltip title="VR" placement="bottom">
-            <ToggleButton value="vr"><VrpanoIcon fontSize="small" /></ToggleButton>
+          {/* 無効なボタンに Tooltip を付けると MUI が警告するので、そのときは出さない */}
+          <Tooltip title={vrDisabled ? '' : 'VR'} placement="bottom">
+            <ToggleButton value="vr" disabled={vrDisabled}><VrpanoIcon fontSize="small" /></ToggleButton>
           </Tooltip>
         </ToggleButtonGroup>
       </Box>

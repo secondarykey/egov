@@ -1,7 +1,8 @@
 {
-  "drop": "Drop video here",
+  "drop": "Drop video or image here",
   "error": {
-    "videoLoad": "Failed to load video"
+    "videoLoad": "Failed to load video",
+    "imageLoad": "Failed to load image"
   },
   "vr": {
     "selectViewpoint": "Select Viewpoint",

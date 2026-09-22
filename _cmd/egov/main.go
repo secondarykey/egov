@@ -238,8 +238,8 @@ func main() {
 	// この経路に一本化する。
 	win.OnWindowEvent(events.Common.WindowFilesDropped, func(e *application.WindowEvent) {
 		for _, path := range e.Context().DroppedFiles() {
-			// 動画以外は無視する（従来のフロントエンド側 MIME 判定と同じ扱い）
-			if !egov.IsVideoFile(path) {
+			// 動画・画像以外は無視する（従来のフロントエンド側 MIME 判定と同じ扱い）
+			if !egov.IsMediaFile(path) {
 				continue
 			}
 			mu.Lock()

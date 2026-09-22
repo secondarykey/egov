@@ -101,6 +101,26 @@ Key facts:
 - VR split-screen: シェーダの `uSrcOffset` / `uSrcRepeat` uniform が左右／上下の半分を選ぶ。
   `texture.repeat/offset` は平面モードと共有しているので触らないこと（等倍のまま）
 
+### 静止画の表示
+
+画像（`api.go` の `imageExts` / フロントの `utils.IMAGE_EXTS`、両者は揃えること）も開ける。
+**画像は normal / free だけで、VR は無効**（タイトルバーの VR ボタンを disabled にし、
+VR 中に開いたら normal へ落とす）。
+
+- 読み込みは `Player.openMedia()` に一本化してある。画像のときは **video 要素の src を外す**
+  （`removeAttribute('src')` + `load()`。`src = ''` は error を発火させる）。
+  再生・シーク・コマ送り・サムネイル・長押しシークはすべて `video.src` の有無で
+  早期 return するので、個別の分岐は不要
+- 描画は `useThreeScene` の `showImage()` / `showVideo()` が平面マテリアルの `map` を
+  `THREE.Texture`（画像）と `VideoTexture` で差し替える。画像は一度アップロードすれば
+  描画ループは不要（操作・リサイズ時の `requestRender` だけ）
+- **VR に画像を通さない理由は色空間。** `THREE.Texture` は sRGB 内部フォーマットで持たれ、
+  サンプル時点で線形化済み。VRシェーダは VideoTexture 前提で `sRGBTransferEOTF()` を
+  自前でかけているので、そのまま通すと二重復号で暗く沈む。対応するなら uniform で切り替える
+- GPU の `maxTextureSize` を超える画像はキャンバスで縮小してから渡す
+- ウィンドウのフィット（Reset）は `mediaSizeRef`（動画／画像共通の画素数）を使う
+- アニメーション GIF は先頭フレームのみ
+
 ### 範囲切り出し（無劣化カット）
 
 `internal/mp4cut` が progressive MP4 (`moov` + `mdat`) から時間範囲をサンプル単位で
