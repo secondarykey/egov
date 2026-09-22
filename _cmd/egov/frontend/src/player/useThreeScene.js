@@ -11,7 +11,8 @@ import { createVrQuad } from './vrShader'
 // onDuration / onVideoEl / onVideoError には setState 関数（安定参照）を渡すこと。
 export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoError }) {
   const mountRef       = useRef(null)
-  const videoRef       = useRef(null)
+  const videoRef       = useRef(null)     // 再生中のメディア（video 要素か AnimPlayer。Player が差し替える）
+  const videoElRef     = useRef(null)     // 本物の video 要素（差し替えても変わらない）
   const cameraRef      = useRef(null)
   const controlsRef    = useRef(null)
   const planeRef       = useRef(null)
@@ -24,6 +25,8 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
   const captureRef     = useRef(null)     // 表示中の描画結果を2Dキャンバスへ取り出す
   const showImageRef   = useRef(null)     // 平面に静止画を貼る（読み込み済みの HTMLImageElement を渡す）
   const showVideoRef   = useRef(null)     // 平面を動画テクスチャへ戻す
+  const showCanvasRef  = useRef(null)     // 平面に canvas を貼る（アニメーションWebP。描き換えごとに refreshCanvasRef）
+  const refreshCanvasRef = useRef(null)   // canvas の描き換えをテクスチャへ反映して再描画する
   const mediaSizeRef   = useRef({ w: 0, h: 0 })   // 表示中の動画／画像の画素数
   const objectUrlRef   = useRef(null)     // loadFile で作成した Object URL（解放用）
   const detectedFpsRef = useRef(0)
@@ -73,6 +76,7 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
     video.crossOrigin = 'anonymous'
     video.volume      = 0.5
     videoRef.current  = video
+    videoElRef.current = video
     onVideoEl(video)
 
     const texture = new THREE.VideoTexture(video)
@@ -197,6 +201,21 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
 
     // 静止画は読み込み時に一度アップロードすれば済むので、描画ループは使わない。
     // 以後の再描画は操作・リサイズ時の requestRender だけで足りる。
+    // source を平面に貼る。dynamic=true は毎フレーム描き換わる canvas 用で、
+    // アップロードごとのミップマップ生成を省く（縮小表示のにじみ対策より速度を取る）。
+    const setPlaneSource = (source, w, h, dynamic) => {
+      imageTexture.dispose()              // 前の画像の GPU メモリを解放
+      imageTexture.image = source
+      imageTexture.generateMipmaps = !dynamic
+      imageTexture.minFilter = dynamic ? THREE.LinearFilter : THREE.LinearMipmapLinearFilter
+      imageTexture.needsUpdate = true
+      planeMaterial.map = imageTexture
+      planeMaterial.transparent = true    // 透過 PNG / WebP の抜けを黒背景に合成する
+      planeMaterial.needsUpdate = true
+      applyMediaSize(w, h)
+      requestRender()
+    }
+
     const showImage = (img) => {
       const w = img.naturalWidth, h = img.naturalHeight
       // GPU のテクスチャ上限（多くは 16384px）を超えるとアップロードに失敗して
@@ -211,16 +230,15 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
         c.getContext('2d').drawImage(img, 0, 0, c.width, c.height)
         source = c
       }
-      imageTexture.dispose()              // 前の画像の GPU メモリを解放
-      imageTexture.image = source
-      imageTexture.needsUpdate = true
-      planeMaterial.map = imageTexture
-      planeMaterial.transparent = true    // 透過 PNG の抜けを黒背景に合成する
-      planeMaterial.needsUpdate = true
-      applyMediaSize(w, h)
-      requestRender()
+      setPlaneSource(source, w, h, false)
     }
     showImageRef.current = showImage
+
+    showCanvasRef.current = (canvas) => setPlaneSource(canvas, canvas.width, canvas.height, true)
+    refreshCanvasRef.current = () => {
+      imageTexture.needsUpdate = true
+      requestRender()
+    }
 
     const showVideo = () => {
       if (planeMaterial.map === texture) return
@@ -409,6 +427,7 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
     vrUniformsRef, syncVrSizeRef,
     requestRenderRef, captureRef, objectUrlRef, detectedFpsRef,
     frameCountRef, renderCountRef, renderPathRef,
-    showImageRef, showVideoRef, mediaSizeRef,
+    showImageRef, showVideoRef, showCanvasRef, refreshCanvasRef, mediaSizeRef,
+    videoElRef,
   }
 }

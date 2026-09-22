@@ -62,6 +62,7 @@ type API struct {
 	secret         string
 	settings       *Settings
 	version        string
+	anims          *AnimStore
 }
 
 // QuitRequested is signaled each time the frontend calls API.Quit(). main
@@ -70,8 +71,8 @@ type API struct {
 // about any func-typed declaration in this package.
 var QuitRequested = make(chan struct{}, 1)
 
-func NewApi(initialFile string, fileServerPort int, secret string, settings *Settings, version string) *API {
-	return &API{initialFile: initialFile, fileServerPort: fileServerPort, secret: secret, settings: settings, version: version}
+func NewApi(initialFile string, fileServerPort int, secret string, settings *Settings, version string, anims *AnimStore) *API {
+	return &API{initialFile: initialFile, fileServerPort: fileServerPort, secret: secret, settings: settings, version: version, anims: anims}
 }
 
 // GetVersion returns the application version.

@@ -1,5 +1,8 @@
 {
   "drop": "Drop video or image here",
+  "anim": {
+    "fallback": "Could not expand the animation; showing it as a still image ({{msg}})"
+  },
   "error": {
     "videoLoad": "Failed to load video",
     "imageLoad": "Failed to load image"

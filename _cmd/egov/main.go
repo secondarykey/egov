@@ -96,6 +96,7 @@ func main() {
 		os.Exit(1)
 	}
 	fileServerPort := listener.Addr().(*net.TCPAddr).Port
+	anims := egov.NewAnimStore()
 	go http.Serve(listener, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// CORS: webview（wails オリジン）とローカル開発サーバのみ許可。
 		// 任意オリジンに開かないことで、外部サイトからの読み出しを防ぐ。
@@ -140,6 +141,13 @@ func main() {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
+
+		// アニメーション WebP の合成済みフレーム（API.OpenAnimation で展開したもの）
+		if urlPath == "/animframe" {
+			anims.ServeFrame(w, r)
+			return
+		}
+
 		path := r.URL.Query().Get("path")
 		mu.RLock()
 		_, ok := allowed[path]
@@ -156,7 +164,7 @@ func main() {
 		version += "+DEV"
 	}
 
-	api := egov.NewApi(initialFile, fileServerPort, secret, settings, version)
+	api := egov.NewApi(initialFile, fileServerPort, secret, settings, version, anims)
 
 	// Webview のユーザーデータは固定パスに置く。
 	// 起動ごとの一時ディレクトリだと %TEMP% に溜まり続け、キャッシュも効かない。

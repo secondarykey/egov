@@ -15,7 +15,7 @@ import { barStyle } from './utils'
 
 // 下部コントロールバー（シークバー・再生操作・音量・ファイル名・全画面）。
 export default function ControlBar({
-  showUI, image, video, duration, paused, onPlayPause,
+  showUI, image, silent, video, duration, paused, onPlayPause,
   muted, onMuteToggle, volume, onVolumeChange, onVolumeCommitted,
   fileName, filePath, fullscreen, onFullscreenToggle,
   loop, onLoopToggle, rangeLoop, onRangeLoopToggle, activeColor,
@@ -59,6 +59,8 @@ export default function ControlBar({
           {paused ? <PlayArrowIcon sx={{ fontSize: 28 }} /> : <PauseIcon sx={{ fontSize: 28 }} />}
         </IconButton>
         <TimeDisplay video={video} duration={duration} visible={showUI} />
+        {/* 音声の無い素材（アニメーションWebP）では音量を出さない */}
+        {!silent && (<>
         <IconButton onClick={onMuteToggle} sx={{ color: muted ? 'rgba(255,255,255,0.3)' : 'white', width: 28, height: 28, ml: '20px !important' }}>
           {muted ? <VolumeOffIcon /> : <VolumeUpIcon />}
         </IconButton>
@@ -77,6 +79,7 @@ export default function ControlBar({
             '& .MuiSlider-thumb': { width: 16, height: 16 },
           }}
         />
+        </>)}
         </>)}
         <Typography noWrap sx={{
           flex: 1, fontSize: '1.2rem', lineHeight: 1,

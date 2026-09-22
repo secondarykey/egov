@@ -124,6 +124,32 @@ VR 中に開いたら normal へ落とす）。
   OS が片方の辺だけクランプし、ウィンドウは最大近くなのに画は余白付きという状態になる
 - アニメーション GIF は先頭フレームのみ
 
+### アニメーションWebP（動画として扱う）
+
+WebView は `<img>` ならアニメーションWebPを再生できるが、WebGL へ渡せるのは先頭フレームだけで
+シークもできない。そこで **Go 側で全フレームを合成して保持し、フロントは video 要素と同じ顔の
+`player/AnimPlayer.js` で再生する**。
+
+- デコードは `golang.org/x/image` の fork（`github.com/secondarykey/image` の
+  `feature/webp-animated`、`webp.DecodeAnimated`）。ルートと `_cmd/egov` の **両方の go.mod** に
+  `replace` がある（replace はメインモジュールでしか効かないため）。fork を更新したら両方の
+  擬似バージョンを上げること
+- `internal/animwebp` がオフセット・ブレンド・破棄を処理してキャンバスサイズの非乗算 RGBA に
+  合成する。破棄は背景色ではなく透明（libwebp / ブラウザと同じ）。10ms 以下の表示時間は 100ms 扱い
+  （これもブラウザと同じ）。合計 `MaxBytes`（1GB）を超える素材は展開せず静止画で出す
+- `API.OpenAnimation(path)` が展開して `AnimStore` に1本だけ保持し、フレームはローカルファイル
+  サーバの `/animframe?token=&id=&i=` で生の RGBA として配る（バインディングで []byte を返すと
+  base64 の JSON になり毎フレームには重い）。`id` は開き直すたびに増え、古い id の要求は 410
+- Player は **`videoRef.current` を AnimPlayer に差し替える**。シークバー・時間表示・範囲ループ・
+  ダブルクリック／長押しシークは video 要素と同じプロパティとイベントで動く。
+  本物の video 要素は `videoElRef`（診断オーバーレイ・コマ送りのラッチ・ループ初期値）
+- 画像と同じく VR は無効。サムネイル（ホバー／一覧）と音量も出さない。
+  ホバーサムネイルの可否は設定値そのものではなく `thumbHoverRef` を SeekBarArea へ渡している
+- 描画は canvas を `imageTexture` に貼り、フレームを描き換えるたびに `refreshCanvasRef` で
+  再アップロードする（ミップマップ生成は切る）
+- **ファイル選択ダイアログ（`<input type=file>`）経由はローカルパスが無いので展開できず、
+  静止画（先頭フレーム）になる。** ドロップ・起動引数・二重起動の転送は動く
+
 ### 範囲切り出し（無劣化カット）
 
 `internal/mp4cut` が progressive MP4 (`moov` + `mdat`) から時間範囲をサンプル単位で
