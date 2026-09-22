@@ -28,7 +28,6 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
   const showCanvasRef  = useRef(null)     // 平面に canvas を貼る（アニメーション画像。描き換えごとに refreshCanvasRef）
   const refreshCanvasRef = useRef(null)   // canvas の描き換えをテクスチャへ反映して再描画する
   const mediaSizeRef   = useRef({ w: 0, h: 0 })   // 表示中の動画／画像の画素数
-  const objectUrlRef   = useRef(null)     // loadFile で作成した Object URL（解放用）
   const detectedFpsRef = useRef(0)
   const frameCountRef  = useRef(0)        // テクスチャに取り込んだ動画フレーム数（診断用）
   const renderCountRef = useRef(0)        // WebGL描画回数（診断用）
@@ -417,7 +416,6 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
       renderer.dispose()
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement)
       video.src = ''
-      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
     }
   }, [])
 
@@ -425,7 +423,7 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
     mountRef, videoRef, cameraRef, controlsRef, planeRef,
     textureRef, fitCameraRef, rendererRef,
     vrUniformsRef, syncVrSizeRef,
-    requestRenderRef, captureRef, objectUrlRef, detectedFpsRef,
+    requestRenderRef, captureRef, detectedFpsRef,
     frameCountRef, renderCountRef, renderPathRef,
     showImageRef, showVideoRef, showCanvasRef, refreshCanvasRef, mediaSizeRef,
     videoElRef,

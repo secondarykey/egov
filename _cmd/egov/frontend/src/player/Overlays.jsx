@@ -172,12 +172,11 @@ export function VideoErrorOverlay({ error, image }) {
   )
 }
 
-// ファイル未選択時のプレースホルダ。クリックでファイル選択を開く（label 経由）。
-export function EmptyState({ resizeCursor }) {
+// ファイル未選択時のプレースホルダ。クリックでファイル選択を開く。
+export function EmptyState({ resizeCursor, onOpenFile }) {
   return (
     <Box
-      component="label"
-      htmlFor="file-input"
+      onClick={onOpenFile}
       sx={{
         position: 'absolute', inset: 0, zIndex: 5,
         display: 'flex', flexDirection: 'column',

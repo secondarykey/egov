@@ -95,7 +95,7 @@ export default function VideoInfoPanel({ video, duration, fileName, filePath }) 
 
   const rows = [
     [t('info.fileName'),   fileName || '—'],
-    // ドロップで開いたファイルはローカルパスが取れないので、その場合は行ごと出さない
+    // パスが無い（ファイル未選択など）ときは行ごと出さない
     ...(filePath ? [[t('info.path'), filePath]] : []),
     [t('info.resolution'), width && height ? `${width} × ${height}` : '—'],
     [t('info.aspect'),     aspectRatio(width, height)],

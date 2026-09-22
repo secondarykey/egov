@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,12 +13,6 @@ import (
 	"egov/internal/mp4cut"
 	"egov/internal/vrformat"
 )
-
-// LocalFileURL builds a playable URL for path on the local file server.
-func LocalFileURL(port int, secret, path string) string {
-	return fmt.Sprintf("http://127.0.0.1:%d/localfile?token=%s&path=%s",
-		port, secret, url.QueryEscape(path))
-}
 
 // videoExts はドロップを受け付ける拡張子。
 // ドラッグ&ドロップは Go 側でパスとして受け取るため、
@@ -56,13 +49,12 @@ func IsMediaFile(path string) bool {
 
 type API struct {
 	// mu guards settings/initialFile. バインディング呼び出しは並行に実行されうる。
-	mu             sync.Mutex
-	initialFile    string
-	fileServerPort int
-	secret         string
-	settings       *Settings
-	version        string
-	anims          *AnimStore
+	mu          sync.Mutex
+	initialFile string
+	files       *LocalFiles
+	settings    *Settings
+	version     string
+	anims       *AnimStore
 }
 
 // QuitRequested is signaled each time the frontend calls API.Quit(). main
@@ -71,8 +63,8 @@ type API struct {
 // about any func-typed declaration in this package.
 var QuitRequested = make(chan struct{}, 1)
 
-func NewApi(initialFile string, fileServerPort int, secret string, settings *Settings, version string, anims *AnimStore) *API {
-	return &API{initialFile: initialFile, fileServerPort: fileServerPort, secret: secret, settings: settings, version: version, anims: anims}
+func NewApi(initialFile string, files *LocalFiles, settings *Settings, version string, anims *AnimStore) *API {
+	return &API{initialFile: initialFile, files: files, settings: settings, version: version, anims: anims}
 }
 
 // GetVersion returns the application version.
@@ -82,7 +74,7 @@ func (a *API) GetVersion() string {
 
 // GetServerURL returns the base URL of the local file server.
 func (a *API) GetServerURL() string {
-	return fmt.Sprintf("http://127.0.0.1:%d", a.fileServerPort)
+	return a.files.BaseURL()
 }
 
 // GetSettings returns the current settings.
@@ -349,5 +341,5 @@ func (a *API) GetInitialFile() string {
 	}
 	path := a.initialFile
 	a.initialFile = ""
-	return LocalFileURL(a.fileServerPort, a.secret, path)
+	return a.files.Allow(path)
 }

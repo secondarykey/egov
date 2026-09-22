@@ -158,8 +158,6 @@ WebView は `<img>` ならアニメーション画像を再生できるが、Web
   ホバーサムネイルの可否は設定値そのものではなく `thumbHoverRef` を SeekBarArea へ渡している
 - 描画は canvas を `imageTexture` に貼り、フレームを描き換えるたびに `refreshCanvasRef` で
   再アップロードする（ミップマップ生成は切る）
-- **ファイル選択ダイアログ（`<input type=file>`）経由はローカルパスが無いので展開できず、
-  静止画（先頭フレーム）になる。** ドロップ・起動引数・二重起動の転送は動く
 
 **アニメーション AVIF は展開しない。** 中身は ISOBMFF（moov/trak、ハンドラ `pict`、`av01`
 サンプル）で MP4 と同じ構造をしており、Chromium（WebView2）の `<video>` で動画として再生できる。
@@ -364,6 +362,20 @@ Windows でもランタイムがドロップを Go へ転送するので、
 
 また Linux/macOS では `relatedTarget=null` の `dragleave` が即座に飛んでくるので、
 ドラッグ表示のカウンタはこれを無視しないと状態が壊れる。
+
+### ファイルを開く（ファイル選択ダイアログ）
+
+**`<input type="file">` は使わない。** 見た目は OS 標準のダイアログだが、ブラウザの制約で
+フロントエンドには中身（Blob）しか渡らず**パスが取れない**。パスが無いと Go 側の処理
+（アニメーション画像の展開・無劣化切り出し・メタデータからの VR 形式推定）が一切できない。
+`Player.handleOpenFile()` が Wails の `Dialogs.OpenFile` でパスを受け取り、
+`API.OpenLocalFile(path)` で検証（絶対パス・通常ファイル・対応拡張子）して許可リストへ
+登録した URL を得る。以後はドロップ・起動引数と同じ `loadFilePath()` の経路になる。
+
+- ダイアログのフィルタは `API.MediaFilePattern()` が Go 側の拡張子一覧から組み立てる
+- ローカルファイル配信の許可リスト・トークン・URL は `egov.LocalFiles`（`localfiles.go`）に
+  まとめてある。フロントエンドが読めるのはユーザーが明示的に開いたファイルだけ
+  （起動引数は `GetInitialFile`、ドロップ・二重起動は main.go、ダイアログは `OpenLocalFile` が登録）
 
 ### 診断オーバーレイ
 

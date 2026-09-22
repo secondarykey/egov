@@ -6,7 +6,7 @@ import ContentCutIcon from '@mui/icons-material/ContentCut'
 import GridViewIcon from '@mui/icons-material/GridView'
 import FitScreenIcon from '@mui/icons-material/FitScreen'
 import { Dialogs, Events, Window } from '@wailsio/runtime'
-import { CanExtract, CloseAnimation, DetectVRFormat, OpenAnimation, ExtractRange, SuggestExtractTarget, GetInitialFile, GetServerURL, GetSettings, UpdateAlwaysOnTop, UpdatePlaybackSettings, UpdateVRSettings } from '../bindings/egov/api'
+import { CanExtract, CloseAnimation, DetectVRFormat, MediaFilePattern, OpenAnimation, OpenLocalFile, ExtractRange, SuggestExtractTarget, GetInitialFile, GetServerURL, GetSettings, UpdateAlwaysOnTop, UpdatePlaybackSettings, UpdateVRSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
 import { loadLanguages } from './languages'
 import SettingsDialog from './SettingsDialog'
@@ -134,7 +134,7 @@ export default function Player() {
     mountRef, videoRef, cameraRef, controlsRef, planeRef,
     textureRef, fitCameraRef, rendererRef,
     vrUniformsRef, syncVrSizeRef,
-    requestRenderRef, captureRef, objectUrlRef, detectedFpsRef,
+    requestRenderRef, captureRef, detectedFpsRef,
     frameCountRef, renderCountRef, renderPathRef,
     showImageRef, showVideoRef, showCanvasRef, refreshCanvasRef, mediaSizeRef,
     videoElRef,
@@ -413,7 +413,6 @@ export default function Player() {
   //
   // アニメーション画像（WebP / GIF / APNG）は Go 側で全フレームを展開し、AnimPlayer（video 要素と同じ
   // インターフェース）を videoRef.current に差し替えて動画として扱う。
-  // ローカルパスが無い Blob 読み込みでは展開できないので静止画（先頭フレーム）になる。
   const openMedia = async ({ url, name, path, image }) => {
     const video = videoElRef.current
     // Three.js の初期化に失敗している場合は video 要素が存在しない。
@@ -511,27 +510,28 @@ export default function Player() {
     applyDetectedFormat(path || name, seq)
   }
 
-  const loadFile = (file) => {
-    if (!file) return
-    const image = file.type.startsWith('image/')
-    if (!image && !file.type.startsWith('video/')) return
-    if (!videoRef.current) return
-    const url = URL.createObjectURL(file)
-    // 前のファイルの Object URL を解放（Blob 参照のリーク防止）
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
-    objectUrlRef.current = url
-    // Blob 経由なのでローカルパスが無く、Go 側で切り出せない。
-    // 形式の推定もメタデータは読めずファイル名だけになる
-    openMedia({ url, name: file.name, path: '', image })
+  // ファイル選択ダイアログ。<input type="file"> はブラウザの制約でパスが取れず
+  // （中身の Blob しか渡らない）、アニメーション画像の展開・無劣化切り出し・
+  // VR形式の推定といった Go 側の処理ができないため、Wails のダイアログでパスを受け取る。
+  // 見た目はどちらも OS 標準のダイアログ。
+  const handleOpenFile = async () => {
+    try {
+      const path = await Dialogs.OpenFile({
+        Title: t('menu.openFile'),
+        Filters: [{ DisplayName: t('menu.mediaFiles'), Pattern: await MediaFilePattern() }],
+        CanChooseFiles: true,
+      })
+      if (!path) return   // キャンセル
+      loadFilePath(await OpenLocalFile(path))
+    } catch (err) {
+      console.error('open file failed:', err)
+      setNotice({ severity: 'error', text: t('menu.openFailed', { msg: err?.message ?? String(err) }) })
+    }
   }
 
   const loadFilePath = (fileUrl) => {
     if (!fileUrl) return
     if (!videoRef.current) return
-    if (objectUrlRef.current) {
-      URL.revokeObjectURL(objectUrlRef.current)
-      objectUrlRef.current = null
-    }
     const filePath = new URL(fileUrl).searchParams.get('path') ?? ''
     openMedia({
       url: fileUrl,
@@ -692,8 +692,6 @@ export default function Player() {
       video?.removeEventListener('error', clearFrameSeek)
     }
   }, [])
-
-  const handleFileChange = (e) => loadFile(e.target.files[0])
 
   // ドラッグ表示の解除は dragleave だけに頼れない。
   // Linux(WebKitGTK)/macOS では relatedTarget=null の dragleave が即座に飛んでくるので
@@ -1209,11 +1207,10 @@ export default function Player() {
 
       {videoError && <VideoErrorOverlay error={videoError} image={isImage} />}
 
-      {!fileName && <EmptyState resizeCursor={resizeCursor} />}
+      {!fileName && <EmptyState resizeCursor={resizeCursor} onOpenFile={handleOpenFile} />}
 
       {dragging && <DropHint />}
 
-      <input id="file-input" type="file" accept="video/*,image/*" style={{ display: 'none' }} onChange={handleFileChange} />
       <video ref={thumbVideoRef} muted preload="metadata" crossOrigin="anonymous" style={{ display: 'none' }} />
       <canvas ref={thumbCanvasRef} style={{ display: 'none' }} />
 
@@ -1239,6 +1236,7 @@ export default function Player() {
         onAlwaysOnTopToggle={handleAlwaysOnTopToggle}
         activeColor={activeColor}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenFile={handleOpenFile}
         onOpenVrOverlay={openVrOverlay}
         vrDisabled={isImage || isAnim}
       />
