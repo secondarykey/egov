@@ -4,6 +4,8 @@ export const VR_START = {
   right:  { repeat: [0.5, 1],   offset: [0.5, 0  ] },
   top:    { repeat: [1,   0.5], offset: [0,   0.5] },
   bottom: { repeat: [1,   0.5], offset: [0,   0  ] },
+  // モノラル素材（360°正距円筒、変換済みの平面映像など）は切り出さない
+  full:   { repeat: [1,   1  ], offset: [0,   0  ] },
 }
 
 export const fmt = (s) => {
@@ -74,3 +76,20 @@ export const barStyle = {
   transition:     'opacity 0.3s ease',
   color:          'white',
 }
+
+// 静止画として開く拡張子。Go 側 api.go の imageExts と揃えること。
+// ローカルパス経由（ドロップ・起動引数）では MIME が無いので拡張子で判定する。
+export const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.avif', '.apng']
+
+// アニメーションの可能性がある拡張子。実際にアニメーションかは Go 側
+// （API.OpenAnimation）が中身で判定し、違えば静止画として表示する。
+// AVIF はアニメーションなら video 要素でそのまま再生する（asVideo）。
+const ANIM_EXTS = ['.webp', '.gif', '.png', '.apng', '.avif']
+
+const extOf = (path) => {
+  const i = path.lastIndexOf('.')
+  return i >= 0 ? path.slice(i).toLowerCase() : ''
+}
+
+export const isImagePath = (path) => IMAGE_EXTS.includes(extOf(path))
+export const mayBeAnimatedPath = (path) => ANIM_EXTS.includes(extOf(path))

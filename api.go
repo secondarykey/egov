@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,13 +11,8 @@ import (
 	"sync"
 
 	"egov/internal/mp4cut"
+	"egov/internal/vrformat"
 )
-
-// LocalFileURL builds a playable URL for path on the local file server.
-func LocalFileURL(port int, secret, path string) string {
-	return fmt.Sprintf("http://127.0.0.1:%d/localfile?token=%s&path=%s",
-		port, secret, url.QueryEscape(path))
-}
 
 // videoExts はドロップを受け付ける拡張子。
 // ドラッグ&ドロップは Go 側でパスとして受け取るため、
@@ -29,20 +23,38 @@ var videoExts = map[string]struct{}{
 	".m2ts": {}, ".mts": {}, ".ts": {}, ".ogv": {}, ".3gp": {},
 }
 
+// imageExts は静止画として開く拡張子。WebView がデコードできる形式に限る。
+// フロントエンドの utils.IMAGE_EXTS と揃えること。
+var imageExts = map[string]struct{}{
+	".jpg": {}, ".jpeg": {}, ".png": {}, ".gif": {}, ".webp": {},
+	".bmp": {}, ".avif": {}, ".apng": {},
+}
+
 // IsVideoFile reports whether path looks like a playable video file.
 func IsVideoFile(path string) bool {
 	_, ok := videoExts[strings.ToLower(filepath.Ext(path))]
 	return ok
 }
 
+// IsImageFile reports whether path looks like a displayable image file.
+func IsImageFile(path string) bool {
+	_, ok := imageExts[strings.ToLower(filepath.Ext(path))]
+	return ok
+}
+
+// IsMediaFile reports whether path can be opened (video or image).
+func IsMediaFile(path string) bool {
+	return IsVideoFile(path) || IsImageFile(path)
+}
+
 type API struct {
 	// mu guards settings/initialFile. バインディング呼び出しは並行に実行されうる。
-	mu             sync.Mutex
-	initialFile    string
-	fileServerPort int
-	secret         string
-	settings       *Settings
-	version        string
+	mu          sync.Mutex
+	initialFile string
+	files       *LocalFiles
+	settings    *Settings
+	version     string
+	anims       *AnimStore
 }
 
 // QuitRequested is signaled each time the frontend calls API.Quit(). main
@@ -51,8 +63,8 @@ type API struct {
 // about any func-typed declaration in this package.
 var QuitRequested = make(chan struct{}, 1)
 
-func NewApi(initialFile string, fileServerPort int, secret string, settings *Settings, version string) *API {
-	return &API{initialFile: initialFile, fileServerPort: fileServerPort, secret: secret, settings: settings, version: version}
+func NewApi(initialFile string, files *LocalFiles, settings *Settings, version string, anims *AnimStore) *API {
+	return &API{initialFile: initialFile, files: files, settings: settings, version: version, anims: anims}
 }
 
 // GetVersion returns the application version.
@@ -62,7 +74,7 @@ func (a *API) GetVersion() string {
 
 // GetServerURL returns the base URL of the local file server.
 func (a *API) GetServerURL() string {
-	return fmt.Sprintf("http://127.0.0.1:%d", a.fileServerPort)
+	return a.files.BaseURL()
 }
 
 // GetSettings returns the current settings.
@@ -157,6 +169,27 @@ func (a *API) Quit() {
 // extractableExts は無劣化切り出し（ExtractRange）に対応する拡張子。
 // いずれも ISOBMFF なのでサンプルのバイトコピーだけで切り出せる。
 // mkv/webm/ts などはコンテナ構造が異なるため対象外。
+// VRFormat は動画ファイルから推定した VR 素材の形式。空文字列／0 の項目は
+// 推定できなかったもので、フロントエンドは保存済みの既定値を使う。
+type VRFormat struct {
+	// Start は "left" / "top" / "full"。
+	Start string `json:"start"`
+	// Projection は "equirect" / "equidistant"。
+	Projection string `json:"projection"`
+	// FOV は片目分の水平画角（度）。
+	FOV float64 `json:"fov"`
+	// Source は判定の根拠（"metadata" / "filename" / "metadata+filename" / ""）。
+	Source string `json:"source"`
+}
+
+// DetectVRFormat は path のメタデータ（Spherical Video V1/V2）とファイル名から
+// VR 素材の形式を推定する。ファイルが開けない場合はファイル名だけで推定する
+// （ローカルパスの無い Blob 読み込みでもファイル名を渡せば使える）。
+func (a *API) DetectVRFormat(path string) VRFormat {
+	f := vrformat.Detect(path)
+	return VRFormat{Start: f.Start, Projection: f.Projection, FOV: f.FOV, Source: f.Source}
+}
+
 var extractableExts = map[string]struct{}{
 	".mp4": {}, ".m4v": {}, ".mov": {},
 }
@@ -308,5 +341,5 @@ func (a *API) GetInitialFile() string {
 	}
 	path := a.initialFile
 	a.initialFile = ""
-	return LocalFileURL(a.fileServerPort, a.secret, path)
+	return a.files.Allow(path)
 }

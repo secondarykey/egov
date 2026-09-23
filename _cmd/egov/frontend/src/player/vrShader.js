@@ -15,7 +15,18 @@ import * as THREE from 'three'
 //  - 表示側の投影方式を選べる。透視投影は原理的に画面端が引き伸ばされ、
 //    HMDならレンズが打ち消すが平面モニタでは歪みとして残る
 
-export const SOURCE_PROJECTIONS  = ['equirect', 'equidistant', 'equisolid']
+export const SOURCE_PROJECTIONS  = ['equirect', 'equidistant', 'equisolid', 'flat']
+
+// 素材の画角（水平、度）として意味のある範囲と、方式を切り替えたときの初期値。
+// flat（普通のカメラ映像）は tan で広がるため 180° 未満でなければならない。
+// 正距円筒は 360° モノラル素材まで貼れるよう 360° まで開ける。
+// Go 側の sourceFovRange() と一致させること。
+export const SRC_FOV_RANGE = {
+  equirect:    { min: 60,  max: 360, def: 180 },
+  equidistant: { min: 120, max: 240, def: 180 },
+  equisolid:   { min: 120, max: 240, def: 180 },
+  flat:        { min: 10,  max: 170, def: 70  },
+}
 export const DISPLAY_PROJECTIONS = ['rectilinear', 'panini', 'stereographic']
 
 const VERT = `
@@ -32,9 +43,9 @@ varying vec2 vUv;
 uniform sampler2D uMap;
 uniform vec2  uSrcOffset;    // SBS切り出しのオフセット
 uniform vec2  uSrcRepeat;    // SBS切り出しのスケール
-uniform float uSrcAspect;    // 切り出し後の 幅/高さ（魚眼を真円に保つ補正）
-uniform float uSrcHalfFov;   // ソースの半画角（ラジアン）
-uniform int   uSrcProj;      // 0:正距円筒 1:等距離魚眼 2:等立体角魚眼
+uniform float uSrcAspect;    // 切り出し後の 幅/高さ（縦の画角を横から求めるのに使う）
+uniform float uSrcHalfFov;   // ソースの水平半画角（ラジアン）
+uniform int   uSrcProj;      // 0:正距円筒 1:等距離魚眼 2:等立体角魚眼 3:平面（透視）
 uniform int   uDispProj;     // 0:透視 1:Panini 2:ステレオ投影
 uniform float uAspect;       // 画面の 幅/高さ
 uniform vec2  uShift;        // 描画結果の平行移動（1.0 = 画面の半分、±3 まで）
@@ -69,11 +80,24 @@ vec3 screenToDir(vec2 p) {
 
 // 視線ベクトル → ソース画像のUV。z成分は範囲内なら1.0、範囲外なら0.0。
 vec3 dirToUv(vec3 dir) {
-  // 正距円筒: 経度・緯度がそれぞれ線形にマップされる
+  // 正距円筒: 経度・緯度がそれぞれ線形にマップされる。
+  // 1度あたりの画素数は縦横で等しいので、縦の画角は 横 / アスペクト。
+  // SBS 180°（片側 1:1）なら 180°×180°、360°モノラル（2:1）なら 360°×180° になる。
   if (uSrcProj == 0) {
     float lon = atan(dir.x, -dir.z);
     float lat = asin(clamp(dir.y, -1.0, 1.0));
-    vec2 uv = vec2(0.5) + vec2(lon, lat) / (2.0 * uSrcHalfFov);
+    vec2 uv = vec2(0.5) + vec2(lon, lat * uSrcAspect) / (2.0 * uSrcHalfFov);
+    float ok = (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) ? 0.0 : 1.0;
+    return vec3(uv, ok);
+  }
+
+  // 平面: 普通のカメラで撮った透視投影の映像を、正面に置いた一枚の画として貼る。
+  // 画面上の位置は tan(角度) に比例し、縦横で焦点距離は共通。
+  // 縦長動画をエンコードし直さずに首振りできる。
+  if (uSrcProj == 3) {
+    if (dir.z > -1e-4) return vec3(0.0, 0.0, 0.0); // 真横より後ろは写っていない
+    vec2 t  = dir.xy / -dir.z;
+    vec2 uv = vec2(0.5) + vec2(t.x, t.y * uSrcAspect) / (2.0 * tan(uSrcHalfFov));
     float ok = (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) ? 0.0 : 1.0;
     return vec3(uv, ok);
   }
@@ -177,4 +201,11 @@ export function setVrRotation(matrix3, yaw, pitch, roll) {
 }
 
 export const srcProjIndex  = (name) => Math.max(0, SOURCE_PROJECTIONS.indexOf(name))
+
+// 素材の画角を投影方式の範囲へ収める。範囲外（方式を切り替えた直後など）は
+// その方式の初期値に戻す——flat へ 180° のまま切り替えると tan が発散するため。
+export function fitSrcFov(proj, fov) {
+  const r = SRC_FOV_RANGE[proj] ?? SRC_FOV_RANGE.equirect
+  return fov >= r.min && fov <= r.max ? fov : r.def
+}
 export const dispProjIndex = (name) => Math.max(0, DISPLAY_PROJECTIONS.indexOf(name))

@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -82,13 +81,6 @@ func main() {
 	}
 	secret := hex.EncodeToString(tokenBytes)
 
-	// 許可パスのホワイトリスト
-	var mu sync.RWMutex
-	allowed := map[string]struct{}{}
-	if initialFile != "" {
-		allowed[initialFile] = struct{}{}
-	}
-
 	// ローカルファイル配信用サーバをランダムポートで起動
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -96,6 +88,9 @@ func main() {
 		os.Exit(1)
 	}
 	fileServerPort := listener.Addr().(*net.TCPAddr).Port
+	// 許可パスのホワイトリストと URL の組み立て（起動引数のファイルは GetInitialFile で登録される）
+	files := egov.NewLocalFiles(fileServerPort, secret)
+	anims := egov.NewAnimStore()
 	go http.Serve(listener, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// CORS: webview（wails オリジン）とローカル開発サーバのみ許可。
 		// 任意オリジンに開かないことで、外部サイトからの読み出しを防ぐ。
@@ -136,19 +131,23 @@ func main() {
 		}
 
 		// ローカルファイル: トークン認証 + ホワイトリスト
-		if r.URL.Query().Get("token") != secret {
+		if !files.Authorized(r) {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
+
+		// アニメーション WebP の合成済みフレーム（API.OpenAnimation で展開したもの）
+		if urlPath == "/animframe" {
+			anims.ServeFrame(w, r)
+			return
+		}
+
 		path := r.URL.Query().Get("path")
-		mu.RLock()
-		_, ok := allowed[path]
-		mu.RUnlock()
-		if !ok {
+		if !files.IsAllowed(path) {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
-		http.ServeFile(w, r, path)
+		egov.ServeLocalFile(w, r, path)
 	}))
 
 	version := strings.TrimSpace(appVersion)
@@ -156,7 +155,7 @@ func main() {
 		version += "+DEV"
 	}
 
-	api := egov.NewApi(initialFile, fileServerPort, secret, settings, version)
+	api := egov.NewApi(initialFile, files, settings, version, anims)
 
 	// Webview のユーザーデータは固定パスに置く。
 	// 起動ごとの一時ディレクトリだと %TEMP% に溜まり続け、キャッシュも効かない。
@@ -238,14 +237,11 @@ func main() {
 	// この経路に一本化する。
 	win.OnWindowEvent(events.Common.WindowFilesDropped, func(e *application.WindowEvent) {
 		for _, path := range e.Context().DroppedFiles() {
-			// 動画以外は無視する（従来のフロントエンド側 MIME 判定と同じ扱い）
-			if !egov.IsVideoFile(path) {
+			// 動画・画像以外は無視する（従来のフロントエンド側 MIME 判定と同じ扱い）
+			if !egov.IsMediaFile(path) {
 				continue
 			}
-			mu.Lock()
-			allowed[path] = struct{}{}
-			mu.Unlock()
-			app.Event.Emit("open-file", egov.LocalFileURL(fileServerPort, secret, path))
+			app.Event.Emit("open-file", files.Allow(path))
 			// 複数ドロップされても最初の1件だけ開く
 			return
 		}
@@ -317,10 +313,7 @@ func main() {
 	// IPC経由で受信したファイルパスをホワイトリストに追加してフロントエンドへ転送
 	go func() {
 		for path := range ipcFileCh {
-			mu.Lock()
-			allowed[path] = struct{}{}
-			mu.Unlock()
-			fileUrl := egov.LocalFileURL(fileServerPort, secret, path)
+			fileUrl := files.Allow(path)
 			win.Show()
 			win.Focus()
 			app.Event.Emit("open-file", fileUrl)

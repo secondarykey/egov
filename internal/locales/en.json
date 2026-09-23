@@ -1,7 +1,11 @@
 {
-  "drop": "Drop video here",
+  "drop": "Drop video or image here",
+  "anim": {
+    "fallback": "Could not expand the animation; showing it as a still image ({{msg}})"
+  },
   "error": {
-    "videoLoad": "Failed to load video"
+    "videoLoad": "Failed to load video",
+    "imageLoad": "Failed to load image"
   },
   "vr": {
     "selectViewpoint": "Select Viewpoint",
@@ -11,7 +15,7 @@
     "shiftX": "Shift Horizontally",
     "shiftY": "Shift Vertically",
     "fov": "Field of View",
-    "srcFov": "Source FOV (lens angle)",
+    "srcFov": "Source horizontal FOV",
     "sourceProjection": "Source projection",
     "sourceProjectionHint": "How the footage stores angles. If this is wrong, the centre looks fine but the edges stretch as you look around.",
     "displayProjection": "Display projection",
@@ -22,7 +26,9 @@
       "equidistant": "Fisheye (equidistant)",
       "equidistantHint": "Unconverted dual-fisheye footage. Image height is proportional to angle.",
       "equisolid": "Fisheye (equisolid)",
-      "equisolidHint": "Unconverted dual-fisheye footage. Image height follows sin(angle/2)."
+      "equisolidHint": "Unconverted dual-fisheye footage. Image height follows sin(angle/2).",
+      "flat": "Flat",
+      "flatHint": "Ordinary camera footage. Placed as a single picture in front of you so you can look around it without re-encoding."
     },
     "dispProj": {
       "rectilinear": "Rectilinear",
@@ -41,11 +47,14 @@
       "left": "Left",
       "right": "Right",
       "top": "Top",
-      "bottom": "Bottom"
+      "bottom": "Bottom",
+      "full": "Whole frame (mono)"
     }
   },
   "menu": {
     "openFile": "Open File",
+    "mediaFiles": "Videos and images",
+    "openFailed": "Could not open the file: {{msg}}",
     "settings": "Settings"
   },
   "mode": {
@@ -71,7 +80,8 @@
     "exitFullscreen": "Exit Fullscreen",
     "rotate": "Rotate",
     "resetCamera": "Reset Camera (restore all saved VR settings)",
-    "fitWindow": "Fit window to video size",
+    "fitWindow": "Fit window to media size",
+    "fitTooLarge": "Too large for the screen — showing at {{percent}}%",
     "resetView": "Reset View"
   },
   "extract": {
@@ -125,6 +135,8 @@
     "resolution": "Resolution",
     "aspect": "Aspect ratio",
     "duration": "Duration",
-    "frameRate": "Frame rate"
+    "frameRate": "Frame rate",
+    "frameCount": "Frames",
+    "averageFps": "{{fps}} (average)"
   }
 }

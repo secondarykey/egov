@@ -1,7 +1,11 @@
 {
-  "drop": "動画をドロップ",
+  "drop": "動画・画像をドロップ",
+  "anim": {
+    "fallback": "アニメーションを展開できなかったため静止画として表示しています（{{msg}}）"
+  },
   "error": {
-    "videoLoad": "動画を読み込めませんでした"
+    "videoLoad": "動画を読み込めませんでした",
+    "imageLoad": "画像を読み込めませんでした"
   },
   "vr": {
     "selectViewpoint": "視点を選択",
@@ -11,7 +15,7 @@
     "shiftX": "水平方向へずらす",
     "shiftY": "垂直方向へずらす",
     "fov": "視野角 (FOV)",
-    "srcFov": "素材の画角（レンズの画角）",
+    "srcFov": "素材の水平画角",
     "sourceProjection": "素材の投影方式",
     "sourceProjectionHint": "素材が角度をどう記録しているか。ここが違うと、中央は合うのに首を振ると周辺が伸び縮みする。",
     "displayProjection": "表示の投影方式",
@@ -22,7 +26,9 @@
       "equidistant": "魚眼（等距離）",
       "equidistantHint": "未変換のデュアル魚眼素材。像高が角度に比例する。",
       "equisolid": "魚眼（等立体角）",
-      "equisolidHint": "未変換のデュアル魚眼素材。像高が sin(角度/2) に比例する。"
+      "equisolidHint": "未変換のデュアル魚眼素材。像高が sin(角度/2) に比例する。",
+      "flat": "平面",
+      "flatHint": "普通のカメラ映像。正面に置いた一枚の画として貼るので、エンコードし直さずに首振りできる。"
     },
     "dispProj": {
       "rectilinear": "透視投影",
@@ -41,11 +47,14 @@
       "left": "左",
       "right": "右",
       "top": "上",
-      "bottom": "下"
+      "bottom": "下",
+      "full": "全体（モノラル）"
     }
   },
   "menu": {
     "openFile": "ファイルを開く",
+    "mediaFiles": "動画・画像",
+    "openFailed": "ファイルを開けませんでした: {{msg}}",
     "settings": "設定"
   },
   "mode": {
@@ -71,7 +80,8 @@
     "exitFullscreen": "全画面解除",
     "rotate": "回転",
     "resetCamera": "カメラをリセット（保存済みのVR設定へ全項目を戻す）",
-    "fitWindow": "ウィンドウを動画サイズに合わせる",
+    "fitWindow": "ウィンドウを動画・画像のサイズに合わせる",
+    "fitTooLarge": "画面に収まらないため {{percent}}% で表示しています",
     "resetView": "表示をリセット"
   },
   "extract": {
@@ -125,6 +135,8 @@
     "resolution": "解像度",
     "aspect": "アスペクト比",
     "duration": "長さ",
-    "frameRate": "フレームレート"
+    "frameRate": "フレームレート",
+    "frameCount": "フレーム数",
+    "averageFps": "{{fps}}（平均）"
   }
 }

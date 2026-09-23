@@ -5,6 +5,8 @@ This file provides guidance to coding agents (Claude Code など) when working w
 ## Project Overview
 
 **egov** is a desktop VR video player built with [Wails3](https://v3.wails.io/) — a framework that pairs a Go backend with a React + TypeScript frontend compiled into a single native binary. The app focuses on split-screen VR video playback with zoom support.
+It also opens still images (image viewer, normal/free modes only) and plays animated images
+(WebP / GIF / APNG / AVIF) with the same controls as video — see「静止画の表示」and「アニメーション画像」below.
 
 ## Commands
 
@@ -57,6 +59,18 @@ The project uses **two Go modules**:
 
 The command module imports the root module as a local `replace` directive in its `go.mod`.
 
+Root module packages:
+
+| Path | Purpose |
+|------|---------|
+| `api.go` / `settings.go` / `locales.go` | `API`（Wails Binding）・設定・ロケール |
+| `localfiles.go` | ローカルファイル配信の許可リスト・トークン・URL（`LocalFiles`）、`OpenLocalFile` |
+| `media.go` | ローカルファイルの配信（アニメーション AVIF の読み替えを含む） |
+| `anim.go` | アニメーション画像の展開結果の保持とフレーム配信（`AnimStore`）、`OpenAnimation` |
+| `internal/animimage` | WebP / GIF / APNG の展開・合成、AVIF シーケンスの判定と読み替え |
+| `internal/mp4cut` | MP4 の無劣化切り出し |
+| `internal/vrformat` | メタデータ・ファイル名からの VR 素材形式の推定 |
+
 ### Go ↔ Frontend Binding Pattern
 
 Methods on the `API` struct (`api.go`) are automatically callable from React via auto-generated TypeScript clients in `_cmd/egov/frontend/bindings/`. Adding a new backend method requires:
@@ -79,20 +93,25 @@ Vite builds to `_cmd/egov/frontend/dist/`. The Go binary embeds that directory w
 
 | File | Role |
 |------|------|
-| `player/useThreeScene.js` | Three.js scene setup + render-on-demand loop (rVFC), exposes refs |
+| `player/useThreeScene.js` | Three.js scene setup + render-on-demand loop (rVFC), exposes refs。平面に貼る素材を動画／画像／canvas で差し替える（`showVideo` / `showImage` / `showCanvas`） |
+| `player/AnimPlayer.js` | アニメーション画像を video 要素と同じインターフェースで再生するプレーヤー（Player が `videoRef.current` に差し込む） |
 | `player/vrShader.js` | VR投影のフルスクリーンquad＋GLSL（投影方式の変換一式） |
 | `player/TitleBar.jsx` | Title bar (drag region, mode toggle, window controls) |
 | `player/ControlBar.jsx` | Bottom bar (seek, play/pause, volume, fullscreen) |
 | `player/SeekBarArea.jsx` / `TimeDisplay.jsx` / `MiniProgressBar.jsx` | `memo`-isolated high-frequency updates (`timeupdate`, thumbnail hover) |
 | `player/VrViewpointOverlay.jsx` | VR start-point + 視点/投影の調整オーバーレイ |
 | `player/Overlays.jsx` | Feedback/error/drop/empty-state overlays |
+| `player/VideoInfoPanel.jsx` | 情報パネル（解像度・長さ・フレームレート、アニメーション画像はフレーム数と平均 FPS） |
+| `player/ThumbnailGrid.jsx` | サムネイル一覧（normal モード、動画のみ） |
+| `player/DiagnosticsOverlay.jsx` | `Ctrl+Shift+D` の診断オーバーレイ |
 | `player/utils.js` | Shared constants (`VR_START`, `barStyle`) and helpers |
 
 Key facts:
 
 - **Three.js** (`r0.184`) + `OrbitControls` for rendering. 平面モード（normal/free）は
   `PerspectiveCamera` ＋ plane、VRモードは専用シーンのフルスクリーンquad＋シェーダ。
-  両者は同じ `VideoTexture` を共有し、`renderOnce()` が `modeRef` で描画先を切り替える
+  動画のときは両者が同じ `VideoTexture` を共有し、`renderOnce()` が `modeRef` で描画先を切り替える。
+  画像・アニメーション画像のときは平面だけが別テクスチャ（`imageTexture`）を使い、VR は無効
 - **MUI** for all UI controls (title bar, control bar, sliders, menus)
 - Three view modes: `normal` (default, window-fit), `free` (pan/zoom), `vr` — internal names match the UI labels. Legacy `fit` in settings.json is migrated to `normal` by `Settings.normalize()`
 - マウス割り当ては free と vr で意味を揃えてある。**右ドラッグ＝平行移動、
@@ -100,6 +119,88 @@ Key facts:
   VRの首振りは**中ドラッグ**。左ボタンは全モードで再生・シークが使う
 - VR split-screen: シェーダの `uSrcOffset` / `uSrcRepeat` uniform が左右／上下の半分を選ぶ。
   `texture.repeat/offset` は平面モードと共有しているので触らないこと（等倍のまま）
+
+### 静止画の表示
+
+画像（`api.go` の `imageExts` / フロントの `utils.IMAGE_EXTS`、両者は揃えること）も開ける。
+**画像は normal / free だけで、VR は無効**（タイトルバーの VR ボタンを disabled にし、
+VR 中に開いたら normal へ落とす）。
+
+- 読み込みは `Player.openMedia()` に一本化してある。画像のときは **video 要素の src を外す**
+  （`removeAttribute('src')` + `load()`。`src = ''` は error を発火させる）。
+  再生・シーク・コマ送り・サムネイル・長押しシークはすべて `video.src` の有無で
+  早期 return するので、個別の分岐は不要
+- 描画は `useThreeScene` の `showImage()` / `showVideo()` が平面マテリアルの `map` を
+  `THREE.Texture`（画像）と `VideoTexture` で差し替える。画像は一度アップロードすれば
+  描画ループは不要（操作・リサイズ時の `requestRender` だけ）
+- **VR に画像を通さない理由は色空間。** `THREE.Texture` は sRGB 内部フォーマットで持たれ、
+  サンプル時点で線形化済み。VRシェーダは VideoTexture 前提で `sRGBTransferEOTF()` を
+  自前でかけているので、そのまま通すと二重復号で暗く沈む。対応するなら uniform で切り替える
+- GPU の `maxTextureSize` を超える画像はキャンバスで縮小してから渡す
+- ウィンドウのフィット（Reset）は `mediaSizeRef`（動画／画像共通の画素数）を使う。
+  作業領域（`Window.GetScreen().WorkArea`）に収まらない素材は、縦横比を保って縮めた
+  サイズにし、何%表示かを Snackbar で出す（`fitWindowToMedia()`）。そのまま `SetSize` すると
+  OS が片方の辺だけクランプし、ウィンドウは最大近くなのに画は余白付きという状態になる
+- アニメーションする WebP / GIF / APNG は次節の方式で動画として扱う
+
+### アニメーション画像（WebP / GIF / APNG / AVIF を動画として扱う）
+
+WebView は `<img>` ならアニメーション画像を再生できるが、WebGL へ渡せるのは先頭フレームだけで
+シークもできない。そこで **Go 側で全フレームを合成して保持し、フロントは video 要素と同じ顔の
+`player/AnimPlayer.js` で再生する**。
+
+- デコーダ:
+  - WebP: `golang.org/x/image` の fork（`github.com/secondarykey/image` の
+    `feature/webp-animated`、`webp.DecodeAnimated`）。ルートと `_cmd/egov` の **両方の go.mod** に
+    `replace` がある（replace はメインモジュールでしか効かないため）。fork を更新したら両方の
+    擬似バージョンを上げること
+  - GIF: 標準の `image/gif`（`DecodeAll`）
+  - APNG: `github.com/kettek/apng`（タグ無し、擬似バージョンで取り込み）。先頭の既定画像
+    （`IsDefault`）はアニメーションに含めない
+- `internal/animimage` の構成: 形式ごとの差（位置・重ね方・消し方・表示時間の単位）は
+  `formats.go` で共通の `frame` に揃え、合成は `compose()` だけが行う。消し方は
+  「そのまま / 透明に戻す / 直前に戻す（GIF・APNG のみ）」の3種。背景色ではなく透明に戻すのは
+  libwebp / ブラウザと同じ。10ms 以下の表示時間は 100ms 扱い（これもブラウザと同じ、GIF の
+  `delay=0` 対策）。合計 `MaxBytes`（1GB）を超える素材は展開せず静止画で出す
+- **形式もアニメーションかどうかも拡張子ではなく中身で判定する**（`IsAnimated`）。
+  `.png` の APNG があるため。軽い判定で済ませる: WebP は VP8X のフラグ、APNG は IDAT より前の
+  `acTL`、GIF は画像記述子が2つあるか（LZW は展開しない）。acTL があっても1フレームの APNG は
+  `ErrNotAnimated` → 静止画。フロントは `utils.mayBeAnimatedPath()`（webp/gif/png/apng）の
+  ときだけ `OpenAnimation` を呼ぶ
+- `API.OpenAnimation(path)` が展開して `AnimStore` に1本だけ保持し、フレームはローカルファイル
+  サーバの `/animframe?token=&id=&i=` で生の RGBA として配る（バインディングで []byte を返すと
+  base64 の JSON になり毎フレームには重い）。`id` は開き直すたびに増え、古い id の要求は 410
+- Player は **`videoRef.current` を AnimPlayer に差し替える**。シークバー・時間表示・範囲ループ・
+  ダブルクリック／長押しシークは video 要素と同じプロパティとイベントで動く。
+  本物の video 要素は `videoElRef`（診断オーバーレイ・コマ送りのラッチ・ループ初期値）
+- 画像と同じく VR は無効。サムネイル（ホバー／一覧）と音量も出さない。
+  ホバーサムネイルの可否は設定値そのものではなく `thumbHoverRef` を SeekBarArea へ渡している
+- 描画は canvas を `imageTexture` に貼り、フレームを描き換えるたびに `refreshCanvasRef` で
+  再アップロードする（ミップマップ生成は切る）
+
+**アニメーション AVIF は展開しない。** 中身は ISOBMFF（moov/trak、ハンドラ `pict`、`av01`
+サンプル）で MP4 と同じ構造をしており、Chromium（WebView2）の `<video>` で動画として再生できる。
+`API.OpenAnimation` は ftyp に `avis` ブランドがあれば `AsVideo=true` を返し、
+フロントは通常の動画として開く（VR・サムネイル・範囲ループなども動画と同じく使える）。
+
+- ⚠️ **そのままでは再生できない。** AVIF シーケンスはトップレベルの `meta` に代表画像（静止画
+  1枚）を持ち、Chromium のデマクサ（FFmpeg）はこれを moov のトラックより前の映像ストリームとして
+  見せる。video 要素はその1フレームの方を選ぶため、読み込み直後に末尾（duration）へ飛んで
+  ended になる（`loadeddata` の時点で `currentTime == duration`）。
+  ローカルファイルサーバの `egov.ServeLocalFile()` が、配信時に **`meta` の box type だけを
+  同じ長さの `free` に読み替える**（`animimage.AVIFVideo`、ファイルは書き換えない）。
+  サイズが変わらないので stco のオフセットは直さなくてよい。ブランドや hdlr（`pict`）は
+  そのままで再生できる
+- ⚠️ 検証の落とし穴: 読み込み後にすぐシークするテストでは上の症状が見えない（シーク先は
+  正しく出る）。再生開始位置と `currentTime` の進みで確かめること
+- 実機の WebView2 を外から調べるには、`application.Options.Windows.AdditionalBrowserArgs` に
+  `--remote-debugging-port=<port>` を足した一時ビルドを使い、CDP の `Runtime.evaluate` で
+  状態を読む（環境変数 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` は Wails が引数を渡すため効かない）
+- 静止画の AVIF（`avif` ブランドのみ）は画像ビューアで表示する
+- AV1 を WebAssembly でデコードして展開する案（`gen2brain/avif`）は、バイナリ +7MB・
+  1080p/5秒で展開6秒・約1GB と重いので採らなかった
+- 透過（アルファ用の補助トラック）は video 要素では反映されない
+- WebKitGTK / WKWebView での再生は未確認
 
 ### 範囲切り出し（無劣化カット）
 
@@ -165,6 +266,26 @@ VR描画は球メッシュ＋`PerspectiveCamera` ではなく、**フルスク�
   未変換のデュアル魚眼素材を正距円筒として貼るのが典型例
 - **素材の画角は180°決め打ちにしない。** 撮影機は 190°/200° が多く、
   180°として貼ると首振り角と画の動きが一致しない
+- **素材の画角は水平画角。縦は切り出し後のアスペクト（`uSrcAspect`）から求める。**
+  正距円筒は1度あたりの画素数が縦横で等しいので 縦 = 横 / アスペクト。
+  SBS 180°（片側 1:1）なら 180°×180°、360°モノラル（2:1）なら 360°×180° になる。
+  意味のある範囲は方式ごとに違うため `SRC_FOV_RANGE`（Go側 `sourceFovRange()`）で持ち、
+  方式を切り替えたら `fitSrcFov()` で範囲外を初期値へ戻す
+- **`flat` は普通のカメラ映像（透視投影）を正面に置いた一枚の画として貼る。**
+  縦長動画などを正距円筒へエンコードし直さずに首振りできる。
+  tan で広がるので水平画角は 180° 未満（10〜170°）に限る
+- **`VR_START.full` は切り出さない（モノラル素材）。** 360°モノラル正距円筒や
+  `flat` 素材向け。オーバーレイのコンパスの中央に置いてある
+- **素材の形式（始点・素材の投影方式・素材の画角）はファイルを開くたびに推定する。**
+  `internal/vrformat` が Spherical Video V2（サンプルエントリ配下の `st3d` / `sv3d/proj/equi`）
+  と V1（trak 直下の uuid box の XML）を読み、決まらなかった項目だけを
+  ファイル名の印（`_LR`/`_SBS`/`_TB`/`_OU`/`_MONO`/`_180`/`_360`/`_FISHEYE190` など、
+  区切り文字で分けたトークンの完全一致）で埋める。mp4ff は `st3d`/`sv3d` を解釈しないので自前で辿っている
+- **推定結果はセッション中の上書きで、ディスクへは書かない。** 見方の好み（向き・表示画角・
+  表示投影・平行移動）には触れない。`vrSavedRef`（保存済み）に推定できた項目だけを重ねたものが
+  `vrDefaultsRef`（Reset Camera の戻り先）になる。推定できなかった項目は保存済みの値へ戻す
+  ——前のファイルの推定（例: 360°モノラル）を次のファイルへ持ち越さないため。
+  始点 `start` も `currentVrView()` の1項目として保存・リセットの対象に含めている
 - 透視投影は原理的に画面端が引き伸ばされる。HMDならレンズが打ち消すが、
   平面モニタでは歪みとして残るため Panini / ステレオ投影を選べるようにしている
 - `uProjScale` は「画面上端／下端で視線角がちょうど `fov/2` になる係数」。
@@ -260,6 +381,20 @@ Windows でもランタイムがドロップを Go へ転送するので、
 
 また Linux/macOS では `relatedTarget=null` の `dragleave` が即座に飛んでくるので、
 ドラッグ表示のカウンタはこれを無視しないと状態が壊れる。
+
+### ファイルを開く（ファイル選択ダイアログ）
+
+**`<input type="file">` は使わない。** 見た目は OS 標準のダイアログだが、ブラウザの制約で
+フロントエンドには中身（Blob）しか渡らず**パスが取れない**。パスが無いと Go 側の処理
+（アニメーション画像の展開・無劣化切り出し・メタデータからの VR 形式推定）が一切できない。
+`Player.handleOpenFile()` が Wails の `Dialogs.OpenFile` でパスを受け取り、
+`API.OpenLocalFile(path)` で検証（絶対パス・通常ファイル・対応拡張子）して許可リストへ
+登録した URL を得る。以後はドロップ・起動引数と同じ `loadFilePath()` の経路になる。
+
+- ダイアログのフィルタは `API.MediaFilePattern()` が Go 側の拡張子一覧から組み立てる
+- ローカルファイル配信の許可リスト・トークン・URL は `egov.LocalFiles`（`localfiles.go`）に
+  まとめてある。フロントエンドが読めるのはユーザーが明示的に開いたファイルだけ
+  （起動引数は `GetInitialFile`、ドロップ・二重起動は main.go、ダイアログは `OpenLocalFile` が登録）
 
 ### 診断オーバーレイ
 
