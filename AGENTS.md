@@ -5,40 +5,23 @@ This file provides guidance to coding agents (Claude Code など) when working w
 ## Project Overview
 
 **egov** is a desktop VR video player built with [Wails3](https://v3.wails.io/) — a framework that pairs a Go backend with a React + TypeScript frontend compiled into a single native binary. The app focuses on split-screen VR video playback with zoom support.
-It also opens still images (image viewer, normal/free modes only) and plays animated images
-(WebP / GIF / APNG / AVIF) with the same controls as video — see「静止画の表示」and「アニメーション画像」below.
+It also opens still images (normal/free modes only) and plays animated images
+(WebP / GIF / APNG / AVIF) with the same controls as video.
 
 ## Commands
 
 All commands are run from `_cmd/egov/` using [Task](https://taskfile.dev/).
 
 ```bash
-# Development (hot-reload for both Go and frontend)
-task dev
-
-# Production build
-task build
-
-# Run the built binary
-task run
-
-# Platform-specific builds
-task windows:build
-task darwin:build
-task linux:build
-
-# Headless HTTP server (no GUI)
-task build:server
+task dev             # Development (hot-reload for both Go and frontend)
+task build           # Production build
+task run             # Run the built binary
+task windows:build   # / darwin:build / linux:build
+task build:server    # Headless HTTP server (no GUI)
 task run:server
 ```
 
-Frontend commands (from `_cmd/egov/frontend/`):
-
-```bash
-npm run dev          # Vite dev server standalone
-npm run build        # Production build → frontend/dist/
-npm run build:dev    # Non-minified build
-```
+Frontend commands (from `_cmd/egov/frontend/`): `npm run dev` / `npm run build` / `npm run build:dev`
 
 Regenerate Go→TypeScript bindings after changing the `API` struct:
 
@@ -48,407 +31,85 @@ wails3 generate bindings -f '' -clean=true
 
 ## Architecture
 
-### Module Layout
+- **Two Go modules**: root `egov`（`API` struct と共有ライブラリ、`internal/` 配下に
+  `animimage` / `mp4cut` / `vrformat`）と `_cmd/egov`（Wails3 のエントリポイント・ビルドアセット・
+  フロントエンド）。`_cmd/egov/go.mod` はルートを `replace` で参照する
+- **Binding**: `api.go` の `API` にメソッドを足す → bindings を再生成 → フロントで
+  `_cmd/egov/frontend/bindings/` から import
+- **Events**: Go は `app.Event.Emit(name, payload)`、フロントは `@wailsio/runtime` の `Events.On`
+- **Embedding**: Vite の出力 `frontend/dist/` を `//go:embed` している。本番バイナリに
+  フロントの変更を入れるにはビルドし直す
+- **Frontend**: `src/Player.jsx` が状態・ref・入力処理を持ち、描画は `src/player/` の各コンポーネントに
+  委ねる。高頻度で更新する部分（シークバー・時間表示）は `memo` で切り離してある
+- Three.js（`r0.184`）＋ MUI。表示モードは `normal` / `free` / `vr`（設定の旧名 `fit` は
+  `Settings.normalize()` が `normal` へ移す）
+- マウス割り当ては free と vr で揃えてある: **右ドラッグ＝平行移動、ホイール＝寄る/引く、
+  中ドラッグ＝VRの首振り**。左ボタンは全モードで再生・シークが使う
 
-The project uses **two Go modules**:
+## 詳細ドキュメント（`_docs/`）
 
-| Module | Path | Purpose |
-|--------|------|---------|
-| `egov` | `/` (root) | Shared library — defines the `API` struct and its methods |
-| `github.com/secondarykey/egov/cmd/egov` | `_cmd/egov/` | Wails3 application entry point (`main.go`), build assets, frontend |
+該当箇所を触る前に読むこと。
 
-The command module imports the root module as a local `replace` directive in its `go.mod`.
-
-Root module packages:
-
-| Path | Purpose |
-|------|---------|
-| `api.go` / `settings.go` / `locales.go` | `API`（Wails Binding）・設定・ロケール |
-| `localfiles.go` | ローカルファイル配信の許可リスト・トークン・URL（`LocalFiles`）、`OpenLocalFile` |
-| `media.go` | ローカルファイルの配信（アニメーション AVIF の読み替えを含む） |
-| `anim.go` | アニメーション画像の展開結果の保持とフレーム配信（`AnimStore`）、`OpenAnimation` |
-| `internal/animimage` | WebP / GIF / APNG の展開・合成、AVIF シーケンスの判定と読み替え |
-| `internal/mp4cut` | MP4 の無劣化切り出し |
-| `internal/vrformat` | メタデータ・ファイル名からの VR 素材形式の推定 |
-
-### Go ↔ Frontend Binding Pattern
-
-Methods on the `API` struct (`api.go`) are automatically callable from React via auto-generated TypeScript clients in `_cmd/egov/frontend/bindings/`. Adding a new backend method requires:
-
-1. Add the method to `API` in `api.go`
-2. Run `wails3 generate bindings -f '' -clean=true`
-3. Import the generated function in the frontend
-
-### Event System
-
-Go goroutines in `_cmd/egov/main.go` emit events via `app.Event.Emit("eventName", payload)`. The frontend subscribes with `Events.On("eventName", callback)` from `@wailsio/runtime`.
-
-### Frontend Embedding
-
-Vite builds to `_cmd/egov/frontend/dist/`. The Go binary embeds that directory with `//go:embed frontend/dist` and serves it as the Wails3 web root. Any frontend change requires a rebuild to be picked up in a production binary; `task dev` handles this automatically via hot-reload.
-
-### Frontend Component
-
-`_cmd/egov/frontend/src/Player.jsx` is the orchestrator component rendered from `App.jsx` — it owns all state/refs and input handling, and delegates rendering to `src/player/`:
-
-| File | Role |
-|------|------|
-| `player/useThreeScene.js` | Three.js scene setup + render-on-demand loop (rVFC), exposes refs。平面に貼る素材を動画／画像／canvas で差し替える（`showVideo` / `showImage` / `showCanvas`） |
-| `player/AnimPlayer.js` | アニメーション画像を video 要素と同じインターフェースで再生するプレーヤー（Player が `videoRef.current` に差し込む） |
-| `player/vrShader.js` | VR投影のフルスクリーンquad＋GLSL（投影方式の変換一式） |
-| `player/TitleBar.jsx` | Title bar (drag region, mode toggle, window controls) |
-| `player/ControlBar.jsx` | Bottom bar (seek, play/pause, volume, fullscreen) |
-| `player/SeekBarArea.jsx` / `TimeDisplay.jsx` / `MiniProgressBar.jsx` | `memo`-isolated high-frequency updates (`timeupdate`, thumbnail hover) |
-| `player/VrViewpointOverlay.jsx` | VR start-point + 視点/投影の調整オーバーレイ |
-| `player/Overlays.jsx` | Feedback/error/drop/empty-state overlays |
-| `player/VideoInfoPanel.jsx` | 情報パネル（解像度・長さ・フレームレート、アニメーション画像はフレーム数と平均 FPS） |
-| `player/ThumbnailGrid.jsx` | サムネイル一覧（normal モード、動画のみ） |
-| `player/DiagnosticsOverlay.jsx` | `Ctrl+Shift+D` の診断オーバーレイ |
-| `player/utils.js` | Shared constants (`VR_START`, `barStyle`) and helpers |
-
-Key facts:
-
-- **Three.js** (`r0.184`) + `OrbitControls` for rendering. 平面モード（normal/free）は
-  `PerspectiveCamera` ＋ plane、VRモードは専用シーンのフルスクリーンquad＋シェーダ。
-  動画のときは両者が同じ `VideoTexture` を共有し、`renderOnce()` が `modeRef` で描画先を切り替える。
-  画像・アニメーション画像のときは平面だけが別テクスチャ（`imageTexture`）を使い、VR は無効
-- **MUI** for all UI controls (title bar, control bar, sliders, menus)
-- Three view modes: `normal` (default, window-fit), `free` (pan/zoom), `vr` — internal names match the UI labels. Legacy `fit` in settings.json is migrated to `normal` by `Settings.normalize()`
-- マウス割り当ては free と vr で意味を揃えてある。**右ドラッグ＝平行移動、
-  ホイール＝寄る/引く**（free はパン＋ドリー、vr は `uShift`＋画角）。
-  VRの首振りは**中ドラッグ**。左ボタンは全モードで再生・シークが使う
-- VR split-screen: シェーダの `uSrcOffset` / `uSrcRepeat` uniform が左右／上下の半分を選ぶ。
-  `texture.repeat/offset` は平面モードと共有しているので触らないこと（等倍のまま）
-
-### 静止画の表示
-
-画像（`api.go` の `imageExts` / フロントの `utils.IMAGE_EXTS`、両者は揃えること）も開ける。
-**画像は normal / free だけで、VR は無効**（タイトルバーの VR ボタンを disabled にし、
-VR 中に開いたら normal へ落とす）。
-
-- 読み込みは `Player.openMedia()` に一本化してある。画像のときは **video 要素の src を外す**
-  （`removeAttribute('src')` + `load()`。`src = ''` は error を発火させる）。
-  再生・シーク・コマ送り・サムネイル・長押しシークはすべて `video.src` の有無で
-  早期 return するので、個別の分岐は不要
-- 描画は `useThreeScene` の `showImage()` / `showVideo()` が平面マテリアルの `map` を
-  `THREE.Texture`（画像）と `VideoTexture` で差し替える。画像は一度アップロードすれば
-  描画ループは不要（操作・リサイズ時の `requestRender` だけ）
-- **VR に画像を通さない理由は色空間。** `THREE.Texture` は sRGB 内部フォーマットで持たれ、
-  サンプル時点で線形化済み。VRシェーダは VideoTexture 前提で `sRGBTransferEOTF()` を
-  自前でかけているので、そのまま通すと二重復号で暗く沈む。対応するなら uniform で切り替える
-- GPU の `maxTextureSize` を超える画像はキャンバスで縮小してから渡す
-- ウィンドウのフィット（Reset）は `mediaSizeRef`（動画／画像共通の画素数）を使う。
-  作業領域（`Window.GetScreen().WorkArea`）に収まらない素材は、縦横比を保って縮めた
-  サイズにし、何%表示かを Snackbar で出す（`fitWindowToMedia()`）。そのまま `SetSize` すると
-  OS が片方の辺だけクランプし、ウィンドウは最大近くなのに画は余白付きという状態になる
-- アニメーションする WebP / GIF / APNG は次節の方式で動画として扱う
-
-### アニメーション画像（WebP / GIF / APNG / AVIF を動画として扱う）
-
-WebView は `<img>` ならアニメーション画像を再生できるが、WebGL へ渡せるのは先頭フレームだけで
-シークもできない。そこで **Go 側で全フレームを合成して保持し、フロントは video 要素と同じ顔の
-`player/AnimPlayer.js` で再生する**。
-
-- デコーダ:
-  - WebP: `golang.org/x/image` の fork（`github.com/secondarykey/image` の
-    `feature/webp-animated`、`webp.DecodeAnimated`）。ルートと `_cmd/egov` の **両方の go.mod** に
-    `replace` がある（replace はメインモジュールでしか効かないため）。fork を更新したら両方の
-    擬似バージョンを上げること
-  - GIF: 標準の `image/gif`（`DecodeAll`）
-  - APNG: `github.com/kettek/apng`（タグ無し、擬似バージョンで取り込み）。先頭の既定画像
-    （`IsDefault`）はアニメーションに含めない
-- `internal/animimage` の構成: 形式ごとの差（位置・重ね方・消し方・表示時間の単位）は
-  `formats.go` で共通の `frame` に揃え、合成は `compose()` だけが行う。消し方は
-  「そのまま / 透明に戻す / 直前に戻す（GIF・APNG のみ）」の3種。背景色ではなく透明に戻すのは
-  libwebp / ブラウザと同じ。10ms 以下の表示時間は 100ms 扱い（これもブラウザと同じ、GIF の
-  `delay=0` 対策）。合計 `MaxBytes`（1GB）を超える素材は展開せず静止画で出す
-- **形式もアニメーションかどうかも拡張子ではなく中身で判定する**（`IsAnimated`）。
-  `.png` の APNG があるため。軽い判定で済ませる: WebP は VP8X のフラグ、APNG は IDAT より前の
-  `acTL`、GIF は画像記述子が2つあるか（LZW は展開しない）。acTL があっても1フレームの APNG は
-  `ErrNotAnimated` → 静止画。フロントは `utils.mayBeAnimatedPath()`（webp/gif/png/apng）の
-  ときだけ `OpenAnimation` を呼ぶ
-- `API.OpenAnimation(path)` が展開して `AnimStore` に1本だけ保持し、フレームはローカルファイル
-  サーバの `/animframe?token=&id=&i=` で生の RGBA として配る（バインディングで []byte を返すと
-  base64 の JSON になり毎フレームには重い）。`id` は開き直すたびに増え、古い id の要求は 410
-- Player は **`videoRef.current` を AnimPlayer に差し替える**。シークバー・時間表示・範囲ループ・
-  ダブルクリック／長押しシークは video 要素と同じプロパティとイベントで動く。
-  本物の video 要素は `videoElRef`（診断オーバーレイ・コマ送りのラッチ・ループ初期値）
-- 画像と同じく VR は無効。サムネイル（ホバー／一覧）と音量も出さない。
-  ホバーサムネイルの可否は設定値そのものではなく `thumbHoverRef` を SeekBarArea へ渡している
-- 描画は canvas を `imageTexture` に貼り、フレームを描き換えるたびに `refreshCanvasRef` で
-  再アップロードする（ミップマップ生成は切る）
-
-**アニメーション AVIF は展開しない。** 中身は ISOBMFF（moov/trak、ハンドラ `pict`、`av01`
-サンプル）で MP4 と同じ構造をしており、Chromium（WebView2）の `<video>` で動画として再生できる。
-`API.OpenAnimation` は ftyp に `avis` ブランドがあれば `AsVideo=true` を返し、
-フロントは通常の動画として開く（VR・サムネイル・範囲ループなども動画と同じく使える）。
-
-- ⚠️ **そのままでは再生できない。** AVIF シーケンスはトップレベルの `meta` に代表画像（静止画
-  1枚）を持ち、Chromium のデマクサ（FFmpeg）はこれを moov のトラックより前の映像ストリームとして
-  見せる。video 要素はその1フレームの方を選ぶため、読み込み直後に末尾（duration）へ飛んで
-  ended になる（`loadeddata` の時点で `currentTime == duration`）。
-  ローカルファイルサーバの `egov.ServeLocalFile()` が、配信時に **`meta` の box type だけを
-  同じ長さの `free` に読み替える**（`animimage.AVIFVideo`、ファイルは書き換えない）。
-  サイズが変わらないので stco のオフセットは直さなくてよい。ブランドや hdlr（`pict`）は
-  そのままで再生できる
-- ⚠️ 検証の落とし穴: 読み込み後にすぐシークするテストでは上の症状が見えない（シーク先は
-  正しく出る）。再生開始位置と `currentTime` の進みで確かめること
-- 実機の WebView2 を外から調べるには、`application.Options.Windows.AdditionalBrowserArgs` に
-  `--remote-debugging-port=<port>` を足した一時ビルドを使い、CDP の `Runtime.evaluate` で
-  状態を読む（環境変数 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` は Wails が引数を渡すため効かない）
-- 静止画の AVIF（`avif` ブランドのみ）は画像ビューアで表示する
-- AV1 を WebAssembly でデコードして展開する案（`gen2brain/avif`）は、バイナリ +7MB・
-  1080p/5秒で展開6秒・約1GB と重いので採らなかった
-- 透過（アルファ用の補助トラック）は video 要素では反映されない
-- WebKitGTK / WKWebView での再生は未確認
-
-### 範囲切り出し（無劣化カット）
-
-`internal/mp4cut` が progressive MP4 (`moov` + `mdat`) から時間範囲をサンプル単位で
-バイトコピーして切り出す。再エンコードしないためコーデック非依存
-（H.264 / HEVC / AV1 いずれも可）。実装は [Eyevinn/mp4ff](https://github.com/Eyevinn/mp4ff) を使う。
-
-処理の流れは `stts` で時刻→サンプル番号を解決 → `stss` で開始点を直前のキーフレームへ
-スナップ → `stsc`/`stsz`/`stco` で入力チャンクを範囲の端で切り詰め →
-`stbl` 配下のテーブルを作り直し → mdat 本体の開始位置が確定してから chunk offset を絶対値へ補正、というもの。
-
-- **開始点は必ず sync sample にスナップされる**ため、指定より前にずれる。`ExtractResult.StartSec` に実際の値が返る
-- `edts`/`elst` は元のタイムラインを指すため破棄する。`sdtp`/`sbgp`/`sgpd`/`subs`/`saio`/`saiz` も破棄する
-- fragmented MP4 (`moof`) は非対応。対応拡張子は `API.CanExtract()`（`.mp4`/`.m4v`/`.mov`）が判定する
-- 4GB 超の出力では mdat を largesize ヘッダ（16バイト）にし、chunk offset も `co64` にする
-- 保存先は**ネイティブの保存ダイアログ**（`Dialogs.SaveFile`、Go側Binding不要）で選ばせる。
-  既定のフォルダ・ファイル名は `API.SuggestExtractTarget()` が
-  `<元の場所>/<name>_02m00s-07m00s.mp4` の形で作る（衝突時は `_2` を付ける）
-- 上書き確認はネイティブダイアログの責務なので `API.ExtractRange()` は既存ファイルを拒否しないが、
-  **読み込み中の元ファイルへの上書きだけは必ず弾く**（`resolveExtractPath()` / `sameFile()`）。
-  Windows/macOS は大文字小文字を区別しないため `os.SameFile` で実体比較する
-
-UI は既存の**範囲ループのマーカーをそのまま in/out 点として使う**。選択範囲は
-`SeekBarArea` から `rangeRef`（ref）で Player へ公開する — state で持ち上げると
-マーカーのドラッグ中に Player 全体が再描画されるため。
-起動は右サイドパネル最上段のハサミ（範囲ループが ON のときだけ有効）。
-**キーフレーム単位でしか切れないことはハサミのツールチップに注記する**
-（`controls.extractKeyframeNote`）。GOP 長はエンコーダ次第で、x264 のデフォルト
-（`keyint=250`）なら 30fps で約8秒空くため、黙っていると「指定と違う位置で切れた」
-という驚きになる。切り出し後の Snackbar には実際の範囲を出す。
-保存ダイアログを待っている間にマーカーが動いても影響しないよう、
-範囲はクリック時点の値をコピーして固定する。
-進行中と結果は Snackbar に出す（進行中は `busy` で自動クローズを止める）。
-
-テスト用の `internal/mp4cut/testdata/sample.mp4` は ffmpeg で生成した合成クリップ
-（320x180 / 30fps / GOP 60 = キーフレームは 0,2,4,6,8秒 / AAC）。
-出力の妥当性検証に ffmpeg デコードを使うテストがあるが、ffmpeg が無い環境ではスキップされる。
-
-### VR投影（`player/vrShader.js`）
-
-VR描画は球メッシュ＋`PerspectiveCamera` ではなく、**フルスクリーンquad＋フラグメント
-シェーダ**で行う。ピクセルごとに「画面座標 → 視線ベクトル → 頭の回転 → ソース画像のUV」
-を直接解く。旧実装（`SphereGeometry(500, 60, 40, 0, PI)`）には以下の問題があった。
-
-- **半球が前方ではなく左方向を向いていた**。`sphere.rotation.y = -PI/2` の結果、
-  ワールドの前方 `(0,0,-1)` が UV `u=1.0`（切り出した映像の右端）に対応し、
-  画面の右半分にはメッシュ自体が存在しなかった。数値で検証可能:
-  ジオメトリを組んで `matrixWorld` 適用後の頂点方向と UV を突き合わせると
-  前方の最近傍頂点が `uv=(1.000, 0.500)`、右方向 `(1,0,0)` は最近傍まで90°離れている
-- UVが頂点間で線形補間されるため、FOVを絞ると1マス（水平3°/垂直4.5°）が
-  画面の大きな割合を占め、面ごとの歪みが見えた
-- ソースが 180° 正距円筒であることを決め打ちしていた
-
-シェーダ側は3つの軸を独立に持つ。
-
-| uniform | 意味 |
+| ファイル | 内容 |
 |---|---|
-| `uSrcProj` / `uSrcHalfFov` | 素材の投影方式（正距円筒 / 等距離魚眼 / 等立体角魚眼）と画角 |
-| `uDispProj` / `uProjScale` | 画面への投影方式（透視 / Panini / ステレオ）と画角 |
-| `uRot` | yaw(Y) → pitch(X) → roll(Z) の合成回転（`Euler(pitch, yaw, roll, 'YXZ')`） |
+| [`_docs/rendering.md`](_docs/rendering.md) | Three.js で動画を描く仕組み（レンダーオンデマンド、rVFC が動かない環境、テクスチャ） |
+| [`_docs/vr-projection.md`](_docs/vr-projection.md) | VR投影シェーダ、素材形式の推定、色空間、視点の保存とリセット |
+| [`_docs/images-and-animations.md`](_docs/images-and-animations.md) | 静止画、アニメーション画像（WebP/GIF/APNG）の展開と再生、アニメーション AVIF |
+| [`_docs/range-extract.md`](_docs/range-extract.md) | MP4 の無劣化切り出し（`internal/mp4cut`）と UI |
 
-- **素材の投影方式が合っていないと、中央は合うのに首を振ると周辺が伸び縮みする。**
-  未変換のデュアル魚眼素材を正距円筒として貼るのが典型例
-- **素材の画角は180°決め打ちにしない。** 撮影機は 190°/200° が多く、
-  180°として貼ると首振り角と画の動きが一致しない
-- **素材の画角は水平画角。縦は切り出し後のアスペクト（`uSrcAspect`）から求める。**
-  正距円筒は1度あたりの画素数が縦横で等しいので 縦 = 横 / アスペクト。
-  SBS 180°（片側 1:1）なら 180°×180°、360°モノラル（2:1）なら 360°×180° になる。
-  意味のある範囲は方式ごとに違うため `SRC_FOV_RANGE`（Go側 `sourceFovRange()`）で持ち、
-  方式を切り替えたら `fitSrcFov()` で範囲外を初期値へ戻す
-- **`flat` は普通のカメラ映像（透視投影）を正面に置いた一枚の画として貼る。**
-  縦長動画などを正距円筒へエンコードし直さずに首振りできる。
-  tan で広がるので水平画角は 180° 未満（10〜170°）に限る
-- **`VR_START.full` は切り出さない（モノラル素材）。** 360°モノラル正距円筒や
-  `flat` 素材向け。オーバーレイのコンパスの中央に置いてある
-- **素材の形式（始点・素材の投影方式・素材の画角）はファイルを開くたびに推定する。**
-  `internal/vrformat` が Spherical Video V2（サンプルエントリ配下の `st3d` / `sv3d/proj/equi`）
-  と V1（trak 直下の uuid box の XML）を読み、決まらなかった項目だけを
-  ファイル名の印（`_LR`/`_SBS`/`_TB`/`_OU`/`_MONO`/`_180`/`_360`/`_FISHEYE190` など、
-  区切り文字で分けたトークンの完全一致）で埋める。mp4ff は `st3d`/`sv3d` を解釈しないので自前で辿っている
-- **推定結果はセッション中の上書きで、ディスクへは書かない。** 見方の好み（向き・表示画角・
-  表示投影・平行移動）には触れない。`vrSavedRef`（保存済み）に推定できた項目だけを重ねたものが
-  `vrDefaultsRef`（Reset Camera の戻り先）になる。推定できなかった項目は保存済みの値へ戻す
-  ——前のファイルの推定（例: 360°モノラル）を次のファイルへ持ち越さないため。
-  始点 `start` も `currentVrView()` の1項目として保存・リセットの対象に含めている
-- 透視投影は原理的に画面端が引き伸ばされる。HMDならレンズが打ち消すが、
-  平面モニタでは歪みとして残るため Panini / ステレオ投影を選べるようにしている
-- `uProjScale` は「画面上端／下端で視線角がちょうど `fov/2` になる係数」。
-  投影方式を変えても画角の意味が揃うよう `projScaleFor()` で算出する
-- **色空間は自前で往復させる。** three.js は VideoTexture に限って sRGB の内部
-  フォーマットを使わない（`WebGLTextures.js` の `getInternalFormat()` に
-  `forceLinearTransfer = texture.isVideoTexture` が渡り `RGBA8` になる）。
-  サンプル結果は sRGB のままなので `sRGBTransferEOTF()` で明示的に復号し、
-  `#include <colorspace_fragment>` で再符号化する。組み込みマテリアルが
-  `DECODE_VIDEO_TEXTURE` で行っているのと同じこと。
-  **復号を省くと sRGB が二重にかかり、画が白っぽく浮く。**
-  どちらの関数も `ShaderMaterial`（Rawではない）なら `WebGLProgram` の
-  prefixFragment に注入されるので宣言不要
-- **表示画角は `VR_FOV_MIN`/`VR_FOV_MAX` = 20〜180°**（Go側は `vrFovMin`/`vrFovMax`）。
-  素材が 180° 級である以上 180° は設定したい値になりうるので、
-  「歪みが強いから」で手前で切らない。透視/Panini の `tan(fov/2)` は
-  fov=180° で発散し Infinity が uniform に入ると全面 NaN で黒くなるため、
-  `projScaleFor()` が半画角を 90° の直前へ丸めて潰す。
-  ステレオ投影は `2 tan(fov/4)` なので 180° でも有限で、広角側では実用になる
-- **スナップショットは VR では描画結果を保存する。** `video` 要素を drawImage しても
-  投影前の（正距円筒／魚眼の）半分が出てくるだけなので、`useThreeScene` の
-  `captureRef` が `renderOnce()` 直後に WebGL キャンバスを2Dキャンバスへコピーする。
-  `preserveDrawingBuffer` は使わない（常時コピーで描画が重くなる）。
-  描画バッファのクリアは合成時＝現在のタスクの終わりなので、
-  **同期で drawImage する限り内容は残っている**（間に await を挟まないこと）
-- `uShift` は**描画結果の**平行移動（アスペクト補正の**前**に引くので X/Y とも
-  「1.0 = ウィンドウの半分」で単位が揃う）。視点は動かさないので歪みは増えない。
-  上限 `VR_SHIFT_LIMIT` / `vrShiftLimit` = 3（±300%）は**表示投影で決まる**。
-  透視投影は画面座標をいくら伸ばしても視線角が90°に漸近するだけなので
-  180°素材では黒帯が出ない（500%でも画面の100%が埋まる）が、
-  Panini は有限の画面座標で90°を超えるため fov75 で 300% を過ぎると画が残らない
-- **VR視点の変更はディスクへ書かない。** スライダー・トグル・マウス操作はすべて
-  セッション中のプレビューで、保存は `VrViewpointOverlay` の「既定として保存」
-  ボタン（`onCommit` → `persistVRView`）だけが行う。
-  **`onChangeCommitted` などから `onCommit` を呼ばないこと**——保存した値は
-  Reset Camera の戻り先なので、触るたびに保存すると戻り先が更新されて
-  永久に戻れなくなる（実際にそうなっていた）
-- **VR視点の保存とリセットは対称にすること。** 向き・平行移動・画角・素材／表示の
-  投影方式まで全項目を、`currentVrView()` が返す1つのオブジェクトとして扱う
-  （`vrDefaultsRef` に保持）。個別の ref に分けると、項目を足したときに
-  保存かリセットのどちらかで取りこぼす（実際に FOV がリセットされない不具合を出した）
-- **視点の平行移動（旧 `positionX/Y/Z`）は撤去した。** 180°映像には視差情報が無く、
-  投影中心から離れても「一歩前に出る」にはならず非一様な歪みが増えるだけで、
-  これで位置を合わせようとしても収束しない
+## 守ること
 
-### Wails3 Drag Behavior
+### 描画・VR
+- `texture.repeat/offset` は平面モードと共有しているので触らない。VR の左右／上下の切り出しは
+  シェーダの `uSrcOffset` / `uSrcRepeat` で行う
+- VR シェーダは `VideoTexture` 前提で sRGB を自前で復号している。画像（`THREE.Texture`）を
+  そのまま通すと暗くなるので、**画像・アニメーション画像では VR を無効にしている**
+- 最初のフレームは `loadeddata` で描く。`play` イベントだけを描画のきっかけにしない
+  （Linux では自動再生が拒否される）
+- VR 視点はディスクへ書かない。保存は「既定として保存」（`onCommit`）だけ。
+  **`onChangeCommitted` などから `onCommit` を呼ばない**（Reset の戻り先が壊れる）
+- VR 視点の保存とリセットは `currentVrView()` の1オブジェクトで対称に扱う。個別の ref に分けない
+- 表示画角の上限 180° を「歪むから」で手前に切らない（`projScaleFor()` が発散を潰している）
+- 素材形式の推定結果はセッション中だけの上書き。ディスクへ書かない
 
-`@wailsio/runtime/dist/drag.js` registers capture-phase listeners on `mousedown/mousemove/mouseup`. Elements with `--wails-draggable: drag` trigger window drag on left-click-move. **Do not set `--wails-draggable: drag` on the Three.js canvas/mount div** — while `dragging=true`, the library suppresses all `mousedown` events and all non-left-button events via `stopImmediatePropagation`, which breaks OrbitControls right-click. Only set `--wails-draggable: drag` on the title bar.
+### メディアの種類
+- 画像の拡張子はフロント `utils.IMAGE_EXTS` と Go `imageExts` を揃える
+- 画像のときは video の `src` を `removeAttribute('src')` + `load()` で外す（`src = ''` は error を出す）
+- アニメーションかどうかは拡張子ではなく中身で判定する（`.png` の APNG があるため）
+- WebP の fork（`github.com/secondarykey/image`）の `replace` はルートと `_cmd/egov` の
+  **両方の go.mod** にある。更新するときは両方を上げる
 
-## Wails3 Known Patterns
+### 切り出し
+- 開始点は直前のキーフレームにスナップされる。読み込み中の元ファイルへの上書きは必ず弾く
 
-### Linux (WebKitGTK) の自動再生制限
+### Wails / プラットフォーム
+- **`--wails-draggable: drag` はタイトルバーだけに付ける。** canvas に付けると右ドラッグが壊れる
+- `main.jsx` の `import '@wailsio/runtime'`（ベア import）を消さない。ドラッグが効かなくなる
+- 映像側の mousedown / click は `utils.isResizeEdge()` でリサイズ域を先に弾く
+  （リサイズに入ると mouseup が届かない）
+- ファイルドロップは Go の `WindowFilesDropped` に一本化する。DOM の `drop` は
+  Linux/macOS では届かず、両方で処理すると二重に読み込む。`relatedTarget=null` の
+  `dragleave` は無視する
+- ファイルを開くのは `Dialogs.OpenFile` ＋ `API.OpenLocalFile`。**`<input type="file">` は使わない**
+  （パスが取れない）。フロントが読めるのはユーザーが明示的に開いたファイルだけ
+  （`egov.LocalFiles` の許可リスト）
+- 閉じるボタンは `Window.Close()` ではなく `Quit()` binding を呼ぶ（終了時にウィンドウ位置を保存するため）。
+  ウィンドウの復元は `WindowRuntimeReady` で行う
+- Linux では `webkitenv_linux.go` が `WEBKIT_DISABLE_DMABUF_RENDERER=1` を既定にしている
+  （DMA-BUF による映像化け対策、`application.New()` より前に設定）
+- Linux では `-tags production,devtools` がビルドできない。本番ビルドの切り分けには
+  `Ctrl+Shift+D` の診断オーバーレイ（`player/DiagnosticsOverlay.jsx`）を使う
 
-WebKitGTK はミュートしていないメディアの自動再生にユーザー操作を要求するため、
-ファイルを開いた直後の `video.play()` は必ず `NotAllowedError` で拒否される。
-Wails v3 beta.16 時点でも `EnableAutoplayWithoutUserAction`（`mediaTypesRequiringUserActionForPlayback`）は
-**darwin/iOS 専用**で、Linux 側の `linux_cgo.go` は
-`webkit_settings_set_media_playback_requires_user_gesture` を一切呼んでいない。
-Windows の WebView2 は既定で自動再生を許可するため、この問題は Linux でのみ顕在化する。
+### Worktree
+- ワークツリーでは `_cmd/egov/frontend/node_modules` をメインリポジトリから
+  ジャンクションで張る。**ワークツリー側で `npm install` しない**（ジャンクションが壊れる）
 
-そのため **描画のきっかけを `play` イベントだけに依存してはいけない**。
-`loadedmetadata` 時点は `readyState=HAVE_METADATA` でフレーム実体がまだ無く、
-ここで描画しても黒画になる。最初のフレームは `loadeddata` で
-`texture.needsUpdate` を立てて描画すること（`player/useThreeScene.js`）。
-
-### Linux (WebKitGTK) の DMA-BUF による映像化け
-
-WebKitGTK 2.40 以降はデコード済み動画フレームを DMA-BUF（YUV マルチプレーン＋
-DRM format modifier）でゼロコピー転送するが、ドライバが未対応だとタイル化された
-バッファをリニアな RGB として読み、**映像が砂嵐状に化ける**。
-Intel Haswell 世代の Mesa が該当し、起動時に
-`FINISHME: support YUV colorspace with DRM format modifiers` を出力する。
-
-egov は VideoTexture 経由で WebGL に転送するためこの経路に強く依存する。
-`webkitenv_linux.go` の `configureWebviewEnv()` で
-`WEBKIT_DISABLE_DMABUF_RENDERER=1` を既定で設定して回避する
-（`application.New()` より前に設定すること。Webプロセスのfork前である必要がある）。
-環境変数が既に設定済みなら尊重するため、`WEBKIT_DISABLE_DMABUF_RENDERER=0` で上書き可能。
-
-⚠️ 検証時の注意: `VAR=1` を単独行で書くと export されず子プロセスに渡らない。
-`VAR=1 ./bin/egov` か `export VAR=1` を使うこと。
-
-### ファイルのドラッグ&ドロップ
-
-`EnableFileDrop: true` のとき、Wails はネイティブ側でドロップを横取りし、
-ドロップ先の要素が `data-file-drop-target` を持つ場合に **Go 側の**
-`events.Common.WindowFilesDropped` を発火させる。
-
-⚠️ **Linux(WebKitGTK)/macOS では DOM の `drop` イベントが配送されない**ため、
-フロントエンドの `e.dataTransfer.files` に依存してはいけない。
-Windows でもランタイムがドロップを Go へ転送するので、
-`WindowFilesDropped` に一本化するのが正しい（両方で処理すると二重読み込みになる）。
-
-また Linux/macOS では `relatedTarget=null` の `dragleave` が即座に飛んでくるので、
-ドラッグ表示のカウンタはこれを無視しないと状態が壊れる。
-
-### ファイルを開く（ファイル選択ダイアログ）
-
-**`<input type="file">` は使わない。** 見た目は OS 標準のダイアログだが、ブラウザの制約で
-フロントエンドには中身（Blob）しか渡らず**パスが取れない**。パスが無いと Go 側の処理
-（アニメーション画像の展開・無劣化切り出し・メタデータからの VR 形式推定）が一切できない。
-`Player.handleOpenFile()` が Wails の `Dialogs.OpenFile` でパスを受け取り、
-`API.OpenLocalFile(path)` で検証（絶対パス・通常ファイル・対応拡張子）して許可リストへ
-登録した URL を得る。以後はドロップ・起動引数と同じ `loadFilePath()` の経路になる。
-
-- ダイアログのフィルタは `API.MediaFilePattern()` が Go 側の拡張子一覧から組み立てる
-- ローカルファイル配信の許可リスト・トークン・URL は `egov.LocalFiles`（`localfiles.go`）に
-  まとめてある。フロントエンドが読めるのはユーザーが明示的に開いたファイルだけ
-  （起動引数は `GetInitialFile`、ドロップ・二重起動は main.go、ダイアログは `OpenLocalFile` が登録）
-
-### 診断オーバーレイ
-
-`Ctrl+Shift+D` で `player/DiagnosticsOverlay.jsx` を開ける（Esc で閉じる）。
-HTTP取得/CORS・デコード・WebGL転送のどこで詰まっているかを
-`networkState` / `readyState` / `MediaError` / 2D drawImage / 描画カウンタで判別する。
-Linux では `-tags production,devtools` がビルドできない
-（`webview_window_linux_production.go` が `!devtools`、`webview_window_linux_dev.go` が `!production`
-で両方とも除外される）ため、プロダクションビルドでの切り分けにはこれを使う。
-
-### Window State Save/Restore
-
-Window position/size restoration uses a **two-phase approach**:
-
-- **Phase 1 (before `app.Run()`)**: `NewWebviewWindowWithOptions` に保存済み座標を渡す。`ScreenNearestDipPoint` は Run() 前に nil を返すため、サイズは安全な上限でクランプのみ。`InitialPosition: application.WindowXY` を明示的に指定しないと X/Y が無視され中央配置になる。
-- **Phase 2 (after `app.Run()`)**: `win.OnWindowEvent(WindowRuntimeReady)` 内で `ScreenNearestDipPoint` を使い正式なクランプを行い `SetSize`/`SetPosition` で補正。`ApplicationStarted` では `SetSize` が効かない場合がある。
-
-終了時の保存は `API.Quit()` 経由で行う。`WindowClosing` 時点ではウィンドウ破棄が進行中のため `Position()`/`Size()` が (0,0) を返すことがある。フロントエンドの閉じるボタンは `Window.Close()` ではなく `Quit()` binding を呼ぶ。
-
-### Frameless Window Resize Handles
-
-`@wailsio/runtime/dist/drag.js` のリサイズハンドル判定は `window.outerWidth/outerHeight` とマウス座標の比較のみで行われ、DOM要素のマージンには依存しない。そのため Three.js canvas 等の全面要素にマージンは不要で、`100vw`/`100vh` で映像を100%表示にしてもリサイズは機能する（以前は `calc(100vw - 10px)` + `margin: 5px` としていたが撤去済み）。
-
-⚠️ **リサイズ域では映像側のクリック処理を動かしてはいけない。** リサイズ開始は
-mousedown → mousemove の順なので、端で押した時点の `mousedown` はこちらへ届くが、
-`resizing` に入った後の `mouseup`/`click` は capture 段で
-`stopImmediatePropagation` され**届かない**。長押しの早送りオーバーレイをそこで
-開くと、ボタンを離しても閉じずに早送りが続く。`utils.isResizeEdge()` が
-drag.js と同じしきい値（既定 5px、角は +10px）で判定するので、
-`handleCanvasMouseDown` / `handleCanvasClick` はこれで早期 return する。
-
-### Runtime Import
-
-`main.jsx` で `import '@wailsio/runtime'` をベア import しておくこと。個別の名前付き import（`import { Window } from '@wailsio/runtime'`）だけでは `drag.js` の副作用が有効化されない場合がある。
-
-### Worktree / Junction
-
-ワークツリーでは node_modules をメインリポジトリからジャンクション（Windows）でリンクする。ワークツリー側で `npm install` を実行するとジャンクションが破壊される。パッケージの追加・削除は必ずメイン側で行う。
-
-**ワークツリーでのセッション開始時（必須）**: `_cmd/egov/frontend/node_modules` が存在しない場合、以下のコマンドでメインリポジトリからジャンクションを作成すること。ビルドや `task dev` の前に必ず実行する。
-
-```powershell
-# PowerShell で実行（cmd の mklink /J でも可）
-New-Item -ItemType Junction -Path "_cmd\egov\frontend\node_modules" -Target "D:\Go\Projects\egov\_cmd\egov\frontend\node_modules"
-```
-
-同様に `frontend/dist` も存在しないとGoの `//go:embed all:frontend/dist` がビルドエラーになる。空ディレクトリを作成するか、ジャンクションを作成すること。
-
-```powershell
-# 空ディレクトリで十分（ビルド時に上書きされる）
-New-Item -ItemType Directory -Path "_cmd\egov\frontend\dist" -Force
-```
-
-`build/Taskfile.yml` の `install:frontend:deps` は `status: test -d node_modules` で存在チェックに変更済み（`generates: node_modules` はViteキャッシュで誤検知し不要な npm install を走らせるため）。`wails3 update build-assets` を実行すると `build/Taskfile.yml` が上書きされるため、再修正が必要。
+  ```powershell
+  New-Item -ItemType Junction -Path "_cmd\egov\frontend\node_modules" -Target "D:\Go\Projects\egov\_cmd\egov\frontend\node_modules"
+  New-Item -ItemType Directory -Path "_cmd\egov\frontend\dist" -Force   # go:embed 用
+  ```
+- `build/Taskfile.yml` の `install:frontend:deps` は `status: test -d node_modules` に変えてある。
+  `wails3 update build-assets` で上書きされるので、実行したら直し直す
 
 ## Key Configuration Files
 
