@@ -71,7 +71,7 @@ wails3 generate bindings -f '' -clean=true
 - VR 視点はディスクへ書かない。保存は「既定として保存」（`onCommit`）だけ。
   **`onChangeCommitted` などから `onCommit` を呼ばない**（Reset の戻り先が壊れる）
 - VR 視点の保存とリセットは `currentVrView()` の1オブジェクトで対称に扱う。個別の ref に分けない
-- 小窓ズームは同じ `scene` / `VideoTexture` を2つ目のカメラで scissor 描画する（`planePassRef`）。
+- 小窓ズームは同じ `scene` / `VideoTexture` を2つ目のカメラで描き、縁を透かして合成する（`planePassRef`）。
   `<video>`・`VideoTexture`・`WebGLRenderer` を2つ目に作らない（デコードや転送が倍になる）
 - 表示画角の上限 180° を「歪むから」で手前に切らない（`projScaleFor()` が発散を潰している）
 - 素材形式の推定結果はセッション中だけの上書き。ディスクへ書かない

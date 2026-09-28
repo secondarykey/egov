@@ -3,9 +3,9 @@ import * as THREE from 'three'
 import { clamp, isResizeEdge } from './utils'
 
 // 小窓ズーム（normal / free モード）。
-// 主画面と同じシーン（同じ VideoTexture を貼った平面）を、2つ目のカメラで
-// 小窓の範囲だけ scissor して描き直す。デコードも GPU への転送も1回のままで、
-// 増えるのは小窓の面積ぶんの描画だけ。
+// 主画面と同じシーン（同じ VideoTexture を貼った平面）を2つ目のカメラで小窓の大きさの
+// オフスクリーンへ描き、縁ほど透明にして主画面へ重ねる。デコードも GPU への転送も
+// 1回のままで、増えるのは小窓の面積ぶんの描画2回（オフスクリーンと合成）だけ。
 //
 // 切り抜く範囲はワールド座標（平面上の位置）で持つので、free モードで主画面を
 // 動かしても小窓は同じ場所を映し続ける。主画面には範囲を示す枠を出さない。
@@ -17,6 +17,34 @@ const MIN_W = 160
 const MIN_H = 90
 const MIN_REGION_H = 9 / 50        // 平面の高さ（9）の 1/50 まで寄れる
 const WHEEL_SPEED = 0.0015
+const FEATHER = 0.12               // 縁を透かす幅（小窓の短辺に対する割合）
+
+const COMPOSITE_VERT = /* glsl */ `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = vec4(position.xy, 0.0, 1.0);
+  }
+`
+
+// オフスクリーンの中身は乗算済みアルファ（透明の上に通常合成で描いたため）。
+// 出力の色空間変換は乗算前の色に掛けてから、縁のマスクと一緒にアルファを掛け直す。
+const COMPOSITE_FRAG = /* glsl */ `
+  uniform sampler2D tMap;
+  uniform vec2 uSize;
+  uniform float uFeather;
+  varying vec2 vUv;
+  void main() {
+    vec4 texel = texture2D(tMap, vUv);
+    vec2 px = vUv * uSize;
+    vec2 edge = min(px, uSize - px);
+    float mask = smoothstep(0.0, uFeather, edge.x) * smoothstep(0.0, uFeather, edge.y);
+    float a = texel.a * mask;
+    gl_FragColor = vec4(texel.rgb / max(texel.a, 1e-4), 1.0);
+    #include <colorspace_fragment>
+    gl_FragColor = vec4(gl_FragColor.rgb * a, a);
+  }
+`
 
 // 平面がワールド座標で占める範囲の半分。free モードの回転（90°単位）で縦横が入れ替わる
 const planeExtent = (plane) => {
@@ -67,6 +95,30 @@ export default function ZoomInset({ stateRef, mountRef, planeRef, planePassRef, 
     const insetCamera = new THREE.PerspectiveCamera(60, 1, 0.01, 1000)
     const tanHalf = Math.tan(THREE.MathUtils.degToRad(insetCamera.fov) / 2)
     const size = new THREE.Vector2()
+    const clearColor = new THREE.Color()
+
+    // sRGB のレンダーターゲットにすると書き込みで符号化・読み出しで復号されるので、
+    // 暗部の階調が潰れず、合成側は線形のまま扱える
+    const target = new THREE.WebGLRenderTarget(1, 1)
+    target.texture.colorSpace = THREE.SRGBColorSpace
+
+    const composite = new THREE.ShaderMaterial({
+      uniforms: {
+        tMap:     { value: target.texture },
+        uSize:    { value: new THREE.Vector2(1, 1) },
+        uFeather: { value: 1 },
+      },
+      vertexShader: COMPOSITE_VERT,
+      fragmentShader: COMPOSITE_FRAG,
+      transparent: true,
+      premultipliedAlpha: true,
+      depthTest: false,
+      depthWrite: false,
+    })
+    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), composite)
+    quad.frustumCulled = false
+    const quadScene  = new THREE.Scene().add(quad)
+    const quadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)   // 頂点シェーダが直接 NDC を出すので形だけ
 
     // 毎フレーム呼ばれるので、位置が変わったときだけ DOM に書く
     let placed = ''
@@ -98,14 +150,28 @@ export default function ZoomInset({ stateRef, mountRef, planeRef, planePassRef, 
       insetCamera.updateProjectionMatrix()
       insetCamera.position.set(region.cx, region.cy, region.h / 2 / tanHalf)
 
-      // viewport / scissor は左下原点の CSS px（three.js が pixelRatio を掛ける）
-      const vy = H - rect.y - rect.h
-      renderer.setViewport(rect.x, vy, rect.w, rect.h)
-      renderer.setScissor(rect.x, vy, rect.w, rect.h)
-      renderer.setScissorTest(true)
+      // 1) 小窓の中身をオフスクリーンへ描く。映像の外は透明にして、引いたときも主画面が透ける
+      const pr = renderer.getPixelRatio()
+      const tw = Math.max(1, Math.round(rect.w * pr))
+      const th = Math.max(1, Math.round(rect.h * pr))
+      if (target.width !== tw || target.height !== th) target.setSize(tw, th)
+      renderer.getClearColor(clearColor)
+      const clearAlpha = renderer.getClearAlpha()
+      renderer.setClearColor(0x000000, 0)
+      renderer.setRenderTarget(target)
       renderer.render(scene, insetCamera)
-      renderer.setScissorTest(false)
+      renderer.setRenderTarget(null)
+      renderer.setClearColor(clearColor, clearAlpha)
+
+      // 2) 縁ほど透明にして主画面へ重ねる。viewport は左下原点の CSS px（three.js が pixelRatio を掛ける）
+      composite.uniforms.uSize.value.set(rect.w, rect.h)
+      composite.uniforms.uFeather.value = Math.min(rect.w, rect.h) * FEATHER
+      const autoClear = renderer.autoClear
+      renderer.autoClear = false
+      renderer.setViewport(rect.x, H - rect.y - rect.h, rect.w, rect.h)
+      renderer.render(quadScene, quadCamera)
       renderer.setViewport(0, 0, W, H)
+      renderer.autoClear = autoClear
 
       place(boxRef.current, rect.x, rect.y, rect.w, rect.h)
     }
@@ -114,6 +180,9 @@ export default function ZoomInset({ stateRef, mountRef, planeRef, planePassRef, 
     return () => {
       planePassRef.current = null
       render()   // 小窓を消した画で描き直す
+      target.dispose()
+      composite.dispose()
+      quad.geometry.dispose()
     }
   }, [])
 
@@ -205,9 +274,6 @@ export default function ZoomInset({ stateRef, mountRef, planeRef, planePassRef, 
       style={{
         position: 'absolute',
         zIndex: 1,
-        boxSizing: 'border-box',
-        border: '1px solid rgba(255,255,255,0.35)',
-        boxShadow: '0 2px 12px rgba(0,0,0,0.6)',
         cursor: 'move',
       }}
     >
