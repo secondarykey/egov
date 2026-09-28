@@ -8,16 +8,15 @@ import { clamp, isResizeEdge } from './utils'
 // 増えるのは小窓の面積ぶんの描画だけ。
 //
 // 切り抜く範囲はワールド座標（平面上の位置）で持つので、free モードで主画面を
-// 動かしても小窓は同じ場所を映し続ける。主画面の枠は描画のたびに主カメラから求め直す。
+// 動かしても小窓は同じ場所を映し続ける。主画面には範囲を示す枠を出さない。
 //
 // 操作は free / vr と揃える: 右ドラッグ＝平行移動、ホイール＝寄る/引く。
-// 左ドラッグは小窓そのものの移動（角のつまみでリサイズ）、主画面の枠の左ドラッグは切り抜く位置の移動。
+// 左ドラッグは小窓そのものの移動（角のつまみでリサイズ）。
 
 const MIN_W = 160
 const MIN_H = 90
 const MIN_REGION_H = 9 / 50        // 平面の高さ（9）の 1/50 まで寄れる
 const WHEEL_SPEED = 0.0015
-const CLICK_TOLERANCE = 4          // これ以上動いたら枠のドラッグとみなし、クリック（再生/一時停止）にしない
 
 // 平面がワールド座標で占める範囲の半分。free モードの回転（90°単位）で縦横が入れ替わる
 const planeExtent = (plane) => {
@@ -25,11 +24,6 @@ const planeExtent = (plane) => {
   const hh = 4.5 * plane.scale.y
   return Math.abs(Math.sin(plane.rotation.z)) > 0.5 ? { hw: hh, hh: hw } : { hw, hh }
 }
-
-// 主カメラで画面の 1px がワールド座標（平面 z=0 上）でいくつか。
-// normal / free ではカメラは回転せず常に -z を向いている。
-const worldPerPx = (camera, height) =>
-  (2 * camera.position.z * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) / height
 
 // 画面上の移動量を mount 内の座標へ直す。normal モードの回転は mount ごと CSS で回している。
 const toLocal = (dx, dy, deg) => {
@@ -49,12 +43,10 @@ const clampRegion = (region, plane) => {
 // 戻ったときに同じ位置・同じ範囲で出すため。
 //   rect   … 小窓の位置と大きさ（mount 内の CSS px、左上原点）
 //   region … 切り抜く範囲の中心（ワールド座標）と高さ。幅は小窓の縦横比で決まる
-export default function ZoomInset({ stateRef, mountRef, cameraRef, planeRef, planePassRef, requestRenderRef, cssRotation, activeColor }) {
+export default function ZoomInset({ stateRef, mountRef, planeRef, planePassRef, requestRenderRef, cssRotation, activeColor }) {
   const boxRef    = useRef(null)
   const handleRef = useRef(null)
-  const frameRef  = useRef(null)
   const rotRef    = useRef(cssRotation)
-  const frameDraggedRef = useRef(false)
   rotRef.current = cssRotation
 
   const render = () => requestRenderRef.current?.()
@@ -77,19 +69,19 @@ export default function ZoomInset({ stateRef, mountRef, cameraRef, planeRef, pla
     const size = new THREE.Vector2()
 
     // 毎フレーム呼ばれるので、位置が変わったときだけ DOM に書く
-    const placed = new Map()
+    let placed = ''
     const place = (el, x, y, w, h) => {
       if (!el) return
       const key = `${x},${y},${w},${h}`
-      if (placed.get(el) === key) return
-      placed.set(el, key)
+      if (placed === key) return
+      placed = key
       el.style.left   = `${x}px`
       el.style.top    = `${y}px`
       el.style.width  = `${w}px`
       el.style.height = `${h}px`
     }
 
-    planePassRef.current = (renderer, scene, camera) => {
+    planePassRef.current = (renderer, scene) => {
       renderer.getSize(size)
       const W = size.x, H = size.y
       if (!W || !H) return
@@ -116,16 +108,6 @@ export default function ZoomInset({ stateRef, mountRef, cameraRef, planeRef, pla
       renderer.setViewport(0, 0, W, H)
 
       place(boxRef.current, rect.x, rect.y, rect.w, rect.h)
-
-      // 切り抜いている範囲を主画面に枠で示す
-      const wpp = worldPerPx(camera, H)
-      const fw  = (region.h * rect.w) / rect.h
-      place(frameRef.current,
-        W / 2 + (region.cx - fw / 2 - camera.position.x) / wpp,
-        H / 2 - (region.cy + region.h / 2 - camera.position.y) / wpp,
-        fw / wpp,
-        region.h / wpp,
-      )
     }
     render()
 
@@ -136,16 +118,14 @@ export default function ZoomInset({ stateRef, mountRef, cameraRef, planeRef, pla
   }, [])
 
   // ポインタを捕まえてドラッグする。onMove には mount 内の座標系での移動量を渡す。
-  const drag = (e, onMove, onEnd) => {
+  const drag = (e, onMove) => {
     const el = e.currentTarget
     el.setPointerCapture(e.pointerId)
-    const startX = e.clientX, startY = e.clientY
-    let lastX = startX, lastY = startY, moved = 0
+    let lastX = e.clientX, lastY = e.clientY
     const move = (ev) => {
       const [dx, dy] = toLocal(ev.clientX - lastX, ev.clientY - lastY, rotRef.current)
       lastX = ev.clientX
       lastY = ev.clientY
-      moved = Math.max(moved, Math.hypot(ev.clientX - startX, ev.clientY - startY))
       onMove(dx, dy)
       render()
     }
@@ -153,7 +133,6 @@ export default function ZoomInset({ stateRef, mountRef, cameraRef, planeRef, pla
       el.removeEventListener('pointermove', move)
       el.removeEventListener('pointerup', end)
       el.removeEventListener('pointercancel', end)
-      onEnd?.(moved)
     }
     el.addEventListener('pointermove', move)
     el.addEventListener('pointerup', end)
@@ -176,25 +155,16 @@ export default function ZoomInset({ stateRef, mountRef, cameraRef, planeRef, pla
 
   // wheel は React だと passive で登録され preventDefault できないので自前で付ける
   useEffect(() => {
-    const box = boxRef.current, frame = frameRef.current
-    const onBoxWheel = (e) => {
+    const box = boxRef.current
+    const onWheel = (e) => {
       e.preventDefault()
       e.stopPropagation()
       const r = box.getBoundingClientRect()   // 回転しても中心は変わらない
       const [ox, oy] = toLocal(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2), rotRef.current)
       zoomRegion(e.deltaY, ox, oy)
     }
-    const onFrameWheel = (e) => {
-      e.preventDefault()
-      e.stopPropagation()
-      zoomRegion(e.deltaY, 0, 0)
-    }
-    box.addEventListener('wheel', onBoxWheel, { passive: false })
-    frame.addEventListener('wheel', onFrameWheel, { passive: false })
-    return () => {
-      box.removeEventListener('wheel', onBoxWheel)
-      frame.removeEventListener('wheel', onFrameWheel)
-    }
+    box.addEventListener('wheel', onWheel, { passive: false })
+    return () => box.removeEventListener('wheel', onWheel)
   }, [])
 
   const onBoxPointerDown = (e) => {
@@ -222,71 +192,37 @@ export default function ZoomInset({ stateRef, mountRef, cameraRef, planeRef, pla
     }
   }
 
-  const onFramePointerDown = (e) => {
-    if (e.button !== 0 || isResizeEdge(e.clientX, e.clientY)) return
-    e.stopPropagation()
-    frameDraggedRef.current = false
-    const { region } = stateRef.current
-    drag(e, (dx, dy) => {
-      const k = worldPerPx(cameraRef.current, mountRef.current.clientHeight)
-      region.cx += dx * k
-      region.cy -= dy * k
-    }, (moved) => { frameDraggedRef.current = moved > CLICK_TOLERANCE })
-  }
-
-  // 主画面の長押しシーク・ダブルクリックシークに入らないよう mousedown は止める。
-  // 枠の上でのクリック（動かしていない）は再生/一時停止として主画面へ流す。
+  // 主画面の再生/一時停止・長押しシーク・ダブルクリックシークに入らないよう止める
   const stop = (e) => e.stopPropagation()
-  const onFrameClick = (e) => {
-    if (frameDraggedRef.current) {
-      frameDraggedRef.current = false
-      e.stopPropagation()
-    }
-  }
 
   return (
-    <>
+    <div
+      ref={boxRef}
+      onPointerDown={onBoxPointerDown}
+      onMouseDown={stop}
+      onClick={stop}
+      onDoubleClick={stop}
+      style={{
+        position: 'absolute',
+        zIndex: 1,
+        boxSizing: 'border-box',
+        border: `1px solid ${activeColor}`,
+        boxShadow: '0 2px 12px rgba(0,0,0,0.6)',
+        cursor: 'move',
+      }}
+    >
       <div
-        ref={frameRef}
-        onPointerDown={onFramePointerDown}
-        onMouseDown={stop}
-        onClick={onFrameClick}
+        ref={handleRef}
         style={{
           position: 'absolute',
-          zIndex: 1,
+          right: 0, bottom: 0,
+          width: 14, height: 14,
           boxSizing: 'border-box',
-          border: `1px dashed ${activeColor}`,
-          cursor: 'move',
+          borderRight:  '3px solid rgba(255,255,255,0.8)',
+          borderBottom: '3px solid rgba(255,255,255,0.8)',
+          cursor: 'nwse-resize',
         }}
       />
-      <div
-        ref={boxRef}
-        onPointerDown={onBoxPointerDown}
-        onMouseDown={stop}
-        onClick={stop}
-        onDoubleClick={stop}
-        style={{
-          position: 'absolute',
-          zIndex: 2,
-          boxSizing: 'border-box',
-          border: `1px solid ${activeColor}`,
-          boxShadow: '0 2px 12px rgba(0,0,0,0.6)',
-          cursor: 'move',
-        }}
-      >
-        <div
-          ref={handleRef}
-          style={{
-            position: 'absolute',
-            right: 0, bottom: 0,
-            width: 14, height: 14,
-            boxSizing: 'border-box',
-            borderRight:  '3px solid rgba(255,255,255,0.8)',
-            borderBottom: '3px solid rgba(255,255,255,0.8)',
-            cursor: 'nwse-resize',
-          }}
-        />
-      </div>
-    </>
+    </div>
   )
 }

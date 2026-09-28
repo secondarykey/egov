@@ -1198,7 +1198,6 @@ export default function Player() {
           <ZoomInset
             stateRef={zoomInsetStateRef}
             mountRef={mountRef}
-            cameraRef={cameraRef}
             planeRef={planeRef}
             planePassRef={planePassRef}
             requestRenderRef={requestRenderRef}
