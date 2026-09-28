@@ -74,9 +74,21 @@ const toLocal = (dx, dy, deg) => {
   return [c * dx + s * dy, -s * dx + c * dy]
 }
 
-const clampRegion = (region, plane) => {
+// 主カメラで画面の 1px がワールド座標（平面 z=0 上）でいくつか。
+// normal / free ではカメラは回転せず常に -z を向いている。
+const worldPerPx = (camera, height) =>
+  (2 * camera.position.z * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) / height
+
+// 切り抜く範囲の高さの上限。小窓が主画面の等倍より小さく映らないようにする
+// （引いても主画面と同じ大きさで止まる）。素材全体より広くもしない。
+const maxRegionH = (plane, rect, mainWpp) => {
   const { hw, hh } = planeExtent(plane)
-  region.h  = clamp(region.h, MIN_REGION_H, 2 * Math.max(hw, hh))
+  return Math.min(2 * Math.max(hw, hh), rect.h * mainWpp)
+}
+
+const clampRegion = (region, plane, maxH) => {
+  const { hw, hh } = planeExtent(plane)
+  region.h  = clamp(region.h, MIN_REGION_H, maxH)
   region.cx = clamp(region.cx, -hw, hw)
   region.cy = clamp(region.cy, -hh, hh)
 }
@@ -91,6 +103,7 @@ export default function ZoomInset({ stateRef, mountRef, planeRef, planePassRef, 
   const boxRef    = useRef(null)
   const rotRef    = useRef(cssRotation)
   const featherRef = useRef(0)
+  const mainWppRef = useRef(Infinity)   // 主画面の 1px あたりのワールド長（等倍の基準）
   rotRef.current = cssRotation
   featherRef.current = border ? 0 : feather
 
@@ -152,7 +165,7 @@ export default function ZoomInset({ stateRef, mountRef, planeRef, planePassRef, 
       el.style.height = `${h}px`
     }
 
-    planePassRef.current = (renderer, scene) => {
+    planePassRef.current = (renderer, scene, camera) => {
       renderer.getSize(size)
       const W = size.x, H = size.y
       if (!W || !H) return
@@ -164,7 +177,8 @@ export default function ZoomInset({ stateRef, mountRef, planeRef, planePassRef, 
       // 画面端からははみ出してよい（mount の overflow: hidden で切れる）。ただし一部は画面内に残す
       rect.x = clamp(rect.x, Math.min(KEEP_VISIBLE, W) - rect.w, W - Math.min(KEEP_VISIBLE, W))
       rect.y = clamp(rect.y, Math.min(KEEP_VISIBLE, H) - rect.h, H - Math.min(KEEP_VISIBLE, H))
-      clampRegion(region, plane)
+      mainWppRef.current = worldPerPx(camera, H)
+      clampRegion(region, plane, maxRegionH(plane, rect, mainWppRef.current))
 
       insetCamera.aspect = rect.w / rect.h
       insetCamera.updateProjectionMatrix()
@@ -234,8 +248,8 @@ export default function ZoomInset({ stateRef, mountRef, planeRef, planePassRef, 
     const before = region.h / rect.h
     const px = region.cx + ox * before
     const py = region.cy - oy * before
-    const { hw, hh } = planeExtent(planeRef.current)
-    region.h = clamp(region.h * Math.exp(deltaY * WHEEL_SPEED), MIN_REGION_H, 2 * Math.max(hw, hh))
+    const maxH = maxRegionH(planeRef.current, rect, mainWppRef.current)
+    region.h = clamp(region.h * Math.exp(deltaY * WHEEL_SPEED), MIN_REGION_H, maxH)
     const after = region.h / rect.h
     region.cx = px - ox * after
     region.cy = py + oy * after
