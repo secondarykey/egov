@@ -11,13 +11,23 @@ import { clamp, isResizeEdge } from './utils'
 // 動かしても小窓は同じ場所を映し続ける。主画面には範囲を示す枠を出さない。
 //
 // 操作は free / vr と揃える: 右ドラッグ＝平行移動、ホイール＝寄る/引く。
-// 左ドラッグは小窓そのものの移動（角のつまみでリサイズ）。
+// 左ドラッグは小窓そのものの移動（四隅のつまみでリサイズ）。
 
 const MIN_W = 160
 const MIN_H = 90
 const MIN_REGION_H = 9 / 50        // 平面の高さ（9）の 1/50 まで寄れる
 const WHEEL_SPEED = 0.0015
 const FEATHER = 0.12               // 縁を透かす幅（小窓の短辺に対する割合）
+
+// リサイズのつまみ。x / y は動かす辺（-1＝左・上、1＝右・下）
+const CORNERS = {
+  nw: { x: -1, y: -1, cursor: 'nwse-resize' },
+  ne: { x:  1, y: -1, cursor: 'nesw-resize' },
+  sw: { x: -1, y:  1, cursor: 'nesw-resize' },
+  se: { x:  1, y:  1, cursor: 'nwse-resize' },
+}
+const HANDLE_SIZE = 14
+const HANDLE_LINE = '3px solid rgba(255,255,255,0.8)'
 
 const COMPOSITE_VERT = /* glsl */ `
   varying vec2 vUv;
@@ -73,7 +83,6 @@ const clampRegion = (region, plane) => {
 //   region … 切り抜く範囲の中心（ワールド座標）と高さ。幅は小窓の縦横比で決まる
 export default function ZoomInset({ stateRef, mountRef, planeRef, planePassRef, requestRenderRef, cssRotation }) {
   const boxRef    = useRef(null)
-  const handleRef = useRef(null)
   const rotRef    = useRef(cssRotation)
   rotRef.current = cssRotation
 
@@ -240,11 +249,25 @@ export default function ZoomInset({ stateRef, mountRef, planeRef, planePassRef, 
     if (isResizeEdge(e.clientX, e.clientY)) return
     e.stopPropagation()
     const { rect, region } = stateRef.current
-    if (e.button === 0 && e.target === handleRef.current) {
+    const corner = CORNERS[e.target.dataset.corner]
+    if (e.button === 0 && corner) {
       const mount = mountRef.current
+      // 反対側の辺を固定したまま、つまんだ角の辺だけを動かす
       drag(e, (dx, dy) => {
-        rect.w = clamp(rect.w + dx, MIN_W, mount.clientWidth  - rect.x)
-        rect.h = clamp(rect.h + dy, MIN_H, mount.clientHeight - rect.y)
+        if (corner.x > 0) {
+          rect.w = clamp(rect.w + dx, MIN_W, mount.clientWidth - rect.x)
+        } else {
+          const right = rect.x + rect.w
+          rect.x = clamp(rect.x + dx, 0, right - MIN_W)
+          rect.w = right - rect.x
+        }
+        if (corner.y > 0) {
+          rect.h = clamp(rect.h + dy, MIN_H, mount.clientHeight - rect.y)
+        } else {
+          const bottom = rect.y + rect.h
+          rect.y = clamp(rect.y + dy, 0, bottom - MIN_H)
+          rect.h = bottom - rect.y
+        }
       })
     } else if (e.button === 0) {
       drag(e, (dx, dy) => {
@@ -277,18 +300,22 @@ export default function ZoomInset({ stateRef, mountRef, planeRef, planePassRef, 
         cursor: 'move',
       }}
     >
-      <div
-        ref={handleRef}
-        style={{
-          position: 'absolute',
-          right: 0, bottom: 0,
-          width: 14, height: 14,
-          boxSizing: 'border-box',
-          borderRight:  '3px solid rgba(255,255,255,0.8)',
-          borderBottom: '3px solid rgba(255,255,255,0.8)',
-          cursor: 'nwse-resize',
-        }}
-      />
+      {Object.entries(CORNERS).map(([key, c]) => (
+        <div
+          key={key}
+          data-corner={key}
+          style={{
+            position: 'absolute',
+            [c.x > 0 ? 'right' : 'left']: 0,
+            [c.y > 0 ? 'bottom' : 'top']: 0,
+            width: HANDLE_SIZE, height: HANDLE_SIZE,
+            boxSizing: 'border-box',
+            [c.x > 0 ? 'borderRight' : 'borderLeft']: HANDLE_LINE,
+            [c.y > 0 ? 'borderBottom' : 'borderTop']: HANDLE_LINE,
+            cursor: c.cursor,
+          }}
+        />
+      ))}
     </div>
   )
 }
