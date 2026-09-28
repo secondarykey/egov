@@ -1202,7 +1202,6 @@ export default function Player() {
             planePassRef={planePassRef}
             requestRenderRef={requestRenderRef}
             cssRotation={mode === 'normal' ? rotation : 0}
-            activeColor={activeColor}
           />
         )}
       </div>

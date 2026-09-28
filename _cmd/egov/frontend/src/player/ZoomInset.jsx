@@ -43,7 +43,7 @@ const clampRegion = (region, plane) => {
 // 戻ったときに同じ位置・同じ範囲で出すため。
 //   rect   … 小窓の位置と大きさ（mount 内の CSS px、左上原点）
 //   region … 切り抜く範囲の中心（ワールド座標）と高さ。幅は小窓の縦横比で決まる
-export default function ZoomInset({ stateRef, mountRef, planeRef, planePassRef, requestRenderRef, cssRotation, activeColor }) {
+export default function ZoomInset({ stateRef, mountRef, planeRef, planePassRef, requestRenderRef, cssRotation }) {
   const boxRef    = useRef(null)
   const handleRef = useRef(null)
   const rotRef    = useRef(cssRotation)
@@ -206,7 +206,7 @@ export default function ZoomInset({ stateRef, mountRef, planeRef, planePassRef, 
         position: 'absolute',
         zIndex: 1,
         boxSizing: 'border-box',
-        border: `1px solid ${activeColor}`,
+        border: '1px solid rgba(255,255,255,0.35)',
         boxShadow: '0 2px 12px rgba(0,0,0,0.6)',
         cursor: 'move',
       }}
