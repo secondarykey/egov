@@ -107,7 +107,9 @@
     "playback": {
       "language": "Language",
       "defaultMode": "Default Mode",
-      "activeColor": "Active Color"
+      "activeColor": "Active Color",
+      "zoomInsetBorder": "Zoom Inset Border",
+      "zoomInsetFeather": "Zoom Inset Edge Fade"
     },
     "controls": {
       "clickTimeout": "Click Timeout",

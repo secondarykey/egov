@@ -6,7 +6,7 @@ import {
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import Draggable from 'react-draggable'
-import { GetDefaultSettings, GetSettings, GetVersion, UpdateActiveColor, UpdateAppSettings, UpdateControlSettings, UpdateDefaultMode, UpdateVRSettings } from '../bindings/egov/api'
+import { GetDefaultSettings, GetSettings, GetVersion, UpdateActiveColor, UpdateAppSettings, UpdateControlSettings, UpdateDefaultMode, UpdateVRSettings, UpdateZoomInsetSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
 
 function DraggablePaper(props) {
@@ -37,11 +37,11 @@ function Row({ label, children }) {
   )
 }
 
-function SliderRow({ label, value, onChange, min, max, step, format }) {
+function SliderRow({ label, value, onChange, min, max, step, format, disabled }) {
   return (
     <Row label={label}>
       <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-        <Slider min={min} max={max} step={step} value={value} onChange={(_, v) => onChange(v)} size="small" />
+        <Slider min={min} max={max} step={step} value={value} onChange={(_, v) => onChange(v)} size="small" disabled={disabled} />
         <Typography variant="body2" sx={{ minWidth: 64, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
           {format ? format(value) : value}
         </Typography>
@@ -50,7 +50,7 @@ function SliderRow({ label, value, onChange, min, max, step, format }) {
   )
 }
 
-export default function SettingsDialog({ open, onClose, availableLangs, onLanguageChange, activeColor: activeColorProp, onActiveColorChange, acceptInactiveClick: acceptInactiveProp, onAcceptInactiveClickChange, miniProgressBar: miniProgressProp, onMiniProgressBarChange, thumbEnabled: thumbEnabledProp, onThumbEnabledChange, onControlsChange }) {
+export default function SettingsDialog({ open, onClose, availableLangs, onLanguageChange, activeColor: activeColorProp, onActiveColorChange, acceptInactiveClick: acceptInactiveProp, onAcceptInactiveClickChange, miniProgressBar: miniProgressProp, onMiniProgressBarChange, onZoomInsetChange, thumbEnabled: thumbEnabledProp, onThumbEnabledChange, onControlsChange }) {
   const { t } = useTranslation()
   const [tab, setTab] = useState(0)
   const [version, setVersion] = useState('')
@@ -78,6 +78,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
   })
   const [origLanguage, setOrigLanguage] = useState('en')
   const [appSettings, setAppSettings] = useState({ singleInstance: false })
+  const [zoomInset, setZoomInset] = useState({ border: false, feather: 0.12 })
 
   useEffect(() => {
     if (!open) return
@@ -88,6 +89,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
       setVr(s.vr)
       setControls(s.controls)
       setAppSettings(s.app)
+      setZoomInset(s.zoomInset)
     })
   }, [open])
 
@@ -98,7 +100,9 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
       UpdateVRSettings(vr),
       UpdateControlSettings(controls),
       UpdateAppSettings(appSettings),
+      UpdateZoomInsetSettings(zoomInset),
     ])
+    onZoomInsetChange?.(zoomInset)
     onControlsChange?.(controls)
     if (playback.language !== origLanguage) {
       onLanguageChange?.(playback.language)
@@ -191,8 +195,30 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
               </Typography>
             </Stack>
           </Row>
+          <Row label={t('settings.playback.zoomInsetBorder')}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={zoomInset.border}
+                  onChange={e => setZoomInset(z => ({ ...z, border: e.target.checked }))}
+                />
+              }
+              label=""
+            />
+          </Row>
+          {/* 枠線を出すときは縁を透かさない。上限は Go 側 zoomFeatherMax と一致させる */}
+          <SliderRow label={t('settings.playback.zoomInsetFeather')}
+            value={zoomInset.feather} onChange={v => setZoomInset(z => ({ ...z, feather: v }))}
+            min={0} max={0.4} step={0.01}
+            format={v => `${Math.round(v * 100)}%`}
+            disabled={zoomInset.border}
+          />
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => defaults && setPlayback(p => ({ ...p, defaultMode: defaults.playback.defaultMode, activeColor: defaults.playback.activeColor }))}>
+            <Button size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }} onClick={() => {
+              if (!defaults) return
+              setPlayback(p => ({ ...p, defaultMode: defaults.playback.defaultMode, activeColor: defaults.playback.activeColor }))
+              setZoomInset(defaults.zoomInset)
+            }}>
               {t('settings.resetDefaults')}
             </Button>
           </Box>

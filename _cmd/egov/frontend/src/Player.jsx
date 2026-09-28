@@ -132,6 +132,7 @@ export default function Player() {
   const [isImage,        setIsImage]        = useState(false)   // 静止画を表示中か（VR・再生系UIを無効にする）
   const [isAnim,         setIsAnim]         = useState(false)   // アニメーション画像を再生中か（VR・サムネイル系を無効にする）
   const [zoomInset,      setZoomInset]      = useState(false)   // 小窓ズーム（normal / free のみ）
+  const [zoomLook,       setZoomLook]       = useState({ border: false, feather: 0.12 })   // 小窓ズームの見た目（settings.zoomInset）
 
   // Three.js シーン（生成・破棄・描画ループはフック側が担う）
   const {
@@ -591,6 +592,7 @@ export default function Player() {
       setVrView(toOverlay(saved))
       setMode(p.defaultMode)
       setMiniProgress(s.app.miniProgressBar)
+      setZoomLook(s.zoomInset)
       setServerUrl(url)
       if (videoRef.current) {
         videoRef.current.volume = p.volume
@@ -1202,6 +1204,8 @@ export default function Player() {
             planePassRef={planePassRef}
             requestRenderRef={requestRenderRef}
             cssRotation={mode === 'normal' ? rotation : 0}
+            border={zoomLook.border}
+            feather={zoomLook.feather}
           />
         )}
       </div>
@@ -1430,6 +1434,7 @@ export default function Player() {
         onAcceptInactiveClickChange={(next) => { acceptInactiveRef.current = next }}
         miniProgressBar={miniProgress}
         onMiniProgressBarChange={(next) => setMiniProgress(next)}
+        onZoomInsetChange={setZoomLook}
         onControlsChange={applyControlSettings}
         thumbEnabled={thumbEnabled}
         onThumbEnabledChange={(next) => {

@@ -10,6 +10,8 @@ import { clamp, isResizeEdge } from './utils'
 // 切り抜く範囲はワールド座標（平面上の位置）で持つので、free モードで主画面を
 // 動かしても小窓は同じ場所を映し続ける。主画面には範囲を示す枠を出さない。
 //
+// 見た目は設定（settings.zoomInset）で選ぶ: 枠線を出すか、出さずに縁を透かすか（透かす幅も設定）。
+//
 // 操作は free / vr と揃える: 右ドラッグ＝平行移動、ホイール＝寄る/引く。
 // 左ドラッグは小窓そのものの移動（四隅のつまみでリサイズ）。
 
@@ -18,7 +20,6 @@ const MIN_H = 90
 const KEEP_VISIBLE = 48            // 画面端からはみ出させても、見失わないよう画面内に残す幅
 const MIN_REGION_H = 9 / 50        // 平面の高さ（9）の 1/50 まで寄れる
 const WHEEL_SPEED = 0.0015
-const FEATHER = 0.12               // 縁を透かす幅（小窓の短辺に対する割合）
 
 // リサイズのつまみ（見た目は出さず、カーソルの形だけで示す）。x / y は動かす辺（-1＝左・上、1＝右・下）
 const CORNERS = {
@@ -48,7 +49,10 @@ const COMPOSITE_FRAG = /* glsl */ `
     vec4 texel = texture2D(tMap, vUv);
     vec2 px = vUv * uSize;
     vec2 edge = min(px, uSize - px);
-    float mask = smoothstep(0.0, uFeather, edge.x) * smoothstep(0.0, uFeather, edge.y);
+    // smoothstep は edge0 == edge1 で未定義なので、透かさないときは分ける
+    float mask = uFeather > 0.0
+      ? smoothstep(0.0, uFeather, edge.x) * smoothstep(0.0, uFeather, edge.y)
+      : 1.0;
     float a = texel.a * mask;
     gl_FragColor = vec4(texel.rgb / max(texel.a, 1e-4), 1.0);
     #include <colorspace_fragment>
@@ -81,12 +85,18 @@ const clampRegion = (region, plane) => {
 // 戻ったときに同じ位置・同じ範囲で出すため。
 //   rect   … 小窓の位置と大きさ（mount 内の CSS px、左上原点）
 //   region … 切り抜く範囲の中心（ワールド座標）と高さ。幅は小窓の縦横比で決まる
-export default function ZoomInset({ stateRef, mountRef, planeRef, planePassRef, requestRenderRef, cssRotation }) {
+//   border  … 枠線を出す（縁は透かさない）
+//   feather … 枠線なしのとき縁を透かす幅（小窓の短辺に対する割合）
+export default function ZoomInset({ stateRef, mountRef, planeRef, planePassRef, requestRenderRef, cssRotation, border, feather }) {
   const boxRef    = useRef(null)
   const rotRef    = useRef(cssRotation)
+  const featherRef = useRef(0)
   rotRef.current = cssRotation
+  featherRef.current = border ? 0 : feather
 
   const render = () => requestRenderRef.current?.()
+
+  useEffect(() => { render() }, [border, feather])
 
   useEffect(() => {
     const mount  = mountRef.current
@@ -175,7 +185,7 @@ export default function ZoomInset({ stateRef, mountRef, planeRef, planePassRef, 
 
       // 2) 縁ほど透明にして主画面へ重ねる。viewport は左下原点の CSS px（three.js が pixelRatio を掛ける）
       composite.uniforms.uSize.value.set(rect.w, rect.h)
-      composite.uniforms.uFeather.value = Math.min(rect.w, rect.h) * FEATHER
+      composite.uniforms.uFeather.value = Math.min(rect.w, rect.h) * featherRef.current
       const autoClear = renderer.autoClear
       renderer.autoClear = false
       renderer.setViewport(rect.x, H - rect.y - rect.h, rect.w, rect.h)
@@ -299,6 +309,11 @@ export default function ZoomInset({ stateRef, mountRef, planeRef, planePassRef, 
         position: 'absolute',
         zIndex: 1,
         cursor: 'move',
+        ...(border && {
+          boxSizing: 'border-box',
+          border: '1px solid rgba(255,255,255,0.6)',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.6)',
+        }),
       }}
     >
       {Object.entries(CORNERS).map(([key, c]) => (
