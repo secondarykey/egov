@@ -15,6 +15,7 @@ import { clamp, isResizeEdge } from './utils'
 
 const MIN_W = 160
 const MIN_H = 90
+const KEEP_VISIBLE = 48            // 画面端からはみ出させても、見失わないよう画面内に残す幅
 const MIN_REGION_H = 9 / 50        // 平面の高さ（9）の 1/50 まで寄れる
 const WHEEL_SPEED = 0.0015
 const FEATHER = 0.12               // 縁を透かす幅（小窓の短辺に対する割合）
@@ -147,11 +148,12 @@ export default function ZoomInset({ stateRef, mountRef, planeRef, planePassRef, 
       if (!W || !H) return
       const { rect, region } = stateRef.current
 
-      // ウィンドウが縮んだら小窓を内側へ収める
+      // 小窓はウィンドウより大きくしない
       rect.w = clamp(rect.w, Math.min(MIN_W, W), W)
       rect.h = clamp(rect.h, Math.min(MIN_H, H), H)
-      rect.x = clamp(rect.x, 0, W - rect.w)
-      rect.y = clamp(rect.y, 0, H - rect.h)
+      // 画面端からははみ出してよい（mount の overflow: hidden で切れる）。ただし一部は画面内に残す
+      rect.x = clamp(rect.x, Math.min(KEEP_VISIBLE, W) - rect.w, W - Math.min(KEEP_VISIBLE, W))
+      rect.y = clamp(rect.y, Math.min(KEEP_VISIBLE, H) - rect.h, H - Math.min(KEEP_VISIBLE, H))
       clampRegion(region, plane)
 
       insetCamera.aspect = rect.w / rect.h
@@ -254,17 +256,17 @@ export default function ZoomInset({ stateRef, mountRef, planeRef, planePassRef, 
       // 反対側の辺を固定したまま、つまんだ角の辺だけを動かす
       drag(e, (dx, dy) => {
         if (corner.x > 0) {
-          rect.w = clamp(rect.w + dx, MIN_W, mount.clientWidth - rect.x)
+          rect.w = clamp(rect.w + dx, MIN_W, mount.clientWidth)
         } else {
           const right = rect.x + rect.w
-          rect.x = clamp(rect.x + dx, 0, right - MIN_W)
+          rect.x = clamp(rect.x + dx, right - mount.clientWidth, right - MIN_W)
           rect.w = right - rect.x
         }
         if (corner.y > 0) {
-          rect.h = clamp(rect.h + dy, MIN_H, mount.clientHeight - rect.y)
+          rect.h = clamp(rect.h + dy, MIN_H, mount.clientHeight)
         } else {
           const bottom = rect.y + rect.h
-          rect.y = clamp(rect.y + dy, 0, bottom - MIN_H)
+          rect.y = clamp(rect.y + dy, bottom - mount.clientHeight, bottom - MIN_H)
           rect.h = bottom - rect.y
         }
       })
