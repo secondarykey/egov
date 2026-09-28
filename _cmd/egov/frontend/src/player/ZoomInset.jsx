@@ -19,15 +19,14 @@ const MIN_REGION_H = 9 / 50        // 平面の高さ（9）の 1/50 まで寄�
 const WHEEL_SPEED = 0.0015
 const FEATHER = 0.12               // 縁を透かす幅（小窓の短辺に対する割合）
 
-// リサイズのつまみ。x / y は動かす辺（-1＝左・上、1＝右・下）
+// リサイズのつまみ（見た目は出さず、カーソルの形だけで示す）。x / y は動かす辺（-1＝左・上、1＝右・下）
 const CORNERS = {
   nw: { x: -1, y: -1, cursor: 'nwse-resize' },
   ne: { x:  1, y: -1, cursor: 'nesw-resize' },
   sw: { x: -1, y:  1, cursor: 'nesw-resize' },
   se: { x:  1, y:  1, cursor: 'nwse-resize' },
 }
-const HANDLE_SIZE = 14
-const HANDLE_LINE = '3px solid rgba(255,255,255,0.8)'
+const HANDLE_SIZE = 16
 
 const COMPOSITE_VERT = /* glsl */ `
   varying vec2 vUv;
@@ -309,9 +308,6 @@ export default function ZoomInset({ stateRef, mountRef, planeRef, planePassRef, 
             [c.x > 0 ? 'right' : 'left']: 0,
             [c.y > 0 ? 'bottom' : 'top']: 0,
             width: HANDLE_SIZE, height: HANDLE_SIZE,
-            boxSizing: 'border-box',
-            [c.x > 0 ? 'borderRight' : 'borderLeft']: HANDLE_LINE,
-            [c.y > 0 ? 'borderBottom' : 'borderTop']: HANDLE_LINE,
             cursor: c.cursor,
           }}
         />
