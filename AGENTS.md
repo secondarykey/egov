@@ -45,6 +45,8 @@ wails3 generate bindings -f '' -clean=true
   `Settings.normalize()` が `normal` へ移す）
 - マウス割り当ては free と vr で揃えてある: **右ドラッグ＝平行移動、ホイール＝寄る/引く、
   中ドラッグ＝VRの首振り**。左ボタンは全モードで再生・シークが使う
+- 小窓ズーム（normal / free）も同じ割り当て: 小窓の上で右ドラッグ＝範囲の平行移動、ホイール＝寄る/引く。
+  左ドラッグは小窓の移動（角でリサイズ）、主画面の枠の左ドラッグは切り抜く位置の移動
 
 ## 詳細ドキュメント（`_docs/`）
 
@@ -52,7 +54,7 @@ wails3 generate bindings -f '' -clean=true
 
 | ファイル | 内容 |
 |---|---|
-| [`_docs/rendering.md`](_docs/rendering.md) | Three.js で動画を描く仕組み（レンダーオンデマンド、rVFC が動かない環境、テクスチャ） |
+| [`_docs/rendering.md`](_docs/rendering.md) | Three.js で動画を描く仕組み（小窓ズーム、レンダーオンデマンド、rVFC が動かない環境、テクスチャ） |
 | [`_docs/vr-projection.md`](_docs/vr-projection.md) | VR投影シェーダ、素材形式の推定、色空間、視点の保存とリセット |
 | [`_docs/images-and-animations.md`](_docs/images-and-animations.md) | 静止画、アニメーション画像（WebP/GIF/APNG）の展開と再生、アニメーション AVIF |
 | [`_docs/range-extract.md`](_docs/range-extract.md) | MP4 の無劣化切り出し（`internal/mp4cut`）と UI |
@@ -69,6 +71,8 @@ wails3 generate bindings -f '' -clean=true
 - VR 視点はディスクへ書かない。保存は「既定として保存」（`onCommit`）だけ。
   **`onChangeCommitted` などから `onCommit` を呼ばない**（Reset の戻り先が壊れる）
 - VR 視点の保存とリセットは `currentVrView()` の1オブジェクトで対称に扱う。個別の ref に分けない
+- 小窓ズームは同じ `scene` / `VideoTexture` を2つ目のカメラで scissor 描画する（`planePassRef`）。
+  `<video>`・`VideoTexture`・`WebGLRenderer` を2つ目に作らない（デコードや転送が倍になる）
 - 表示画角の上限 180° を「歪むから」で手前に切らない（`projScaleFor()` が発散を潰している）
 - 素材形式の推定結果はセッション中だけの上書き。ディスクへ書かない
 

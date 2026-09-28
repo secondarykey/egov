@@ -5,6 +5,7 @@ import CameraAltIcon from '@mui/icons-material/CameraAlt'
 import ContentCutIcon from '@mui/icons-material/ContentCut'
 import GridViewIcon from '@mui/icons-material/GridView'
 import FitScreenIcon from '@mui/icons-material/FitScreen'
+import ZoomInIcon from '@mui/icons-material/ZoomIn'
 import { Dialogs, Events, Window } from '@wailsio/runtime'
 import { CanExtract, CloseAnimation, DetectVRFormat, MediaFilePattern, OpenAnimation, OpenLocalFile, ExtractRange, SuggestExtractTarget, GetInitialFile, GetServerURL, GetSettings, UpdateAlwaysOnTop, UpdatePlaybackSettings, UpdateVRSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
@@ -18,6 +19,7 @@ import MiniProgressBar from './player/MiniProgressBar'
 import ThumbnailGrid from './player/ThumbnailGrid'
 import VrViewpointOverlay from './player/VrViewpointOverlay'
 import DiagnosticsOverlay from './player/DiagnosticsOverlay'
+import ZoomInset from './player/ZoomInset'
 import { ClickFeedback, DropHint, EmptyState, SeekFeedback, SeekZoneOverlay, VideoErrorOverlay } from './player/Overlays'
 import { VR_FOV_MAX, VR_FOV_MIN, VR_SHIFT_LIMIT, VR_START, barStyle, clamp, deg2rad, fmt, isImagePath, isResizeEdge, mayBeAnimatedPath, rad2deg } from './player/utils'
 import { dispProjIndex, fitSrcFov, projScaleFor, setVrRotation, srcProjIndex } from './player/vrShader'
@@ -85,6 +87,7 @@ export default function Player() {
   const mediaKindRef        = useRef('video')   // 'video' | 'image' | 'anim'（アニメーション画像）
   const animRef             = useRef(null)   // 再生中の AnimPlayer
   const thumbHoverRef       = useRef(true)   // シークバーのホバーサムネイルを出すか（設定 ON かつ本物の動画）
+  const zoomInsetStateRef   = useRef(null)   // 小窓ズームの位置と切り抜く範囲（VR を挟んでも保つ）
   const [miniProgress, setMiniProgress] = useState(false)
 
   const [paused,      setPaused]      = useState(true)
@@ -128,6 +131,7 @@ export default function Player() {
   const [notice,         setNotice]         = useState(null)    // Snackbar 通知 { severity, text, busy? }
   const [isImage,        setIsImage]        = useState(false)   // 静止画を表示中か（VR・再生系UIを無効にする）
   const [isAnim,         setIsAnim]         = useState(false)   // アニメーション画像を再生中か（VR・サムネイル系を無効にする）
+  const [zoomInset,      setZoomInset]      = useState(false)   // 小窓ズーム（normal / free のみ）
 
   // Three.js シーン（生成・破棄・描画ループはフック側が担う）
   const {
@@ -137,7 +141,7 @@ export default function Player() {
     requestRenderRef, captureRef, detectedFpsRef,
     frameCountRef, renderCountRef, renderPathRef,
     showImageRef, showVideoRef, showCanvasRef, refreshCanvasRef, mediaSizeRef,
-    videoElRef,
+    videoElRef, planePassRef,
   } = useThreeScene({
     modeRef,
     onDuration: setDuration,
@@ -1176,16 +1180,33 @@ export default function Player() {
                 transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
               }
             : {
+                position: 'relative',
                 width: '100%', height: '100%',
                 transform: mode === 'normal' && rotation ? `rotate(${rotation}deg)` : undefined,
               }),
+          overflow: 'hidden',
+          zIndex: 0,   // 小窓の zIndex を mount の中に閉じ込め、他のオーバーレイより上に出さない
         }}
         onClick={handleCanvasClick}
         onMouseDown={handleCanvasMouseDown}
         onMouseUp={handleCanvasMouseUp}
         onMouseLeave={handleCanvasMouseUp}
         onContextMenu={e => e.preventDefault()}
-      />
+      >
+        {/* normal モードの回転は mount ごと CSS で回すので、小窓も mount の中に置いて一緒に回す */}
+        {zoomInset && mode !== 'vr' && fileName && (
+          <ZoomInset
+            stateRef={zoomInsetStateRef}
+            mountRef={mountRef}
+            cameraRef={cameraRef}
+            planeRef={planeRef}
+            planePassRef={planePassRef}
+            requestRenderRef={requestRenderRef}
+            cssRotation={mode === 'normal' ? rotation : 0}
+            activeColor={activeColor}
+          />
+        )}
+      </div>
 
       {seekFeedback && (
         <SeekFeedback feedback={seekFeedback} onDone={() => setSeekFeedback(null)} />
@@ -1349,6 +1370,13 @@ export default function Player() {
           </IconButton>
         </Tooltip>
         </>)}
+        {mode !== 'vr' && fileName && (
+          <Tooltip title={t('controls.zoomInset')} placement="left">
+            <IconButton onClick={() => setZoomInset(z => !z)} sx={{ color: zoomInset ? activeColor : 'white', width: 56, height: 56 }}>
+              <ZoomInIcon sx={{ fontSize: 40 }} />
+            </IconButton>
+          </Tooltip>
+        )}
         {mode === 'normal' && !isImage && !isAnim && (
           <Tooltip title={t('controls.thumbnailGrid')} placement="left">
             <IconButton onClick={handleThumbGridToggle} sx={{ color: 'white', width: 56, height: 56 }}>
