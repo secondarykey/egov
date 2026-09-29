@@ -27,6 +27,7 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
   const showVideoRef   = useRef(null)     // 平面を動画テクスチャへ戻す
   const showCanvasRef  = useRef(null)     // 平面に canvas を貼る（アニメーション画像。描き換えごとに refreshCanvasRef）
   const refreshCanvasRef = useRef(null)   // canvas の描き換えをテクスチャへ反映して再描画する
+  const planePassRef   = useRef(null)     // 平面モードの追加描画（小窓ズーム）。(renderer, scene, camera) で呼ぶ
   const mediaSizeRef   = useRef({ w: 0, h: 0 })   // 表示中の動画／画像の画素数
   const detectedFpsRef = useRef(0)
   const frameCountRef  = useRef(0)        // テクスチャに取り込んだ動画フレーム数（診断用）
@@ -123,6 +124,8 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
       } else {
         controls.update()
         renderer.render(scene, camera)
+        // 同じ VideoTexture をもう一度サンプルするだけなので、デコードも転送も増えない
+        planePassRef.current?.(renderer, scene, camera)
       }
       renderCountRef.current++
     }
@@ -426,6 +429,6 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
     requestRenderRef, captureRef, detectedFpsRef,
     frameCountRef, renderCountRef, renderPathRef,
     showImageRef, showVideoRef, showCanvasRef, refreshCanvasRef, mediaSizeRef,
-    videoElRef,
+    videoElRef, planePassRef,
   }
 }

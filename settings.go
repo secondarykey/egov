@@ -78,12 +78,22 @@ type AppSettings struct {
 	MiniProgressBar     bool `json:"miniProgressBar"`
 }
 
+// ZoomInsetSettings は normal / free モードの小窓ズームの見た目。
+type ZoomInsetSettings struct {
+	// Border は小窓に枠線を出すか。出すときは縁を透かさない。
+	Border bool `json:"border"`
+	// Feather は枠線なしのときに縁を透かす幅（小窓の短辺に対する割合、0..zoomFeatherMax）。
+	// 0 なら縁はくっきり切れる。
+	Feather float64 `json:"feather"`
+}
+
 type Settings struct {
-	App      AppSettings      `json:"app"`
-	VR       VRSettings       `json:"vr"`
-	Playback PlaybackSettings `json:"playback"`
-	Controls ControlSettings  `json:"controls"`
-	Window   WindowSettings   `json:"window"`
+	App       AppSettings       `json:"app"`
+	VR        VRSettings        `json:"vr"`
+	Playback  PlaybackSettings  `json:"playback"`
+	Controls  ControlSettings   `json:"controls"`
+	ZoomInset ZoomInsetSettings `json:"zoomInset"`
+	Window    WindowSettings    `json:"window"`
 }
 
 // settingsMu serializes writes to settings.json. Wails のバインディング呼び出しは
@@ -149,6 +159,10 @@ func defaultSettings() *Settings {
 			UIHideDelayMs:        1500,
 			UIHideOnLeaveDelayMs: 800,
 		},
+		ZoomInset: ZoomInsetSettings{
+			Border:  false,
+			Feather: 0.12,
+		},
 	}
 }
 
@@ -170,6 +184,11 @@ const (
 	vrFovMin = 20
 	vrFovMax = 180
 )
+
+// zoomFeatherMax は小窓の縁を透かす幅の上限（短辺に対する割合）。
+// 0.5 で左右（上下）の透けが中央で出会い、不透明な部分がなくなる。
+// フロントエンドの設定ダイアログのスライダー上限と一致させること。
+const zoomFeatherMax = 0.4
 
 // sourceFovRange は素材の水平画角（度）として意味のある範囲と、範囲外のときの値。
 // flat は tan で広がるため 180° 未満、正距円筒は 360°モノラルまで。
@@ -265,6 +284,14 @@ func (s *Settings) normalize() {
 	}
 	if s.Controls.UIHideOnLeaveDelayMs <= 0 {
 		s.Controls.UIHideOnLeaveDelayMs = d.Controls.UIHideOnLeaveDelayMs
+	}
+	switch f := s.ZoomInset.Feather; {
+	case math.IsNaN(f):
+		s.ZoomInset.Feather = d.ZoomInset.Feather
+	case f < 0:
+		s.ZoomInset.Feather = 0
+	case f > zoomFeatherMax:
+		s.ZoomInset.Feather = zoomFeatherMax
 	}
 }
 

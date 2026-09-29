@@ -150,6 +150,15 @@ func (a *API) UpdateAppSettings(app AppSettings) {
 	a.save()
 }
 
+// UpdateZoomInsetSettings replaces the zoom inset appearance and saves to disk.
+func (a *API) UpdateZoomInsetSettings(z ZoomInsetSettings) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.settings.ZoomInset = z
+	a.settings.normalize()
+	a.save()
+}
+
 // UpdateActiveColor saves the UI active color to disk.
 func (a *API) UpdateActiveColor(color string) {
 	a.mu.Lock()

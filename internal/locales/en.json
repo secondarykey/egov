@@ -68,6 +68,7 @@
     "thumbnailOff": "Thumbnail preview: Off",
     "snapshot": "Snapshot",
     "thumbnailGrid": "Thumbnail grid",
+    "zoomInset": "Zoom inset",
     "loopOn": "Loop: On",
     "loopOff": "Loop: Off",
     "rangeLoopOn": "Range Loop: On",
@@ -106,7 +107,9 @@
     "playback": {
       "language": "Language",
       "defaultMode": "Default Mode",
-      "activeColor": "Active Color"
+      "activeColor": "Active Color",
+      "zoomInsetBorder": "Zoom Inset Border",
+      "zoomInsetFeather": "Zoom Inset Edge Fade"
     },
     "controls": {
       "clickTimeout": "Click Timeout",
