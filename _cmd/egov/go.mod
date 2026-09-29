@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	egov v0.0.0-00010101000000-000000000000
 	github.com/Microsoft/go-winio v0.6.2
-	github.com/wailsapp/wails/v3 v3.0.0-beta.23
+	github.com/wailsapp/wails/v3 v3.0.0-beta.26
 )
 
 require (
