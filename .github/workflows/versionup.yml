@@ -59,7 +59,7 @@ jobs:
             FINAL_VERSION="${PREFIX}.${NEXT_PATCH}"
           fi
 
-          go run ./_cmd/version $FINAL_VERSION
+          go run _cmd/version.go $FINAL_VERSION
 
           echo "NEW_VERSION=$FINAL_VERSION" >> $GITHUB_ENV
 
