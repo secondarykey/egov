@@ -28,6 +28,13 @@ import { dispProjIndex, fitSrcFov, projScaleFor, setVrRotation, srcProjIndex } f
 // シークコントローラーは表示しない（free/vr モードの視点操作を邪魔しないため）
 const HOLD_MOVE_TOLERANCE = 8
 
+// 再生中のデコードエラーからの自動復旧。この時間内に RECOVER_MAX 回を超えて
+// 落ちるならファイル側の問題とみなし、エラー表示（手動の読み込み直し）に任せる
+const RECOVER_MAX       = 3
+const RECOVER_WINDOW_MS = 60_000
+// 同じ位置で続けて落ちたときに読み飛ばす秒数（回数ごとに増やす）
+const RECOVER_SKIP_SECS = 2
+
 // プレイヤー本体。状態・設定・入力処理のオーケストレーターとして働き、
 // 描画は useThreeScene（Three.jsシーン）と player/ 以下の各コンポーネントに委譲する。
 export default function Player() {
@@ -88,6 +95,15 @@ export default function Player() {
   const animRef             = useRef(null)   // 再生中の AnimPlayer
   const thumbHoverRef       = useRef(true)   // シークバーのホバーサムネイルを出すか（設定 ON かつ本物の動画）
   const zoomInsetStateRef   = useRef(null)   // 小窓ズームの位置と切り抜く範囲（VR を挟んでも保つ）
+  // デコードエラーからの復旧状態（reloadMedia）。ファイルを開くたびに作り直す
+  //   loaded   … このファイルで一度でもフレームが出たか（出ていなければ復旧しない）
+  //   attempts / at … 直近の自動復旧の回数と時刻
+  //   failPos  … 前回落ちた再生位置（同じ所で落ち続けるなら読み飛ばす）
+  //   resumeAt … 読み込み直し中の再開位置。読み込み直しの途中で再び落ちたときに使う
+  //   onMeta   … 読み込み直し後に位置を戻す loadedmetadata のリスナー
+  const newRecovery = () => ({ loaded: false, attempts: 0, at: 0, failPos: -1, resumeAt: null, onMeta: null })
+  const recoveryRef         = useRef(newRecovery())
+  const reloadMediaRef      = useRef(null)
   const [miniProgress, setMiniProgress] = useState(false)
 
   const [paused,      setPaused]      = useState(true)
@@ -134,6 +150,13 @@ export default function Player() {
   const [zoomInset,      setZoomInset]      = useState(false)   // 小窓ズーム（normal / free のみ）
   const [zoomLook,       setZoomLook]       = useState({ border: false, feather: 0.12 })   // 小窓ズームの見た目（settings.zoomInset）
 
+  // video 要素のエラー。useThreeScene はマウント時の関数を持ち続けるので、
+  // 安定参照にして最新の reloadMedia へは ref 経由で届ける
+  const [handleSceneError] = useState(() => (msg) => {
+    if (reloadMediaRef.current?.(false)) return
+    setVideoError(msg)
+  })
+
   // Three.js シーン（生成・破棄・描画ループはフック側が担う）
   const {
     mountRef, videoRef, cameraRef, controlsRef, planeRef,
@@ -147,7 +170,7 @@ export default function Player() {
     modeRef,
     onDuration: setDuration,
     onVideoEl: setVideoEl,
-    onVideoError: setVideoError,
+    onVideoError: handleSceneError,
   })
 
   // VR視点の ref をすべてシェーダの uniform へ反映する。
@@ -387,6 +410,63 @@ export default function Player() {
     })
   }
 
+  // 再生途中のデコードエラーから復旧する。返り値 true = 読み込み直した（エラーは出さない）。
+  //
+  // 負荷が高いときなどに途中でデコーダが落ちると（MEDIA_ERR_DECODE）、video 要素は
+  // エラー状態のまま固まり、以後の play() もシークも一切効かなくなる。
+  // 同じ src で load() し直し、落ちた位置から再開する。
+  // manual=true はエラー表示のボタンや再生操作から。回数制限を外して必ず読み直す。
+  const reloadMedia = (manual) => {
+    const video = videoElRef.current
+    const r = recoveryRef.current
+    if (!video || mediaKindRef.current !== 'video' || !video.getAttribute('src')) return false
+
+    // 読み込み直しの途中で落ちた場合は currentTime が 0 に戻っているので、目指していた位置を使う
+    let pos = r.resumeAt ?? video.currentTime
+    if (!Number.isFinite(pos)) pos = 0
+
+    if (manual) {
+      r.attempts = 0
+    } else {
+      const code = video.error?.code
+      if (code !== MediaError.MEDIA_ERR_DECODE && code !== MediaError.MEDIA_ERR_NETWORK) return false
+      // 一度も映せていないファイルは中身が壊れているか未対応なので、読み直しても同じ
+      if (!r.loaded) return false
+      const now = Date.now()
+      if (now - r.at > RECOVER_WINDOW_MS) r.attempts = 0
+      if (r.attempts >= RECOVER_MAX) return false
+      r.attempts++
+      r.at = now
+      // 前回落ちた所から先へ進めていないならデータ自体が壊れている。少しずつ先へ読み飛ばす
+      if (r.attempts > 1 && Math.abs(pos - r.failPos) < RECOVER_SKIP_SECS * r.attempts) {
+        pos = r.failPos + RECOVER_SKIP_SECS * (r.attempts - 1)
+      } else {
+        r.failPos = pos
+      }
+    }
+    if (Number.isFinite(video.duration)) pos = Math.min(pos, Math.max(0, video.duration - 0.5))
+
+    // 手動のときは再生を望んでいるとみなす。自動のときは落ちる前の状態に戻す
+    const resumePlay = manual || !video.paused
+    const seq = loadSeqRef.current
+    if (r.onMeta) video.removeEventListener('loadedmetadata', r.onMeta)
+    r.resumeAt = pos
+    r.onMeta = () => {
+      r.onMeta = null
+      if (seq !== loadSeqRef.current) return   // 待っている間に別のファイルが開かれた
+      r.resumeAt = null
+      video.currentTime = pos
+      if (resumePlay) { safePlay(video); setPaused(false) }
+      else            setPaused(true)
+    }
+    video.addEventListener('loadedmetadata', r.onMeta, { once: true })
+    video.load()
+    setVideoError(null)
+    if (!manual) setNotice({ severity: 'info', text: t('error.recovered') })
+    return true
+  }
+  reloadMediaRef.current = reloadMedia
+
   // ファイルから推定した素材の形式（始点・投影方式・画角）を反映する。
   // 推定できた項目だけを保存済みの既定値に重ね、それを Reset Camera の戻り先にする。
   // 向き・表示画角などの見方の好みには触れない。ディスクへは書かない。
@@ -444,6 +524,8 @@ export default function Player() {
 
     animRef.current?.dispose()
     animRef.current = null
+    if (recoveryRef.current.onMeta) video.removeEventListener('loadedmetadata', recoveryRef.current.onMeta)
+    recoveryRef.current = newRecovery()
     mediaKindRef.current = kind
     thumbHoverRef.current = thumbEnabledRef.current && kind === 'video'
     setVideoError(null)
@@ -628,6 +710,15 @@ export default function Player() {
     }
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
+  }, [])
+
+  // 一度でもフレームが出たファイルだけをデコードエラーからの自動復旧の対象にする（reloadMedia）
+  useEffect(() => {
+    const video = videoElRef.current
+    if (!video) return
+    const onLoadedData = () => { recoveryRef.current.loaded = true }
+    video.addEventListener('loadeddata', onLoadedData)
+    return () => video.removeEventListener('loadeddata', onLoadedData)
   }, [])
 
   // 診断オーバーレイの開閉。Three.js の初期化が失敗していても使えるよう、
@@ -822,6 +913,8 @@ export default function Player() {
   const handlePlayPause = () => {
     const video = videoRef.current
     if (!video.src) return
+    // エラーで固まった video 要素は play() が効かないので、読み込み直して再開する
+    if (video.error && reloadMedia(true)) return
     if (video.paused) { safePlay(video); setPaused(false) }
     else              { video.pause(); setPaused(true) }
   }
@@ -1228,7 +1321,13 @@ export default function Player() {
         <ClickFeedback feedback={clickFeedback} onDone={() => setClickFeedback(null)} />
       )}
 
-      {videoError && <VideoErrorOverlay error={videoError} image={isImage} />}
+      {videoError && (
+        <VideoErrorOverlay
+          error={videoError}
+          image={isImage}
+          onRetry={!isImage && !isAnim && videoElRef.current?.getAttribute('src') ? () => reloadMedia(true) : undefined}
+        />
+      )}
 
       {!fileName && <EmptyState resizeCursor={resizeCursor} onOpenFile={handleOpenFile} />}
 

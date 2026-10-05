@@ -1,4 +1,5 @@
-import { Box, Stack, Typography } from '@mui/material'
+import { Box, Button, Stack, Typography } from '@mui/material'
+import RefreshIcon       from '@mui/icons-material/Refresh'
 import PlayArrowIcon     from '@mui/icons-material/PlayArrow'
 import PauseIcon         from '@mui/icons-material/Pause'
 import FastForwardIcon   from '@mui/icons-material/FastForward'
@@ -152,7 +153,8 @@ export function ClickFeedback({ feedback, onDone }) {
 }
 
 // 動画読み込みエラー表示。error はエラーコード文字列。
-export function VideoErrorOverlay({ error, image }) {
+// onRetry を渡すと読み込み直しのボタンを出す（オーバーレイ自体はクリックを素通しする）。
+export function VideoErrorOverlay({ error, image, onRetry }) {
   const { t } = useTranslation()
   return (
     <Box sx={{
@@ -168,6 +170,20 @@ export function VideoErrorOverlay({ error, image }) {
       <Typography sx={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>
         {error}
       </Typography>
+      {onRetry && (
+        <Button
+          variant="outlined"
+          startIcon={<RefreshIcon />}
+          onClick={(e) => { e.stopPropagation(); onRetry() }}
+          sx={{
+            mt: 1, pointerEvents: 'auto',
+            color: 'rgba(255,255,255,0.85)', borderColor: 'rgba(255,255,255,0.4)',
+            '&:hover': { borderColor: 'rgba(255,255,255,0.8)' },
+          }}
+        >
+          {t('error.retry')}
+        </Button>
+      )}
     </Box>
   )
 }

@@ -5,7 +5,9 @@
   },
   "error": {
     "videoLoad": "動画を読み込めませんでした",
-    "imageLoad": "画像を読み込めませんでした"
+    "imageLoad": "画像を読み込めませんでした",
+    "recovered": "再生が中断したため読み込み直しました",
+    "retry": "読み込み直す"
   },
   "vr": {
     "selectViewpoint": "視点を選択",

@@ -25,7 +25,7 @@
 | `internal/` | 画像アニメーションの展開（`animimage`）、MP4 切り出し（`mp4cut`）、VR 形式推定（`vrformat`） |
 | `_cmd/egov/` | アプリ本体（Wails3 エントリポイント、ビルド設定、フロントエンド） |
 | `_cmd/egov/frontend/` | React + Three.js + MUI のフロントエンド |
-| `_cmd/version/` | バージョン同期ツール（`version` ファイル → `config.yml` / `package.json`） |
+| `_cmd/version.go` | バージョン同期ツール（`version` ファイル → `config.yml` / `package.json`） |
 | `.github/variables` | CI がインストールする wails3 CLI バージョン（`WAILS_VERSION`）のピン留め |
 
 ### wails3 のバージョン
@@ -76,7 +76,7 @@ xattr -dr com.apple.quarantine /Applications/egov.app
 バージョンを手動で変更する場合は `_cmd/egov/version` を編集後、以下で各ファイルへ同期します。
 
 ```bash
-go run ./_cmd/version          # version ファイルの値で同期
-go run ./_cmd/version 1.2.3    # 指定バージョンを設定
-go run ./_cmd/version -bump    # 対話的に選択
+go run _cmd/version.go          # version ファイルの値で同期
+go run _cmd/version.go 1.2.3    # 指定バージョンを設定
+go run _cmd/version.go -bump    # 対話的に選択
 ```

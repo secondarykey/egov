@@ -5,7 +5,9 @@
   },
   "error": {
     "videoLoad": "Failed to load video",
-    "imageLoad": "Failed to load image"
+    "imageLoad": "Failed to load image",
+    "recovered": "Playback stalled, so the video was reloaded",
+    "retry": "Reload"
   },
   "vr": {
     "selectViewpoint": "Select Viewpoint",

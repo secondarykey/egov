@@ -8,7 +8,8 @@ import { createVrQuad } from './vrShader'
 // モード切替や VR 視点操作などの「状態→シーン」反映は Player 側の
 // effect が返却された ref を使って行う。
 //
-// onDuration / onVideoEl / onVideoError には setState 関数（安定参照）を渡すこと。
+// onDuration / onVideoEl / onVideoError には安定参照（setState 関数など）を渡すこと。
+// マウント時に受け取った関数を使い続ける。
 export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoError }) {
   const mountRef       = useRef(null)
   const videoRef       = useRef(null)     // 再生中のメディア（video 要素か AnimPlayer。Player が差し替える）
