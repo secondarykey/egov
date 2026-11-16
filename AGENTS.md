@@ -141,8 +141,11 @@ wails3 task local:install   # ビルドしてコピーするだけ（版上げ�
   New-Item -ItemType Junction -Path "_cmd\egov\frontend\node_modules" -Target "D:\Go\Projects\egov\_cmd\egov\frontend\node_modules"
   New-Item -ItemType Directory -Path "_cmd\egov\frontend\dist" -Force   # go:embed 用
   ```
-- `build/Taskfile.yml` の `install:frontend:deps` は `status: test -d node_modules` に変えてある。
-  `wails3 update build-assets` で上書きされるので、実行したら直し直す
+- `build/Taskfile.yml` は2か所を手で直してある。`wails3 update build-assets` で上書きされるので、
+  実行したら直し直す（versionup.yml は実行後に `git checkout -- build/Taskfile.yml` で戻している）
+  - `install:frontend:deps` は `status: test -d node_modules`
+  - `generate:icons` は `appicon.png` からだけ作る（`-iconcomposerinput appicon.icon` を渡さない）。
+    `build/appicon.icon` はテンプレートの Wails ロゴのままで、macOS 26 以上ではそれが Mac 版のアイコンになる
 
 ## Key Configuration Files
 
