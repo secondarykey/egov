@@ -4,7 +4,7 @@ This file provides guidance to coding agents (Claude Code など) when working w
 
 ## Project Overview
 
-**egov** is a desktop VR video player built with [Wails3](https://v3.wails.io/) — a framework that pairs a Go backend with a React + TypeScript frontend compiled into a single native binary. The app focuses on split-screen VR video playback with zoom support.
+**egov** is a desktop VR video player built with [Wails3](https://v3.wails.io/) — a framework that pairs a Go backend with a React (JavaScript / JSX) frontend compiled into a single native binary. The app focuses on split-screen VR video playback with zoom support.
 It also opens still images (normal/free modes only) and plays animated images
 (WebP / GIF / APNG / AVIF) with the same controls as video.
 
@@ -17,13 +17,14 @@ task dev             # Development (hot-reload for both Go and frontend)
 task build           # Production build
 task run             # Run the built binary
 task windows:build   # / darwin:build / linux:build
-task build:server    # Headless HTTP server (no GUI)
-task run:server
 ```
+
+Go のテスト（ルートで実行）: `go test ./...`。PR では `.github/workflows/test.yml` が
+`go test -race` と `wails3 build` を走らせる（Windows の手元では `-race` が起動しないことがある）。
 
 Frontend commands (from `_cmd/egov/frontend/`): `npm run dev` / `npm run build` / `npm run build:dev`
 
-Regenerate Go→TypeScript bindings after changing the `API` struct:
+Regenerate Go→JavaScript bindings (`frontend/bindings/`, Git 管理外) after changing the `API` struct:
 
 ```bash
 wails3 generate bindings -f '' -clean=true
@@ -48,6 +49,11 @@ wails3 generate bindings -f '' -clean=true
 - 小窓ズーム（normal / free）も同じ割り当て: 小窓の上で右ドラッグ＝範囲の平行移動、ホイール＝寄る/引く。
   左ドラッグは小窓の移動（四隅でリサイズ）
 
+- **設定**: 起動中の設定は `SettingsStore` だけが持つ。変更は `API.update()`（`SettingsStore.update`）を
+  通し、正規化（`normalize()`）と保存を1つのロックの中で行う。`*Settings` を直接書き換えない
+- **ローカル HTTP サーバ**: `fileserver.go` の `NewFileHandler`（ロケール・許可済みファイル・アニメーションの
+  フレーム）。`main` はポートを開いて渡すだけ
+
 ## 詳細ドキュメント（`_docs/`）
 
 該当箇所を触る前に読むこと。
@@ -58,6 +64,7 @@ wails3 generate bindings -f '' -clean=true
 | [`_docs/vr-projection.md`](_docs/vr-projection.md) | VR投影シェーダ、素材形式の推定、色空間、視点の保存とリセット |
 | [`_docs/images-and-animations.md`](_docs/images-and-animations.md) | 静止画、アニメーション画像（WebP/GIF/APNG）の展開と再生、アニメーション AVIF |
 | [`_docs/range-extract.md`](_docs/range-extract.md) | MP4 の無劣化切り出し（`internal/mp4cut`）と UI |
+| [`_docs/player-split.md`](_docs/player-split.md) | `Player.jsx` の分割計画（作業の引き継ぎ用。`Player.jsx` を大きく触る前に読む） |
 
 ## 守ること
 
@@ -77,7 +84,9 @@ wails3 generate bindings -f '' -clean=true
 - 素材形式の推定結果はセッション中だけの上書き。ディスクへ書かない
 
 ### メディアの種類
-- 画像の拡張子はフロント `utils.IMAGE_EXTS` と Go `imageExts` を揃える
+- 画像の拡張子はフロント `utils.IMAGE_EXTS` と Go `imageExts` を揃える。これを含め、Go とフロントで
+  同じ値を別々に持つ定数（VR の平行移動・画角の範囲、素材の画角、小窓の透かし幅、投影方式）は
+  `frontend_consts_test.go` が照合する。片方だけ変えたらテストが落ちる
 - 画像のときは video の `src` を `removeAttribute('src')` + `load()` で外す（`src = ''` は error を出す）
 - アニメーションかどうかは拡張子ではなく中身で判定する（`.png` の APNG があるため）
 - WebP の fork（`github.com/secondarykey/image`）の `replace` はルートと `_cmd/egov` の

@@ -33,6 +33,11 @@ export const VR_SHIFT_LIMIT = 3
 export const VR_FOV_MIN = 20
 export const VR_FOV_MAX = 180
 
+// 小窓ズームの縁を透かす幅の上限（短辺に対する割合）。
+// 0.5 で左右（上下）の透けが中央で出会い、不透明な部分がなくなる。
+// Go 側 zoomFeatherMax と揃えること。
+export const ZOOM_FEATHER_MAX = 0.4
+
 // ウィンドウ枠のリサイズ判定域内か。
 // @wailsio/runtime の drag.js は window.outerWidth/outerHeight とマウス座標の
 // 比較だけでリサイズ端を決める（既定 5px、角は +10px）。そこで mousedown すると
@@ -77,7 +82,8 @@ export const barStyle = {
   color:          'white',
 }
 
-// 静止画として開く拡張子。Go 側 api.go の imageExts と揃えること。
+// 静止画として開く拡張子。Go 側 api.go の imageExts と揃えること
+// （以下 Go と同じ値を持つ定数は frontend_consts_test.go が照合する）。
 // ローカルパス経由（ドロップ・起動引数）では MIME が無いので拡張子で判定する。
 export const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.avif', '.apng']
 

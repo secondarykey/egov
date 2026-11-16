@@ -1,6 +1,10 @@
 package egov
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestNormalizeSourceFOV(t *testing.T) {
 	cases := []struct {
@@ -48,5 +52,49 @@ func TestNormalizeZoomInsetFeather(t *testing.T) {
 		if s.ZoomInset.Feather != c.want {
 			t.Errorf("%v: got %v, want %v", c.in, s.ZoomInset.Feather, c.want)
 		}
+	}
+}
+
+// どの経路の更新でも正規化を通してから保存する（次回起動を待たない）。
+func TestSettingsStoreUpdateNormalizes(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	if err := os.MkdirAll(filepath.Join(home, ".egov"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	a := NewApi("", nil, NewSettingsStore(defaultSettings()), "", nil)
+	vr := defaultSettings().VR
+	vr.FOV = 0
+	vr.ShiftX = 99
+	a.UpdateVRSettings(vr)
+	// ダイアログからの保存も同じく正規化される（ゼロ値の操作設定・空のモード名）
+	a.UpdateDialogSettings(DialogSettings{VR: a.GetSettings().VR})
+
+	got := a.GetSettings()
+	if got.VR.FOV != defaultSettings().VR.FOV {
+		t.Errorf("FOV = %v, want default", got.VR.FOV)
+	}
+	if got.VR.ShiftX != vrShiftLimit {
+		t.Errorf("ShiftX = %v, want %v", got.VR.ShiftX, vrShiftLimit)
+	}
+	if got.Controls.ClickTimeoutMs != defaultSettings().Controls.ClickTimeoutMs {
+		t.Errorf("ClickTimeoutMs = %v, want default", got.Controls.ClickTimeoutMs)
+	}
+	if got.Playback.DefaultMode != defaultSettings().Playback.DefaultMode {
+		t.Errorf("DefaultMode = %q, want default", got.Playback.DefaultMode)
+	}
+	if got.Playback.Volume != defaultSettings().Playback.Volume {
+		t.Errorf("Volume = %v: ダイアログの保存がダイアログ外の項目を書き換えた", got.Playback.Volume)
+	}
+
+	// ディスクにも正規化後の値が書かれている
+	loaded, err := LoadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.VR.FOV != got.VR.FOV || loaded.VR.ShiftX != got.VR.ShiftX {
+		t.Errorf("saved VR = %+v, want %+v", loaded.VR, got.VR)
 	}
 }
