@@ -7,7 +7,7 @@ import GridViewIcon from '@mui/icons-material/GridView'
 import FitScreenIcon from '@mui/icons-material/FitScreen'
 import ZoomInIcon from '@mui/icons-material/ZoomIn'
 import { Dialogs, Events, Window } from '@wailsio/runtime'
-import { CanExtract, CloseAnimation, DetectVRFormat, MediaFilePattern, OpenAnimation, OpenLocalFile, ExtractRange, SuggestExtractTarget, GetInitialFile, GetServerURL, GetSettings, UpdateAlwaysOnTop, UpdatePlaybackSettings, UpdateVRSettings } from '../bindings/egov/api'
+import { CanExtract, CloseAnimation, DetectVRFormat, MediaFilePattern, OpenAnimation, OpenLocalFile, ExtractRange, SuggestExtractTarget, GetInitialFile, GetServerURL, GetSettings, UpdateAlwaysOnTop, UpdatePlaybackSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
 import { loadLanguages } from './languages'
 import SettingsDialog from './SettingsDialog'
@@ -15,6 +15,7 @@ import useThreeScene from './player/useThreeScene'
 import useDropWatchdog from './player/useDropWatchdog'
 import usePointerSeek from './player/usePointerSeek'
 import useKeyboardShortcuts from './player/useKeyboardShortcuts'
+import useVrView from './player/useVrView'
 import AnimPlayer from './player/AnimPlayer'
 import TitleBar from './player/TitleBar'
 import ControlBar from './player/ControlBar'
@@ -24,8 +25,7 @@ import VrViewpointOverlay from './player/VrViewpointOverlay'
 import DiagnosticsOverlay from './player/DiagnosticsOverlay'
 import ZoomInset from './player/ZoomInset'
 import { ClickFeedback, DropHint, EmptyState, SeekFeedback, SeekZoneOverlay, VideoErrorOverlay } from './player/Overlays'
-import { VR_FOV_MAX, VR_FOV_MIN, VR_SHIFT_LIMIT, VR_START, barStyle, clamp, deg2rad, fmt, isImagePath, mayBeAnimatedPath, rad2deg } from './player/utils'
-import { dispProjIndex, fitSrcFov, projScaleFor, setVrRotation, srcProjIndex } from './player/vrShader'
+import { barStyle, clamp, fmt, isImagePath, mayBeAnimatedPath } from './player/utils'
 
 // 再生中のデコードエラーからの自動復旧。この時間内に RECOVER_MAX 回を超えて
 // 落ちるならファイル側の問題とみなし、エラー表示（手動の読み込み直し）に任せる
@@ -53,28 +53,12 @@ export default function Player() {
   const thumbCanvasRef  = useRef(null)
   const thumbEnabledRef = useRef(true)
   const thumbCacheRef   = useRef(null)   // { key, thumbs } 同一動画・分割数・回転のサムネイル一覧キャッシュ
-  const vrStartRef      = useRef('left')
-  const vrYawRef        = useRef(0)   // 現在の頭の向き（ラジアン、セッション中保持）
-  const vrPitchRef      = useRef(0)
-  const vrRollRef       = useRef(0)   // 素材の水平傾き補正（ラジアン）
-  const vrShiftRef      = useRef({ x: 0, y: 0 })   // 描画結果の平行移動（画面半分=1.0）
-  // 個別の ref に分けると保存・リセットのどちらかで項目を取りこぼすため、
-  // どちらも currentVrView() が返す形のまま丸ごと持つ。
-  //   vrSavedRef    … settings.json に保存されている既定値
-  //   vrDefaultsRef … Reset Camera の戻り先。保存済みの既定値に、開いている
-  //                   ファイルから推定した素材の形式（DetectVRFormat）を重ねたもの
-  const vrSavedRef      = useRef(null)
-  const vrDefaultsRef   = useRef(null)
   const loadSeqRef      = useRef(0)     // 形式推定の応答が前のファイルのものでないかの判定用
   // 設定の写し。一度だけ登録するリスナーからも最新の値を読めるよう ref に持つ。
   // 項目ごとに分けず、設定の形のまま丸ごと差し替える（applyControlSettings など）
   const controlSettingsRef = useRef(INITIAL_CONTROLS)    // settings.controls
   const vrInputRef         = useRef(INITIAL_VR_INPUT)    // settings.vr の dragSensitivity / scrollSpeed
   const appSettingsRef     = useRef({ acceptInactiveClick: false })   // settings.app
-  const vrFovRef            = useRef(75)          // 表示側の垂直画角（度）
-  const vrSrcFovRef         = useRef(180)         // 素材の画角（度）
-  const vrSrcProjRef        = useRef('equirect')  // 素材の投影方式
-  const vrDispProjRef       = useRef('rectilinear')
   const lastPlayErrorRef    = useRef(null)   // 直近の play() 拒否理由（診断用）
   const filePathRef         = useRef('')     // 再生中ファイルのローカルパス（切り出し元）
   const rangeRef            = useRef(null)   // SeekBarArea が公開する { start, end }
@@ -102,16 +86,8 @@ export default function Player() {
   const [showUI,      setShowUI]      = useState(false)
   const [resizeCursor, setResizeCursor] = useState(null)   // Wails3リサイズ判定領域内で明示すべきカーソル種別
   const [mode,        setMode]        = useState('normal')   // normal=ウィンドウフィット / free=自由パン・ズーム / vr
-  const [vrStart,     setVrStart]     = useState('left')
-  const [startOpen,   setStartOpen]   = useState(false)
   const [thumbEnabled, setThumbEnabled] = useState(true)
   const [language,     setLanguage]     = useState('en')
-  // オーバーレイ表示用の視点パラメータ。角度はすべて度。
-  const [vrView, setVrView] = useState({
-    pitch: 0, yaw: 0, roll: 0, fov: 75,
-    srcFov: 180, srcProj: 'equirect', dispProj: 'rectilinear',
-    shiftX: 0, shiftY: 0,
-  })
   const [availableLangs, setAvailableLangs] = useState([])
   const [serverUrl,      setServerUrl]      = useState('')
   const [settingsOpen,   setSettingsOpen]   = useState(false)
@@ -167,64 +143,9 @@ export default function Player() {
 
   useKeyboardShortcuts({ videoRef, videoElRef, detectedFpsRef, controlSettingsRef, doZoneSeek, setDiagOpen })
 
-  // VR視点の ref をすべてシェーダの uniform へ反映する。
-  // VRの状態は Player 側の ref を単一の真実とし、変更点はすべてここを通す。
-  const syncVrView = () => {
-    const u = vrUniformsRef.current
-    if (!u) return
-    setVrRotation(u.uRot.value, vrYawRef.current, vrPitchRef.current, vrRollRef.current)
-    u.uProjScale.value  = projScaleFor(vrDispProjRef.current, deg2rad(vrFovRef.current) / 2)
-    u.uDispProj.value   = dispProjIndex(vrDispProjRef.current)
-    u.uSrcProj.value    = srcProjIndex(vrSrcProjRef.current)
-    u.uSrcHalfFov.value = deg2rad(vrSrcFovRef.current) / 2
-    u.uShift.value.set(vrShiftRef.current.x, vrShiftRef.current.y)
-    requestRenderRef.current?.()
-  }
-
-  // VR視点の全パラメータを1つのオブジェクトにまとめる／書き戻す。
-  // 保存・リセット・オーバーレイはすべてこの形を経由するので、
-  // 項目を足したときに片側だけ忘れることがない。
-  const currentVrView = () => ({
-    start:    vrStartRef.current,
-    pitch:    vrPitchRef.current,
-    yaw:      vrYawRef.current,
-    roll:     vrRollRef.current,
-    shift:    { ...vrShiftRef.current },
-    fov:      vrFovRef.current,
-    srcFov:   vrSrcFovRef.current,
-    srcProj:  vrSrcProjRef.current,
-    dispProj: vrDispProjRef.current,
-  })
-
-  const restoreVrView = (v) => {
-    if (!v) return
-    vrStartRef.current    = v.start
-    setVrStart(v.start)
-    vrPitchRef.current    = v.pitch
-    vrYawRef.current      = v.yaw
-    vrRollRef.current     = v.roll
-    vrShiftRef.current    = { ...v.shift }
-    vrFovRef.current      = v.fov
-    vrSrcFovRef.current   = fitSrcFov(v.srcProj, v.srcFov)
-    vrSrcProjRef.current  = v.srcProj
-    vrDispProjRef.current = v.dispProj
-    syncVrView()
-  }
-
-  // オーバーレイのスライダーは度・比率なので単位を変換する
-  const toOverlay = (v) => ({
-    pitch: rad2deg(v.pitch), yaw: rad2deg(v.yaw), roll: rad2deg(v.roll),
-    fov: v.fov, srcFov: v.srcFov, srcProj: v.srcProj, dispProj: v.dispProj,
-    shiftX: v.shift.x, shiftY: v.shift.y,
-  })
-
-  // 始点はオーバーレイのスライダーではなくボタン（onVrStartChange）で変わる
-  const fromOverlay = (o) => ({
-    start: vrStartRef.current,
-    pitch: deg2rad(o.pitch), yaw: deg2rad(o.yaw), roll: deg2rad(o.roll),
-    shift: { x: o.shiftX, y: o.shiftY },
-    fov: o.fov, srcFov: o.srcFov, srcProj: o.srcProj, dispProj: o.dispProj,
-  })
+  // VR の視点・保存・リセット・オーバーレイ・マウス操作
+  const vr = useVrView({ mode, mountRef, vrUniformsRef, syncVrSizeRef, requestRenderRef, vrInputRef })
+  const { vrStart, syncVrView } = vr
 
   // カメラ・コントロール切替
   useEffect(() => {
@@ -270,120 +191,6 @@ export default function Player() {
     }
     requestRenderRef.current?.()
   }, [mode, vrStart, rotation])
-
-  // VR始点（SBSのどの半分を使うか）の切替。
-  // 平面モードは同じテクスチャを等倍で使うため、texture.repeat/offset は
-  // 触らず、切り出しはVRシェーダの uniform 側だけで行う。
-  useEffect(() => {
-    vrStartRef.current = vrStart
-    const u = vrUniformsRef.current
-    if (!u) return
-    const { repeat, offset } = VR_START[vrStart]
-    u.uSrcRepeat.value.set(...repeat)
-    u.uSrcOffset.value.set(...offset)
-    syncVrSizeRef.current?.()
-    requestRenderRef.current?.()
-  }, [mode, vrStart])
-
-  // VRモード: 右ドラッグで平行移動、中ドラッグで首振り、ホイールで画角。
-  // 右＝平行移動 / ホイール＝寄る引く は free モードと揃えてある。
-  useEffect(() => {
-    if (mode !== 'vr') return
-    const canvas = mountRef.current?.querySelector('canvas')
-    if (!canvas) return
-
-    let startX = 0, startY = 0, drag = null   // 'shift' | 'look' | null
-
-    const onPointerDown = (e) => {
-      const kind = e.button === 2 ? 'shift' : e.button === 1 ? 'look' : null
-      if (!kind) return
-      startX = e.clientX; startY = e.clientY; drag = kind
-      canvas.setPointerCapture(e.pointerId)
-      e.preventDefault()
-    }
-    const onPointerMove = (e) => {
-      if (!drag) return
-      const dx = e.clientX - startX, dy = e.clientY - startY
-      startX = e.clientX; startY = e.clientY
-
-      if (drag === 'shift') {
-        // uShift は「1.0 = ウィンドウの半分」。画面座標を同じ単位へ直すと
-        // 映像がカーソルに1:1で追従する。uShift.y は上が正なので dy は反転。
-        const { width, height } = canvas.getBoundingClientRect()
-        const cur = vrShiftRef.current
-        vrShiftRef.current = {
-          x: clamp(cur.x + (2 * dx) / width,  -VR_SHIFT_LIMIT, VR_SHIFT_LIMIT),
-          y: clamp(cur.y - (2 * dy) / height, -VR_SHIFT_LIMIT, VR_SHIFT_LIMIT),
-        }
-      } else {
-        const sensitivity = vrInputRef.current.dragSensitivity
-        // 向きは ref に保持し、モード切替やスライダー調整と整合させる
-        vrYawRef.current   -= dx * sensitivity
-        vrPitchRef.current  = clamp(vrPitchRef.current - dy * sensitivity, -Math.PI / 2, Math.PI / 2)
-      }
-      syncVrView()
-    }
-    const onPointerUp = () => { drag = null }
-
-    // 中ボタンの既定動作（オートスクロール）を抑止する
-    const onAuxClick = (e) => { if (e.button === 1) e.preventDefault() }
-
-    const onWheel = (e) => {
-      e.preventDefault()
-      vrFovRef.current = clamp(vrFovRef.current + e.deltaY * vrInputRef.current.scrollSpeed, VR_FOV_MIN, VR_FOV_MAX)
-      syncVrView()
-    }
-
-    canvas.addEventListener('pointerdown', onPointerDown)
-    canvas.addEventListener('pointermove', onPointerMove)
-    canvas.addEventListener('pointerup', onPointerUp)
-    canvas.addEventListener('pointercancel', onPointerUp)
-    canvas.addEventListener('auxclick', onAuxClick)
-    canvas.addEventListener('wheel', onWheel, { passive: false })
-
-    return () => {
-      canvas.removeEventListener('pointerdown', onPointerDown)
-      canvas.removeEventListener('pointermove', onPointerMove)
-      canvas.removeEventListener('pointerup', onPointerUp)
-      canvas.removeEventListener('pointercancel', onPointerUp)
-      canvas.removeEventListener('auxclick', onAuxClick)
-      canvas.removeEventListener('wheel', onWheel)
-    }
-  }, [mode])
-
-  // 現在の始点・視点・投影設定を既定として保存する。
-  // 他のVR設定（感度等）は保存済みの値を維持する。
-  const persistVRView = async () => {
-    const v = currentVrView()
-    vrSavedRef.current    = v
-    vrDefaultsRef.current = v
-    const s = await GetSettings()
-    UpdateVRSettings({
-      ...s.vr,
-      defaultStart:      v.start,
-      initialPitch:      rad2deg(v.pitch),
-      initialYaw:        rad2deg(v.yaw),
-      initialRoll:       rad2deg(v.roll),
-      fov:               v.fov,
-      sourceFov:         v.srcFov,
-      sourceProjection:  v.srcProj,
-      displayProjection: v.dispProj,
-      shiftX:            v.shift.x,
-      shiftY:            v.shift.y,
-    })
-  }
-
-  // VR視点オーバーレイを開く。スライダーへ現在値を反映する。
-  const openVrOverlay = () => {
-    setVrView(toOverlay(currentVrView()))
-    setStartOpen(true)
-  }
-
-  // オーバーレイの変更を即時反映する
-  const applyVrView = (next) => {
-    setVrView(next)
-    restoreVrView(fromOverlay(next))
-  }
 
   // 範囲の解除・初期化は SeekBarArea 側の effect が行う
   const resetRangeLoop = () => setRangeLoop(false)
@@ -461,11 +268,7 @@ export default function Player() {
   }
   reloadMediaRef.current = reloadMedia
 
-  // ファイルから推定した素材の形式（始点・投影方式・画角）を反映する。
-  // 推定できた項目だけを保存済みの既定値に重ね、それを Reset Camera の戻り先にする。
-  // 向き・表示画角などの見方の好みには触れない。ディスクへは書かない。
-  // 推定できなかった項目は保存済みの既定値へ戻す——前のファイルの推定結果
-  // （例: 360°モノラル）を次のファイルへ持ち越さないため。
+  // ファイルから素材の形式（始点・投影方式・画角）を推定し、VR の既定へ重ねる（useVrView.applySourceFormat）
   const applyDetectedFormat = async (pathOrName, seq) => {
     let f = {}
     try {
@@ -473,17 +276,8 @@ export default function Player() {
     } catch (err) {
       console.warn('DetectVRFormat failed:', err)
     }
-    if (seq !== loadSeqRef.current || !vrSavedRef.current) return
-    const saved   = vrSavedRef.current
-    const srcProj = f.projection || saved.srcProj
-    const format  = {
-      start:   f.start || saved.start,
-      srcProj,
-      srcFov:  fitSrcFov(srcProj, f.fov || saved.srcFov),
-    }
-    vrDefaultsRef.current = { ...saved, ...format }
-    restoreVrView({ ...currentVrView(), ...format })
-    setVrView(toOverlay(currentVrView()))
+    if (seq !== loadSeqRef.current) return
+    vr.applySourceFormat(f)
   }
 
   // 動画・画像の読み込みの共通部分。
@@ -641,21 +435,7 @@ export default function Player() {
       applyControlSettings(s.controls)
       // VR設定と起動時モードを反映
       vrInputRef.current = { dragSensitivity: s.vr.dragSensitivity, scrollSpeed: s.vr.scrollSpeed }
-      const saved = {
-        start:    s.vr.defaultStart,
-        pitch:    deg2rad(s.vr.initialPitch),
-        yaw:      deg2rad(s.vr.initialYaw),
-        roll:     deg2rad(s.vr.initialRoll),
-        shift:    { x: s.vr.shiftX, y: s.vr.shiftY },
-        fov:      s.vr.fov,
-        srcFov:   s.vr.sourceFov,
-        srcProj:  s.vr.sourceProjection,
-        dispProj: s.vr.displayProjection,
-      }
-      vrSavedRef.current    = saved
-      vrDefaultsRef.current = saved
-      restoreVrView(saved)
-      setVrView(toOverlay(saved))
+      vr.loadSavedVrView(s.vr)
       setMode(p.defaultMode)
       setMiniProgress(s.app.miniProgressBar)
       setZoomLook(s.zoomInset)
@@ -781,10 +561,7 @@ export default function Player() {
     if (!camera || !controls) return
 
     if (mode === 'vr') {
-      // 既定へ全項目を戻す。向き・平行移動・画角だけでなく始点や
-      // 素材／表示の投影方式も含める（保存が全項目を焼くので対称にする）。
-      // 戻り先は保存済みの既定値に、開いているファイルの推定結果を重ねたもの。
-      restoreVrView(vrDefaultsRef.current)
+      vr.resetVrView()
     } else if (mode === 'normal') {
       const { w, h } = mediaSizeRef.current
       if (w && h) {
@@ -1040,14 +817,14 @@ export default function Player() {
       <video ref={thumbVideoRef} muted preload="metadata" crossOrigin="anonymous" style={{ display: 'none' }} />
       <canvas ref={thumbCanvasRef} style={{ display: 'none' }} />
 
-      {startOpen && (
+      {vr.overlayOpen && (
         <VrViewpointOverlay
-          onClose={() => setStartOpen(false)}
+          onClose={vr.closeVrOverlay}
           vrStart={vrStart}
-          onVrStartChange={setVrStart}
-          vrView={vrView}
-          onChange={applyVrView}
-          onCommit={persistVRView}
+          onVrStartChange={vr.setVrStart}
+          vrView={vr.vrView}
+          onChange={vr.applyVrView}
+          onCommit={vr.persistVRView}
         />
       )}
 
@@ -1063,7 +840,7 @@ export default function Player() {
         activeColor={activeColor}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenFile={handleOpenFile}
-        onOpenVrOverlay={openVrOverlay}
+        onOpenVrOverlay={vr.openVrOverlay}
         vrDisabled={isImage || isAnim}
       />
 
@@ -1098,7 +875,7 @@ export default function Player() {
         thumbCanvasRef={thumbCanvasRef}
         thumbEnabledRef={thumbHoverRef}
         modeRef={modeRef}
-        vrStartRef={vrStartRef}
+        vrStartRef={vr.vrStartRef}
         rangeRef={rangeRef}
       />
 
