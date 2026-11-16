@@ -20,7 +20,7 @@ export const SOURCE_PROJECTIONS  = ['equirect', 'equidistant', 'equisolid', 'fla
 // 素材の画角（水平、度）として意味のある範囲と、方式を切り替えたときの初期値。
 // flat（普通のカメラ映像）は tan で広がるため 180° 未満でなければならない。
 // 正距円筒は 360° モノラル素材まで貼れるよう 360° まで開ける。
-// Go 側の sourceFovRange() と一致させること。
+// Go 側の sourceFovRange() と一致させること（frontend_consts_test.go が照合する）。
 export const SRC_FOV_RANGE = {
   equirect:    { min: 60,  max: 360, def: 180 },
   equidistant: { min: 120, max: 240, def: 180 },

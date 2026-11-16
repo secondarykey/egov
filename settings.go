@@ -206,13 +206,13 @@ func defaultSettings() *Settings {
 // vrShiftLimit は VR の平行移動の上限（ウィンドウの半分を 1.0 とする）。
 // 透視投影は視線角が90°に漸近するだけなので 180°素材では画が尽きないが、
 // Panini/ステレオ投影は fov75 で 300% を過ぎると画が残らない。
-// フロントエンド側の VR_SHIFT_LIMIT と一致させること。
+// フロントエンド側の VR_SHIFT_LIMIT と一致させること（frontend_consts_test.go が照合する）。
 const vrShiftLimit = 3
 
 // vrFovMin/vrFovMax は表示側の垂直画角（度）の範囲。素材が 180° 級である以上
 // 180° は設定したい値になりうるのでそこまで許す。透視/Panini の tan(fov/2) が
 // 180° で発散する件はフロントエンドの projScaleFor() が丸めて潰している。
-// フロントエンド側の VR_FOV_MIN / VR_FOV_MAX と一致させること。
+// フロントエンド側の VR_FOV_MIN / VR_FOV_MAX と一致させること（frontend_consts_test.go が照合する）。
 const (
 	vrFovMin = 20
 	vrFovMax = 180
@@ -220,12 +220,12 @@ const (
 
 // zoomFeatherMax は小窓の縁を透かす幅の上限（短辺に対する割合）。
 // 0.5 で左右（上下）の透けが中央で出会い、不透明な部分がなくなる。
-// フロントエンドの設定ダイアログのスライダー上限と一致させること。
+// フロントエンド側の ZOOM_FEATHER_MAX と一致させること（frontend_consts_test.go が照合する）。
 const zoomFeatherMax = 0.4
 
 // sourceFovRange は素材の水平画角（度）として意味のある範囲と、範囲外のときの値。
 // flat は tan で広がるため 180° 未満、正距円筒は 360°モノラルまで。
-// フロントエンド側の SRC_FOV_RANGE と一致させること。
+// フロントエンド側の SRC_FOV_RANGE と一致させること（frontend_consts_test.go が照合する）。
 func sourceFovRange(proj string) (lo, hi, def float64) {
 	switch proj {
 	case "flat":
