@@ -7,12 +7,16 @@ import GridViewIcon from '@mui/icons-material/GridView'
 import FitScreenIcon from '@mui/icons-material/FitScreen'
 import ZoomInIcon from '@mui/icons-material/ZoomIn'
 import { Dialogs, Events, Window } from '@wailsio/runtime'
-import { CanExtract, CloseAnimation, DetectVRFormat, MediaFilePattern, OpenAnimation, OpenLocalFile, ExtractRange, SuggestExtractTarget, GetInitialFile, GetServerURL, GetSettings, UpdateAlwaysOnTop, UpdatePlaybackSettings, UpdateVRSettings } from '../bindings/egov/api'
+import { ExtractRange, SuggestExtractTarget, GetInitialFile, GetServerURL, GetSettings, UpdateAlwaysOnTop, UpdatePlaybackSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
 import { loadLanguages } from './languages'
 import SettingsDialog from './SettingsDialog'
 import useThreeScene from './player/useThreeScene'
-import AnimPlayer from './player/AnimPlayer'
+import useDropWatchdog from './player/useDropWatchdog'
+import usePointerSeek from './player/usePointerSeek'
+import useKeyboardShortcuts from './player/useKeyboardShortcuts'
+import useVrView from './player/useVrView'
+import useMediaLoader from './player/useMediaLoader'
 import TitleBar from './player/TitleBar'
 import ControlBar from './player/ControlBar'
 import MiniProgressBar from './player/MiniProgressBar'
@@ -21,89 +25,36 @@ import VrViewpointOverlay from './player/VrViewpointOverlay'
 import DiagnosticsOverlay from './player/DiagnosticsOverlay'
 import ZoomInset from './player/ZoomInset'
 import { ClickFeedback, DropHint, EmptyState, SeekFeedback, SeekZoneOverlay, VideoErrorOverlay } from './player/Overlays'
-import { VR_FOV_MAX, VR_FOV_MIN, VR_SHIFT_LIMIT, VR_START, barStyle, clamp, deg2rad, fmt, isImagePath, isResizeEdge, mayBeAnimatedPath, rad2deg } from './player/utils'
-import { dispProjIndex, fitSrcFov, projScaleFor, setVrRotation, srcProjIndex } from './player/vrShader'
+import { barStyle, clamp, fmt } from './player/utils'
 
-// 押し込み中にこの距離（px）を超えて動いたらドラッグ操作とみなし、
-// シークコントローラーは表示しない（free/vr モードの視点操作を邪魔しないため）
-const HOLD_MOVE_TOLERANCE = 8
-
-// 再生中のデコードエラーからの自動復旧。この時間内に RECOVER_MAX 回を超えて
-// 落ちるならファイル側の問題とみなし、エラー表示（手動の読み込み直し）に任せる
-const RECOVER_MAX       = 3
-const RECOVER_WINDOW_MS = 60_000
-// 同じ位置で続けて落ちたときに読み飛ばす秒数（回数ごとに増やす）
-const RECOVER_SKIP_SECS = 2
+// 設定を読み込むまでの暫定値（Go の defaultSettings() と同じ値）。
+// 読み込み後は Go 側で正規化済みの値で丸ごと置き換わる
+const INITIAL_CONTROLS = {
+  clickTimeoutMs: 300, doubleClickSeekSecs: 10, dragSeekSecs: 10,
+  fastSeekSecs: 60, arrowSeekSecs: 5, thumbnailGridSize: 4,
+  uiHideDelayMs: 1500, uiHideOnLeaveDelayMs: 800,
+}
+const INITIAL_VR_INPUT = { dragSensitivity: 0.004, scrollSpeed: 0.05 }
 
 // プレイヤー本体。状態・設定・入力処理のオーケストレーターとして働き、
 // 描画は useThreeScene（Three.jsシーン）と player/ 以下の各コンポーネントに委譲する。
 export default function Player() {
   const { t } = useTranslation()
   const modeRef      = useRef('normal')
-  const dragCounter  = useRef(0)
-  const dragTimer    = useRef(null)
   const hideTimer    = useRef(null)
   const thumbVideoRef   = useRef(null)
   const thumbCanvasRef  = useRef(null)
   const thumbEnabledRef = useRef(true)
   const thumbCacheRef   = useRef(null)   // { key, thumbs } 同一動画・分割数・回転のサムネイル一覧キャッシュ
-  const vrStartRef      = useRef('left')
-  const vrYawRef        = useRef(0)   // 現在の頭の向き（ラジアン、セッション中保持）
-  const vrPitchRef      = useRef(0)
-  const vrRollRef       = useRef(0)   // 素材の水平傾き補正（ラジアン）
-  const vrShiftRef      = useRef({ x: 0, y: 0 })   // 描画結果の平行移動（画面半分=1.0）
-  // 個別の ref に分けると保存・リセットのどちらかで項目を取りこぼすため、
-  // どちらも currentVrView() が返す形のまま丸ごと持つ。
-  //   vrSavedRef    … settings.json に保存されている既定値
-  //   vrDefaultsRef … Reset Camera の戻り先。保存済みの既定値に、開いている
-  //                   ファイルから推定した素材の形式（DetectVRFormat）を重ねたもの
-  const vrSavedRef      = useRef(null)
-  const vrDefaultsRef   = useRef(null)
-  const loadSeqRef      = useRef(0)     // 形式推定の応答が前のファイルのものでないかの判定用
-  const feedbackKeyRef      = useRef(0)
-  const clickTimerRef           = useRef(null)
-  const holdTimerRef            = useRef(null)
-  const holdOriginRef           = useRef(null)   // 押し込み開始座標。オーバーレイ表示までの移動量判定に使う
-  const wasHoldRef              = useRef(false)
-  const lastPointerDownTimeRef  = useRef(0)
-  const isMouseHeldRef          = useRef(false)
-  const seekZoneTimerRef        = useRef(null)
-  const seekZoneRef             = useRef(null)
-  const seekOverlayRef          = useRef(null)
-  const fastSeekSecsRef         = useRef(60)
-  const seekFeedbackKeyRef  = useRef(0)
-  const clickTimeoutMsRef   = useRef(300)
-  const doubleClickSeekRef  = useRef(10)
-  const dragSeekSecsRef     = useRef(10)
-  const arrowSeekSecsRef    = useRef(5)
-  const thumbGridSizeRef    = useRef(4)
-  const justFocusedRef      = useRef(false)
-  const focusTimerRef       = useRef(null)
-  const acceptInactiveRef   = useRef(false)
-  const vrFovRef            = useRef(75)          // 表示側の垂直画角（度）
-  const vrSrcFovRef         = useRef(180)         // 素材の画角（度）
-  const vrSrcProjRef        = useRef('equirect')  // 素材の投影方式
-  const vrDispProjRef       = useRef('rectilinear')
-  const vrSensitivityRef    = useRef(0.004)
-  const vrScrollSpeedRef    = useRef(0.05)
-  const uiHideDelayRef      = useRef(1500)
-  const uiHideLeaveDelayRef = useRef(800)
-  const lastPlayErrorRef    = useRef(null)   // 直近の play() 拒否理由（診断用）
-  const filePathRef         = useRef('')     // 再生中ファイルのローカルパス（切り出し元）
+  // 設定の写し。一度だけ登録するリスナーからも最新の値を読めるよう ref に持つ。
+  // 項目ごとに分けず、設定の形のまま丸ごと差し替える（applyControlSettings など）
+  const controlSettingsRef = useRef(INITIAL_CONTROLS)    // settings.controls
+  const vrInputRef         = useRef(INITIAL_VR_INPUT)    // settings.vr の dragSensitivity / scrollSpeed
+  const appSettingsRef     = useRef({ acceptInactiveClick: false })   // settings.app
   const rangeRef            = useRef(null)   // SeekBarArea が公開する { start, end }
-  const mediaKindRef        = useRef('video')   // 'video' | 'image' | 'anim'（アニメーション画像）
-  const animRef             = useRef(null)   // 再生中の AnimPlayer
   const thumbHoverRef       = useRef(true)   // シークバーのホバーサムネイルを出すか（設定 ON かつ本物の動画）
   const zoomInsetStateRef   = useRef(null)   // 小窓ズームの位置と切り抜く範囲（VR を挟んでも保つ）
-  // デコードエラーからの復旧状態（reloadMedia）。ファイルを開くたびに作り直す
-  //   loaded   … このファイルで一度でもフレームが出たか（出ていなければ復旧しない）
-  //   attempts / at … 直近の自動復旧の回数と時刻
-  //   failPos  … 前回落ちた再生位置（同じ所で落ち続けるなら読み飛ばす）
-  //   resumeAt … 読み込み直し中の再開位置。読み込み直しの途中で再び落ちたときに使う
-  //   onMeta   … 読み込み直し後に位置を戻す loadedmetadata のリスナー
-  const newRecovery = () => ({ loaded: false, attempts: 0, at: 0, failPos: -1, resumeAt: null, onMeta: null })
-  const recoveryRef         = useRef(newRecovery())
-  const reloadMediaRef      = useRef(null)
+  const reloadMediaRef      = useRef(null)   // 最新の reloadMedia（useMediaLoader が描画ごとに入れる）
   const [miniProgress, setMiniProgress] = useState(false)
 
   const [paused,      setPaused]      = useState(true)
@@ -111,23 +62,11 @@ export default function Player() {
   const [videoEl,     setVideoEl]     = useState(null)   // 子コンポーネントが timeupdate を購読するため
   const [volume,      setVolume]      = useState(0.5)
   const [muted,       setMuted]       = useState(false)
-  const [fileName,    setFileName]    = useState('')
-  const [dragging,    setDragging]    = useState(false)
   const [showUI,      setShowUI]      = useState(false)
   const [resizeCursor, setResizeCursor] = useState(null)   // Wails3リサイズ判定領域内で明示すべきカーソル種別
   const [mode,        setMode]        = useState('normal')   // normal=ウィンドウフィット / free=自由パン・ズーム / vr
-  const [vrStart,     setVrStart]     = useState('left')
-  const [startOpen,   setStartOpen]   = useState(false)
-  const [clickFeedback, setClickFeedback] = useState(null)
-  const [seekFeedback,  setSeekFeedback]  = useState(null)
   const [thumbEnabled, setThumbEnabled] = useState(true)
   const [language,     setLanguage]     = useState('en')
-  // オーバーレイ表示用の視点パラメータ。角度はすべて度。
-  const [vrView, setVrView] = useState({
-    pitch: 0, yaw: 0, roll: 0, fov: 75,
-    srcFov: 180, srcProj: 'equirect', dispProj: 'rectilinear',
-    shiftX: 0, shiftY: 0,
-  })
   const [availableLangs, setAvailableLangs] = useState([])
   const [serverUrl,      setServerUrl]      = useState('')
   const [settingsOpen,   setSettingsOpen]   = useState(false)
@@ -135,18 +74,14 @@ export default function Player() {
   const [alwaysOnTop,    setAlwaysOnTop]    = useState(false)
   const [fullscreen,     setFullscreen]     = useState(false)
   const [loop,           setLoop]           = useState(true)
+  const [playbackRate,   setPlaybackRate]   = useState(1)       // 起動中だけ持つ（設定へは書かない）
   const [videoError,     setVideoError]     = useState(null)
-  const [seekOverlay,    setSeekOverlay]    = useState(null)   // { x, y } or null
-  const [seekZoneActive, setSeekZoneActive] = useState(null)   // { seconds, forward } or null
   const [rangeLoop,      setRangeLoop]      = useState(false)
   const [rotation,       setRotation]       = useState(0)
   const [thumbGridOpen,  setThumbGridOpen]  = useState(false)
   const [diagOpen,       setDiagOpen]       = useState(false)   // Ctrl+Shift+D の診断オーバーレイ
-  const [canExtract,     setCanExtract]     = useState(false)   // 無劣化切り出しが可能なコンテナか
   const [extracting,     setExtracting]     = useState(false)
   const [notice,         setNotice]         = useState(null)    // Snackbar 通知 { severity, text, busy? }
-  const [isImage,        setIsImage]        = useState(false)   // 静止画を表示中か（VR・再生系UIを無効にする）
-  const [isAnim,         setIsAnim]         = useState(false)   // アニメーション画像を再生中か（VR・サムネイル系を無効にする）
   const [zoomInset,      setZoomInset]      = useState(false)   // 小窓ズーム（normal / free のみ）
   const [zoomLook,       setZoomLook]       = useState({ border: false, feather: 0.12 })   // 小窓ズームの見た目（settings.zoomInset）
 
@@ -160,7 +95,7 @@ export default function Player() {
   // Three.js シーン（生成・破棄・描画ループはフック側が担う）
   const {
     mountRef, videoRef, cameraRef, controlsRef, planeRef,
-    textureRef, fitCameraRef, rendererRef,
+    fitCameraRef, rendererRef,
     vrUniformsRef, syncVrSizeRef,
     requestRenderRef, captureRef, detectedFpsRef,
     frameCountRef, renderCountRef, renderPathRef,
@@ -173,64 +108,21 @@ export default function Player() {
     onVideoError: handleSceneError,
   })
 
-  // VR視点の ref をすべてシェーダの uniform へ反映する。
-  // VRの状態は Player 側の ref を単一の真実とし、変更点はすべてここを通す。
-  const syncVrView = () => {
-    const u = vrUniformsRef.current
-    if (!u) return
-    setVrRotation(u.uRot.value, vrYawRef.current, vrPitchRef.current, vrRollRef.current)
-    u.uProjScale.value  = projScaleFor(vrDispProjRef.current, deg2rad(vrFovRef.current) / 2)
-    u.uDispProj.value   = dispProjIndex(vrDispProjRef.current)
-    u.uSrcProj.value    = srcProjIndex(vrSrcProjRef.current)
-    u.uSrcHalfFov.value = deg2rad(vrSrcFovRef.current) / 2
-    u.uShift.value.set(vrShiftRef.current.x, vrShiftRef.current.y)
-    requestRenderRef.current?.()
-  }
+  const { dragging, endDrag, dropHandlers } = useDropWatchdog()
 
-  // VR視点の全パラメータを1つのオブジェクトにまとめる／書き戻す。
-  // 保存・リセット・オーバーレイはすべてこの形を経由するので、
-  // 項目を足したときに片側だけ忘れることがない。
-  const currentVrView = () => ({
-    start:    vrStartRef.current,
-    pitch:    vrPitchRef.current,
-    yaw:      vrYawRef.current,
-    roll:     vrRollRef.current,
-    shift:    { ...vrShiftRef.current },
-    fov:      vrFovRef.current,
-    srcFov:   vrSrcFovRef.current,
-    srcProj:  vrSrcProjRef.current,
-    dispProj: vrDispProjRef.current,
+  // 映像の上のクリック・ダブルクリック・長押しシーク。handlePlayPause は下で定義するので
+  // 呼ぶ時点で解決する
+  const pointerSeek = usePointerSeek({
+    videoRef, controlSettingsRef, appSettingsRef,
+    onPlayPause: () => handlePlayPause(),
   })
+  const { doZoneSeek } = pointerSeek
 
-  const restoreVrView = (v) => {
-    if (!v) return
-    vrStartRef.current    = v.start
-    setVrStart(v.start)
-    vrPitchRef.current    = v.pitch
-    vrYawRef.current      = v.yaw
-    vrRollRef.current     = v.roll
-    vrShiftRef.current    = { ...v.shift }
-    vrFovRef.current      = v.fov
-    vrSrcFovRef.current   = fitSrcFov(v.srcProj, v.srcFov)
-    vrSrcProjRef.current  = v.srcProj
-    vrDispProjRef.current = v.dispProj
-    syncVrView()
-  }
+  useKeyboardShortcuts({ videoRef, videoElRef, detectedFpsRef, controlSettingsRef, doZoneSeek, setDiagOpen })
 
-  // オーバーレイのスライダーは度・比率なので単位を変換する
-  const toOverlay = (v) => ({
-    pitch: rad2deg(v.pitch), yaw: rad2deg(v.yaw), roll: rad2deg(v.roll),
-    fov: v.fov, srcFov: v.srcFov, srcProj: v.srcProj, dispProj: v.dispProj,
-    shiftX: v.shift.x, shiftY: v.shift.y,
-  })
-
-  // 始点はオーバーレイのスライダーではなくボタン（onVrStartChange）で変わる
-  const fromOverlay = (o) => ({
-    start: vrStartRef.current,
-    pitch: deg2rad(o.pitch), yaw: deg2rad(o.yaw), roll: deg2rad(o.roll),
-    shift: { x: o.shiftX, y: o.shiftY },
-    fov: o.fov, srcFov: o.srcFov, srcProj: o.srcProj, dispProj: o.dispProj,
-  })
+  // VR の視点・保存・リセット・オーバーレイ・マウス操作
+  const vr = useVrView({ mode, mountRef, vrUniformsRef, syncVrSizeRef, requestRenderRef, vrInputRef })
+  const { vrStart, syncVrView } = vr
 
   // カメラ・コントロール切替
   useEffect(() => {
@@ -277,367 +169,45 @@ export default function Player() {
     requestRenderRef.current?.()
   }, [mode, vrStart, rotation])
 
-  // VR始点（SBSのどの半分を使うか）の切替。
-  // 平面モードは同じテクスチャを等倍で使うため、texture.repeat/offset は
-  // 触らず、切り出しはVRシェーダの uniform 側だけで行う。
-  useEffect(() => {
-    vrStartRef.current = vrStart
-    const u = vrUniformsRef.current
-    if (!u) return
-    const { repeat, offset } = VR_START[vrStart]
-    u.uSrcRepeat.value.set(...repeat)
-    u.uSrcOffset.value.set(...offset)
-    syncVrSizeRef.current?.()
-    requestRenderRef.current?.()
-  }, [mode, vrStart])
-
-  // VRモード: 右ドラッグで平行移動、中ドラッグで首振り、ホイールで画角。
-  // 右＝平行移動 / ホイール＝寄る引く は free モードと揃えてある。
-  useEffect(() => {
-    if (mode !== 'vr') return
-    const canvas = mountRef.current?.querySelector('canvas')
-    if (!canvas) return
-
-    let startX = 0, startY = 0, drag = null   // 'shift' | 'look' | null
-
-    const onPointerDown = (e) => {
-      const kind = e.button === 2 ? 'shift' : e.button === 1 ? 'look' : null
-      if (!kind) return
-      startX = e.clientX; startY = e.clientY; drag = kind
-      canvas.setPointerCapture(e.pointerId)
-      e.preventDefault()
-    }
-    const onPointerMove = (e) => {
-      if (!drag) return
-      const dx = e.clientX - startX, dy = e.clientY - startY
-      startX = e.clientX; startY = e.clientY
-
-      if (drag === 'shift') {
-        // uShift は「1.0 = ウィンドウの半分」。画面座標を同じ単位へ直すと
-        // 映像がカーソルに1:1で追従する。uShift.y は上が正なので dy は反転。
-        const { width, height } = canvas.getBoundingClientRect()
-        const cur = vrShiftRef.current
-        vrShiftRef.current = {
-          x: clamp(cur.x + (2 * dx) / width,  -VR_SHIFT_LIMIT, VR_SHIFT_LIMIT),
-          y: clamp(cur.y - (2 * dy) / height, -VR_SHIFT_LIMIT, VR_SHIFT_LIMIT),
-        }
-      } else {
-        const sensitivity = vrSensitivityRef.current
-        // 向きは ref に保持し、モード切替やスライダー調整と整合させる
-        vrYawRef.current   -= dx * sensitivity
-        vrPitchRef.current  = clamp(vrPitchRef.current - dy * sensitivity, -Math.PI / 2, Math.PI / 2)
-      }
-      syncVrView()
-    }
-    const onPointerUp = () => { drag = null }
-
-    // 中ボタンの既定動作（オートスクロール）を抑止する
-    const onAuxClick = (e) => { if (e.button === 1) e.preventDefault() }
-
-    const onWheel = (e) => {
-      e.preventDefault()
-      vrFovRef.current = clamp(vrFovRef.current + e.deltaY * vrScrollSpeedRef.current, VR_FOV_MIN, VR_FOV_MAX)
-      syncVrView()
-    }
-
-    canvas.addEventListener('pointerdown', onPointerDown)
-    canvas.addEventListener('pointermove', onPointerMove)
-    canvas.addEventListener('pointerup', onPointerUp)
-    canvas.addEventListener('pointercancel', onPointerUp)
-    canvas.addEventListener('auxclick', onAuxClick)
-    canvas.addEventListener('wheel', onWheel, { passive: false })
-
-    return () => {
-      canvas.removeEventListener('pointerdown', onPointerDown)
-      canvas.removeEventListener('pointermove', onPointerMove)
-      canvas.removeEventListener('pointerup', onPointerUp)
-      canvas.removeEventListener('pointercancel', onPointerUp)
-      canvas.removeEventListener('auxclick', onAuxClick)
-      canvas.removeEventListener('wheel', onWheel)
-    }
-  }, [mode])
-
-  // 現在の始点・視点・投影設定を既定として保存する。
-  // 他のVR設定（感度等）は保存済みの値を維持する。
-  const persistVRView = async () => {
-    const v = currentVrView()
-    vrSavedRef.current    = v
-    vrDefaultsRef.current = v
-    const s = await GetSettings()
-    UpdateVRSettings({
-      ...s.vr,
-      defaultStart:      v.start,
-      initialPitch:      rad2deg(v.pitch),
-      initialYaw:        rad2deg(v.yaw),
-      initialRoll:       rad2deg(v.roll),
-      fov:               v.fov,
-      sourceFov:         v.srcFov,
-      sourceProjection:  v.srcProj,
-      displayProjection: v.dispProj,
-      shiftX:            v.shift.x,
-      shiftY:            v.shift.y,
-    })
-  }
-
-  // VR視点オーバーレイを開く。スライダーへ現在値を反映する。
-  const openVrOverlay = () => {
-    setVrView(toOverlay(currentVrView()))
-    setStartOpen(true)
-  }
-
-  // オーバーレイの変更を即時反映する
-  const applyVrView = (next) => {
-    setVrView(next)
-    restoreVrView(fromOverlay(next))
-  }
-
   // 範囲の解除・初期化は SeekBarArea 側の effect が行う
   const resetRangeLoop = () => setRangeLoop(false)
 
-  // play() は自動再生ポリシー等で拒否されることがある。
-  // 拒否時は楽観的に false にした paused 状態を停止へ戻す。
-  //
-  // 特に Linux の WebKitGTK はミュートしていないメディアの自動再生に
-  // ユーザー操作を要求するため、ファイルを開いた直後の play() は
-  // NotAllowedError で必ず拒否される（Wails v3 alpha2.114 時点で
-  // EnableAutoplayWithoutUserAction は darwin/iOS 専用でLinuxには無い）。
-  // この場合クリック等の操作で再生できるので、停止状態に戻すだけでよい。
-  const safePlay = (video) => {
-    video.play().catch((err) => {
-      lastPlayErrorRef.current = `${err?.name || 'Error'}: ${err?.message || err}`
-      console.warn('video.play() rejected:', err)
-      setPaused(true)
-    })
-  }
-
-  // 再生途中のデコードエラーから復旧する。返り値 true = 読み込み直した（エラーは出さない）。
-  //
-  // 負荷が高いときなどに途中でデコーダが落ちると（MEDIA_ERR_DECODE）、video 要素は
-  // エラー状態のまま固まり、以後の play() もシークも一切効かなくなる。
-  // 同じ src で load() し直し、落ちた位置から再開する。
-  // manual=true はエラー表示のボタンや再生操作から。回数制限を外して必ず読み直す。
-  const reloadMedia = (manual) => {
-    const video = videoElRef.current
-    const r = recoveryRef.current
-    if (!video || mediaKindRef.current !== 'video' || !video.getAttribute('src')) return false
-
-    // 読み込み直しの途中で落ちた場合は currentTime が 0 に戻っているので、目指していた位置を使う
-    let pos = r.resumeAt ?? video.currentTime
-    if (!Number.isFinite(pos)) pos = 0
-
-    if (manual) {
-      r.attempts = 0
-    } else {
-      const code = video.error?.code
-      if (code !== MediaError.MEDIA_ERR_DECODE && code !== MediaError.MEDIA_ERR_NETWORK) return false
-      // 一度も映せていないファイルは中身が壊れているか未対応なので、読み直しても同じ
-      if (!r.loaded) return false
-      const now = Date.now()
-      if (now - r.at > RECOVER_WINDOW_MS) r.attempts = 0
-      if (r.attempts >= RECOVER_MAX) return false
-      r.attempts++
-      r.at = now
-      // 前回落ちた所から先へ進めていないならデータ自体が壊れている。少しずつ先へ読み飛ばす
-      if (r.attempts > 1 && Math.abs(pos - r.failPos) < RECOVER_SKIP_SECS * r.attempts) {
-        pos = r.failPos + RECOVER_SKIP_SECS * (r.attempts - 1)
-      } else {
-        r.failPos = pos
-      }
-    }
-    if (Number.isFinite(video.duration)) pos = Math.min(pos, Math.max(0, video.duration - 0.5))
-
-    // 手動のときは再生を望んでいるとみなす。自動のときは落ちる前の状態に戻す
-    const resumePlay = manual || !video.paused
-    const seq = loadSeqRef.current
-    if (r.onMeta) video.removeEventListener('loadedmetadata', r.onMeta)
-    r.resumeAt = pos
-    r.onMeta = () => {
-      r.onMeta = null
-      if (seq !== loadSeqRef.current) return   // 待っている間に別のファイルが開かれた
-      r.resumeAt = null
-      video.currentTime = pos
-      if (resumePlay) { safePlay(video); setPaused(false) }
-      else            setPaused(true)
-    }
-    video.addEventListener('loadedmetadata', r.onMeta, { once: true })
-    video.load()
-    setVideoError(null)
-    if (!manual) setNotice({ severity: 'info', text: t('error.recovered') })
-    return true
-  }
-  reloadMediaRef.current = reloadMedia
-
-  // ファイルから推定した素材の形式（始点・投影方式・画角）を反映する。
-  // 推定できた項目だけを保存済みの既定値に重ね、それを Reset Camera の戻り先にする。
-  // 向き・表示画角などの見方の好みには触れない。ディスクへは書かない。
-  // 推定できなかった項目は保存済みの既定値へ戻す——前のファイルの推定結果
-  // （例: 360°モノラル）を次のファイルへ持ち越さないため。
-  const applyDetectedFormat = async (pathOrName, seq) => {
-    let f = {}
-    try {
-      f = await DetectVRFormat(pathOrName) ?? {}
-    } catch (err) {
-      console.warn('DetectVRFormat failed:', err)
-    }
-    if (seq !== loadSeqRef.current || !vrSavedRef.current) return
-    const saved   = vrSavedRef.current
-    const srcProj = f.projection || saved.srcProj
-    const format  = {
-      start:   f.start || saved.start,
-      srcProj,
-      srcFov:  fitSrcFov(srcProj, f.fov || saved.srcFov),
-    }
-    vrDefaultsRef.current = { ...saved, ...format }
-    restoreVrView({ ...currentVrView(), ...format })
-    setVrView(toOverlay(currentVrView()))
-  }
-
-  // 動画・画像の読み込みの共通部分。
-  // 画像のときは video 要素を空にする。以後の再生・シーク・コマ送り・サムネイルは
-  // すべて video.src の有無で早期 return するので、個別に分岐しなくて済む。
-  //
-  // アニメーション画像（WebP / GIF / APNG）は Go 側で全フレームを展開し、AnimPlayer（video 要素と同じ
-  // インターフェース）を videoRef.current に差し替えて動画として扱う。
-  const openMedia = async ({ url, name, path, image }) => {
-    const video = videoElRef.current
-    // Three.js の初期化に失敗している場合は video 要素が存在しない。
-    // ここで例外にせず、初期化失敗のエラー表示をそのまま残す。
-    if (!video) return
-    const seq = ++loadSeqRef.current
-
-    let anim = null
-    if (image && path && mayBeAnimatedPath(path)) {
-      try {
-        const info = await OpenAnimation(path)
-        if (info?.animated) anim = info
-        // アニメーション AVIF は中身が MP4 と同じ構造で、video 要素がそのまま再生できる
-        if (info?.asVideo) image = false
-      } catch (err) {
-        console.warn('OpenAnimation failed:', err)
-        setNotice({ severity: 'warning', text: t('anim.fallback', { msg: err?.message ?? String(err) }) })
-      }
-      if (seq !== loadSeqRef.current) return
-    } else if (mediaKindRef.current === 'anim') {
-      CloseAnimation()   // 展開済みフレームを解放する
-    }
-    const kind = anim ? 'anim' : image ? 'image' : 'video'
-
-    animRef.current?.dispose()
-    animRef.current = null
-    if (recoveryRef.current.onMeta) video.removeEventListener('loadedmetadata', recoveryRef.current.onMeta)
-    recoveryRef.current = newRecovery()
-    mediaKindRef.current = kind
+  // メディアを開いたときにプレイヤー側で片付けるもの（useMediaLoader から呼ばれる）。
+  // 一度だけ登録するリスナー経由で初回の関数のまま呼ばれるので、ref と setter だけを使う
+  const handleMediaChange = ({ kind, url }) => {
     thumbHoverRef.current = thumbEnabledRef.current && kind === 'video'
-    setVideoError(null)
     thumbCacheRef.current = null
-    setFileName(name)
-    filePathRef.current = path
-    setCanExtract(false)
-    setIsImage(kind === 'image')
-    setIsAnim(kind === 'anim')
     resetRangeLoop()
-
-    if (kind !== 'video') {
-      video.pause()
-      video.removeAttribute('src')
-      video.load()
-      const thumb = thumbVideoRef.current
-      if (thumb?.getAttribute('src')) {
-        thumb.removeAttribute('src')
-        thumb.load()
-      }
-      setThumbGridOpen(false)
-      // 画像・アニメーションは VR に対応しない（VRシェーダは VideoTexture 前提）
-      setMode(m => (m === 'vr' ? 'normal' : m))
-    }
-
-    if (kind === 'anim') {
-      const u = new URL(url)
-      const token = u.searchParams.get('token')
-      const player = new AnimPlayer({
-        info: anim,
-        src: url,
-        loop: video.loop,   // ループ設定は video 要素側にも揃えて持っている（handleLoopToggle）
-        frameUrl: (i) => `${u.origin}/animframe?token=${encodeURIComponent(token)}&id=${anim.id}&i=${i}`,
-        onFrame: () => refreshCanvasRef.current?.(),
-        onError: setVideoError,
-      })
-      animRef.current  = player
-      videoRef.current = player
-      setVideoEl(player)
-      showCanvasRef.current?.(player.canvas)
-      setDuration(player.duration)
-      safePlay(player)
-      setPaused(false)
+    const thumb = thumbVideoRef.current
+    if (kind === 'video') {
+      if (thumbEnabledRef.current && thumb) thumb.src = url
       return
     }
-
-    videoRef.current = video
-    setVideoEl(video)
-
-    if (kind === 'image') {
-      setPaused(true)
-      setDuration(0)
-      const img = new Image()
-      img.crossOrigin = 'anonymous'
-      img.src = url
-      img.decode().then(
-        () => { if (seq === loadSeqRef.current) showImageRef.current?.(img) },
-        () => { if (seq === loadSeqRef.current) setVideoError('IMAGE_DECODE_FAILED') },
-      )
-      return
+    if (thumb?.getAttribute('src')) {
+      thumb.removeAttribute('src')
+      thumb.load()
     }
-
-    showVideoRef.current?.()
-    video.src = url
-    if (thumbEnabledRef.current && thumbVideoRef.current) thumbVideoRef.current.src = url
-    safePlay(video)
-    setPaused(false)
-    if (path) CanExtract(path).then(setCanExtract)
-    applyDetectedFormat(path || name, seq)
+    setThumbGridOpen(false)
+    // 画像・アニメーションは VR に対応しない（VRシェーダは VideoTexture 前提）
+    setMode(m => (m === 'vr' ? 'normal' : m))
   }
 
-  // ファイル選択ダイアログ。<input type="file"> はブラウザの制約でパスが取れず
-  // （中身の Blob しか渡らない）、アニメーション画像の展開・無劣化切り出し・
-  // VR形式の推定といった Go 側の処理ができないため、Wails のダイアログでパスを受け取る。
-  // 見た目はどちらも OS 標準のダイアログ。
-  const handleOpenFile = async () => {
-    try {
-      const path = await Dialogs.OpenFile({
-        Title: t('menu.openFile'),
-        Filters: [{ DisplayName: t('menu.mediaFiles'), Pattern: await MediaFilePattern() }],
-        CanChooseFiles: true,
-      })
-      if (!path) return   // キャンセル
-      loadFilePath(await OpenLocalFile(path))
-    } catch (err) {
-      console.error('open file failed:', err)
-      setNotice({ severity: 'error', text: t('menu.openFailed', { msg: err?.message ?? String(err) }) })
-    }
-  }
-
-  const loadFilePath = (fileUrl) => {
-    if (!fileUrl) return
-    if (!videoRef.current) return
-    const filePath = new URL(fileUrl).searchParams.get('path') ?? ''
-    openMedia({
-      url: fileUrl,
-      name: filePath.split(/[\\/]/).pop(),
-      path: filePath,
-      image: isImagePath(filePath),
-    })
-  }
+  // メディア（動画・静止画・アニメーション画像）を開く・読み込み直す
+  const {
+    fileName, canExtract, isImage, isAnim,
+    filePathRef, mediaKindRef, lastPlayErrorRef,
+    loadFilePath, handleOpenFile, reloadMedia, safePlay,
+  } = useMediaLoader({
+    videoRef, videoElRef, showImageRef, showVideoRef, showCanvasRef, refreshCanvasRef,
+    setPaused, setDuration, setVideoEl, setVideoError, setNotice,
+    reloadMediaRef, applySourceFormat: vr.applySourceFormat, onMediaChange: handleMediaChange,
+  })
 
   // 操作系設定を ref に反映する。起動時と設定ダイアログ保存時の両方から呼ばれる。
-  const applyControlSettings = (c) => {
-    clickTimeoutMsRef.current   = c.clickTimeoutMs
-    doubleClickSeekRef.current  = c.doubleClickSeekSecs
-    dragSeekSecsRef.current     = c.dragSeekSecs
-    fastSeekSecsRef.current     = c.fastSeekSecs
-    arrowSeekSecsRef.current    = c.arrowSeekSecs
-    thumbGridSizeRef.current    = c.thumbnailGridSize
-    uiHideDelayRef.current      = c.uiHideDelayMs
-    uiHideLeaveDelayRef.current = c.uiHideOnLeaveDelayMs
+  const applyControlSettings = (c) => { controlSettingsRef.current = c }
+  // VR のドラッグ感度とホイール速度も同じく両方から呼ばれる
+  const applyVrInputSettings = (v) => {
+    vrInputRef.current = { dragSensitivity: v.dragSensitivity, scrollSpeed: v.scrollSpeed }
   }
 
   useEffect(() => {
@@ -652,26 +222,11 @@ export default function Player() {
       setLanguage(p.language)
       setActiveColor(p.activeColor)
       setAlwaysOnTop(s.app.alwaysOnTop)
-      acceptInactiveRef.current  = s.app.acceptInactiveClick
+      appSettingsRef.current = s.app
       applyControlSettings(s.controls)
       // VR設定と起動時モードを反映
-      vrSensitivityRef.current = s.vr.dragSensitivity
-      vrScrollSpeedRef.current = s.vr.scrollSpeed
-      const saved = {
-        start:    s.vr.defaultStart,
-        pitch:    deg2rad(s.vr.initialPitch),
-        yaw:      deg2rad(s.vr.initialYaw),
-        roll:     deg2rad(s.vr.initialRoll),
-        shift:    { x: s.vr.shiftX, y: s.vr.shiftY },
-        fov:      s.vr.fov,
-        srcFov:   s.vr.sourceFov,
-        srcProj:  s.vr.sourceProjection,
-        dispProj: s.vr.displayProjection,
-      }
-      vrSavedRef.current    = saved
-      vrDefaultsRef.current = saved
-      restoreVrView(saved)
-      setVrView(toOverlay(saved))
+      applyVrInputSettings(s.vr)
+      vr.loadSavedVrView(s.vr)
       setMode(p.defaultMode)
       setMiniProgress(s.app.miniProgressBar)
       setZoomLook(s.zoomInset)
@@ -689,156 +244,11 @@ export default function Player() {
     const unsub = Events.On('open-file', (event) => {
       // ドロップ経由の場合、Linux では DOM の drop/dragleave が来ず
       // ドロップ表示が消えないため、ここで確実に解除する
-      clearTimeout(dragTimer.current)
-      dragTimer.current = null
-      dragCounter.current = 0
-      setDragging(false)
+      endDrag()
       settingsReady.then(() => loadFilePath(event.data))
     })
-    return () => {
-      unsub()
-      clearTimeout(dragTimer.current)
-    }
+    return unsub
   }, [])
-
-  useEffect(() => {
-    const onFocus = () => {
-      justFocusedRef.current = true
-      clearTimeout(focusTimerRef.current)
-      // Alt+Tab などキーボードでフォーカスした場合は短時間でリセット
-      focusTimerRef.current = setTimeout(() => { justFocusedRef.current = false }, 500)
-    }
-    window.addEventListener('focus', onFocus)
-    return () => window.removeEventListener('focus', onFocus)
-  }, [])
-
-  // 一度でもフレームが出たファイルだけをデコードエラーからの自動復旧の対象にする（reloadMedia）
-  useEffect(() => {
-    const video = videoElRef.current
-    if (!video) return
-    const onLoadedData = () => { recoveryRef.current.loaded = true }
-    video.addEventListener('loadeddata', onLoadedData)
-    return () => video.removeEventListener('loadeddata', onLoadedData)
-  }, [])
-
-  // 診断オーバーレイの開閉。Three.js の初期化が失敗していても使えるよう、
-  // video 要素に依存しない独立した effect にしている。
-  useEffect(() => {
-    const onKeyDown = (e) => {
-      if (e.ctrlKey && e.shiftKey && (e.key === 'D' || e.key === 'd')) {
-        e.preventDefault()
-        setDiagOpen(o => !o)
-      } else if (e.key === 'Escape') {
-        setDiagOpen(false)
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
-
-  useEffect(() => {
-    let frameSeeking = false
-    let frameSeekTimer = 0
-    // seeked を待つラッチ。解除されないままだと以後のコマ送り/戻しが
-    // すべて無視されるため、読み込み直しやエラーでも必ず解除する。
-    const clearFrameSeek = () => {
-      frameSeeking = false
-      clearTimeout(frameSeekTimer)
-    }
-    // コマ送りのラッチは本物の video 要素の seeked で解除する（AnimPlayer は stepFrame で別処理）
-    const video = videoElRef.current
-    video?.addEventListener('seeked', clearFrameSeek)
-    video?.addEventListener('emptied', clearFrameSeek)
-    video?.addEventListener('error', clearFrameSeek)
-
-    const onKeyDown = (e) => {
-      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
-      const media = videoRef.current
-      if (!media?.src) return
-      e.preventDefault()
-      const forward = e.key === 'ArrowRight'
-      if (media.paused && media.stepFrame) {
-        // アニメーション画像 はフレームの境界が分かっているのでそれを使う
-        media.stepFrame(forward ? 1 : -1)
-      } else if (media.paused) {
-        if (frameSeeking) return
-        // メタデータ未取得だと duration が NaN。代入しても seeked は来ない
-        if (!Number.isFinite(video.duration)) return
-        const fps = detectedFpsRef.current > 1 ? detectedFpsRef.current : 30
-        const step = 1 / fps
-        const target = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? step : -step)))
-        // 先頭/終端でクランプされると currentTime が変化せず seeked が飛ばない。
-        // ここでラッチすると復帰不能になるので、シーク自体を行わない。
-        if (Math.abs(target - video.currentTime) < 1e-6) return
-        frameSeeking = true
-        // seeked が届かない状況への保険。ラッチが永久に残るのを防ぐ
-        frameSeekTimer = setTimeout(() => { frameSeeking = false }, 1000)
-        // シークで timeupdate が発火し、SeekBarArea 等が追従する
-        video.currentTime = target
-      } else {
-        if (e.repeat) return
-        doZoneSeek(arrowSeekSecsRef.current, forward)
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => {
-      window.removeEventListener('keydown', onKeyDown)
-      clearTimeout(frameSeekTimer)
-      video?.removeEventListener('seeked', clearFrameSeek)
-      video?.removeEventListener('emptied', clearFrameSeek)
-      video?.removeEventListener('error', clearFrameSeek)
-    }
-  }, [])
-
-  // ドラッグ表示の解除は dragleave だけに頼れない。
-  // Linux(WebKitGTK)/macOS では relatedTarget=null の dragleave が即座に飛んでくるので
-  // 数えるとカウンタが狂い、Windows ではウィンドウ外へ抜けたときの dragleave も
-  // relatedTarget=null なので無視すると表示が残り続ける。
-  // dragover はドラッグ中ずっと（静止していても）発火し続けるため、
-  // 一定時間 dragover が来なくなったら「通り過ぎた」とみなして解除する。
-  const clearDragWatchdog = () => {
-    clearTimeout(dragTimer.current)
-    dragTimer.current = null
-  }
-  const endDrag = () => {
-    clearDragWatchdog()
-    dragCounter.current = 0
-    setDragging(false)
-  }
-  const armDragWatchdog = () => {
-    clearTimeout(dragTimer.current)
-    dragTimer.current = setTimeout(endDrag, 700)
-  }
-  const handleDragEnter = (e) => {
-    e.preventDefault()
-    dragCounter.current++
-    setDragging(true)
-    armDragWatchdog()
-  }
-  const handleDragLeave = (e) => {
-    e.preventDefault()
-    if (e.relatedTarget === null) {
-      // ウィンドウ外かネイティブ横取りかを区別できないので、
-      // ウォッチドッグに判定を委ねる（dragover が続けば表示は維持される）
-      armDragWatchdog()
-      return
-    }
-    dragCounter.current = Math.max(0, dragCounter.current - 1)
-    if (dragCounter.current === 0) endDrag()
-  }
-  const handleDragOver = (e) => {
-    e.preventDefault()
-    if (dragging) armDragWatchdog()
-  }
-
-  // ファイルの読み込みは行わない。Wails がネイティブ側でドロップを横取りし、
-  // Go の WindowFilesDropped → open-file イベントとして配送される。
-  // Linux/macOS ではそもそも drop イベントが来ず、Windows でも
-  // ランタイムが Go へ転送するため、ここで dataTransfer を読むと二重読み込みになる。
-  const handleDrop = (e) => {
-    e.preventDefault()
-    endDrag()
-  }
 
   // Wails3ランタイム（drag.js）のリサイズ判定と同じ境界でカーソル種別を計算する。
   // 自前オーバーレイ（タイトルバー/ドロップ領域）が独自の cursor を指定していると
@@ -865,48 +275,21 @@ export default function Player() {
 
   const handleMouseMove = (e) => {
     setResizeCursor(computeResizeCursor(e))
-    // 押し込み待機中に動かした場合はドラッグ（視点操作）とみなして表示を取り消す。
-    // 「ぐっと押し込んでほぼ動かさない」ときだけコントローラーを出す。
-    if (holdOriginRef.current) {
-      const o = holdOriginRef.current
-      if (Math.hypot(e.clientX - o.x, e.clientY - o.y) > HOLD_MOVE_TOLERANCE) {
-        clearTimeout(holdTimerRef.current)
-        holdOriginRef.current = null
-        wasHoldRef.current = true   // ドラッグ終了時のクリック（再生/一時停止）も抑止する
-      }
-    }
     const inZone = e.clientY <= 80 || e.clientY >= window.innerHeight - 160 || e.clientX >= window.innerWidth - 80
     if (inZone) {
       clearTimeout(hideTimer.current)
       setShowUI(true)
     } else if (showUI) {
       clearTimeout(hideTimer.current)
-      hideTimer.current = setTimeout(() => setShowUI(false), uiHideDelayRef.current)
+      hideTimer.current = setTimeout(() => setShowUI(false), controlSettingsRef.current.uiHideDelayMs)
     }
-    // シークオーバーレイのゾーン検出（seekOverlay state が設定された後＝800ms経過後のみ）
-    if (seekOverlay && isMouseHeldRef.current) {
-      const dx = e.clientX - seekOverlay.x
-      const dy = Math.abs(e.clientY - seekOverlay.y)
-      if (dy > 55) {
-        stopZoneSeek()
-      } else if (dx > 75) {
-        startZoneSeek(fastSeekSecsRef.current, true)
-      } else if (dx > 20) {
-        startZoneSeek(dragSeekSecsRef.current, true)
-      } else if (dx < -75) {
-        startZoneSeek(fastSeekSecsRef.current, false)
-      } else if (dx < -20) {
-        startZoneSeek(dragSeekSecsRef.current, false)
-      } else {
-        stopZoneSeek()
-      }
-    }
+    pointerSeek.onPointerMove(e)
   }
 
   const handleMouseLeave = () => {
     clearTimeout(hideTimer.current)
-    hideTimer.current = setTimeout(() => setShowUI(false), uiHideLeaveDelayRef.current)
-    if (seekOverlayRef.current) hideSeekOverlay()
+    hideTimer.current = setTimeout(() => setShowUI(false), controlSettingsRef.current.uiHideOnLeaveDelayMs)
+    pointerSeek.onPointerLeave()
     setResizeCursor(null)
   }
 
@@ -960,10 +343,7 @@ export default function Player() {
     if (!camera || !controls) return
 
     if (mode === 'vr') {
-      // 既定へ全項目を戻す。向き・平行移動・画角だけでなく始点や
-      // 素材／表示の投影方式も含める（保存が全項目を焼くので対称にする）。
-      // 戻り先は保存済みの既定値に、開いているファイルの推定結果を重ねたもの。
-      restoreVrView(vrDefaultsRef.current)
+      vr.resetVrView()
     } else if (mode === 'normal') {
       const { w, h } = mediaSizeRef.current
       if (w && h) {
@@ -977,117 +357,6 @@ export default function Player() {
       controls.update()
     }
     requestRenderRef.current?.()
-  }
-
-  const doZoneSeek = (seconds, forward) => {
-    const video = videoRef.current
-    if (!video?.src) return
-    video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? seconds : -seconds)))
-    seekFeedbackKeyRef.current++
-    setSeekFeedback({ forward, seconds, key: seekFeedbackKeyRef.current, overlayPos: seekOverlayRef.current ?? null })
-  }
-
-  const startZoneSeek = (seconds, forward) => {
-    const cur = seekZoneRef.current
-    if (cur?.seconds === seconds && cur?.forward === forward) return
-    clearTimeout(seekZoneTimerRef.current)
-    seekZoneRef.current = { seconds, forward }
-    setSeekZoneActive({ seconds, forward })
-    doZoneSeek(seconds, forward)
-    const tick = () => {
-      if (!seekZoneRef.current) return
-      doZoneSeek(seekZoneRef.current.seconds, seekZoneRef.current.forward)
-      seekZoneTimerRef.current = setTimeout(tick, 1000)
-    }
-    seekZoneTimerRef.current = setTimeout(tick, 1000)
-  }
-
-  const stopZoneSeek = () => {
-    clearTimeout(seekZoneTimerRef.current)
-    seekZoneRef.current = null
-    setSeekZoneActive(null)
-  }
-
-  const hideSeekOverlay = () => {
-    isMouseHeldRef.current = false
-    seekOverlayRef.current = null
-    setSeekOverlay(null)
-    stopZoneSeek()
-  }
-
-  // ダブルクリック: 即座に単純な早送り/巻き戻しを実行（コントローラーは出さない）
-  // シングルクリックでも一定時間（800ms）保持し続けたらコントローラー（オーバーレイ）を表示する
-  const handleCanvasMouseDown = (e) => {
-    if (e.button !== 0) return
-    // 動画が無い（未選択・画像表示中）ときは長押しシークもダブルクリックシークも無い
-    if (!videoRef.current?.src) return
-    // ウィンドウ枠のリサイズ域では何もしない（utils.isResizeEdge 参照）。
-    // ここで長押しオーバーレイを開くと、リサイズ中は mouseup が
-    // ランタイムに握り潰されるため閉じられず、早送りが続いてしまう。
-    if (isResizeEdge(e.clientX, e.clientY)) return
-    // 前回のジェスチャで click が来ないまま残った抑止フラグを引きずらない
-    wasHoldRef.current = false
-    const pos = { x: e.clientX, y: e.clientY }
-    const now = Date.now()
-    const isDouble = e.detail >= 2 || (now - lastPointerDownTimeRef.current) <= clickTimeoutMsRef.current
-    lastPointerDownTimeRef.current = isDouble ? 0 : now
-
-    // 画面中央（x > cx で前方向）を境にダブルクリックシークの方向を決める
-    const cx = window.innerWidth / 2
-
-    if (isDouble) {
-      clearTimeout(clickTimerRef.current)
-      clickTimerRef.current = null
-      doZoneSeek(doubleClickSeekRef.current, pos.x > cx)
-    }
-
-    clearTimeout(holdTimerRef.current)
-    holdOriginRef.current = pos
-    holdTimerRef.current = setTimeout(() => {
-      // 表示後は移動量でゾーン（早送り/巻き戻し）を選ぶので判定を解除する
-      holdOriginRef.current = null
-      wasHoldRef.current = true
-      isMouseHeldRef.current = true
-      seekOverlayRef.current = pos
-      setSeekOverlay(pos)
-    }, 400)
-  }
-
-  const handleCanvasMouseUp = () => {
-    clearTimeout(holdTimerRef.current)
-    holdOriginRef.current = null
-    if (isMouseHeldRef.current) hideSeekOverlay()
-  }
-
-  const handleCanvasClick = (e) => {
-    // 枠を掴んだつもりの操作で再生/一時停止が切り替わらないよう、
-    // mousedown と同じ領域をクリックでも無視する
-    if (isResizeEdge(e.clientX, e.clientY)) return
-    if (wasHoldRef.current) {
-      wasHoldRef.current = false
-      return
-    }
-    if (justFocusedRef.current && !acceptInactiveRef.current) {
-      justFocusedRef.current = false
-      clearTimeout(focusTimerRef.current)
-      return
-    }
-    justFocusedRef.current = false
-    const video = videoRef.current
-    if (!video?.src) return
-    if (e.detail > 1) {
-      clearTimeout(clickTimerRef.current)
-      clickTimerRef.current = null
-      return
-    }
-    clearTimeout(clickTimerRef.current)
-    const willPlay = video.paused
-    clickTimerRef.current = setTimeout(() => {
-      clickTimerRef.current = null
-      handlePlayPause()
-      feedbackKeyRef.current++
-      setClickFeedback({ type: willPlay ? 'play' : 'pause', key: feedbackKeyRef.current })
-    }, clickTimeoutMsRef.current)
   }
 
   // VRは投影し直した「見えている画」を、平面モードは動画フレームそのものを保存する。
@@ -1189,6 +458,18 @@ export default function Player() {
     if (videoElRef.current) videoElRef.current.loop = next
   }
 
+  // 再生速度。ファイルを替えても引き継ぐので、video 要素の defaultPlaybackRate にも持たせる
+  // （load() で playbackRate は defaultPlaybackRate へ戻る。AnimPlayer はここから初期値を取る）
+  const handlePlaybackRateChange = (rate) => {
+    setPlaybackRate(rate)
+    if (videoRef.current) videoRef.current.playbackRate = rate
+    const el = videoElRef.current
+    if (el) {
+      el.defaultPlaybackRate = rate
+      el.playbackRate = rate
+    }
+  }
+
   const handleRangeLoopToggle = () => setRangeLoop(r => !r)
 
   const handleFullscreenToggle = () => {
@@ -1240,7 +521,7 @@ export default function Player() {
   }
 
   // サムネイル一覧キャッシュのキー（動画src・分割数・回転が一致すれば再利用）
-  const thumbCacheKey = `${videoRef.current?.src ?? ''}|${thumbGridSizeRef.current}|${rotation}`
+  const thumbCacheKey = `${videoRef.current?.src ?? ''}|${controlSettingsRef.current.thumbnailGridSize}|${rotation}`
   const cachedThumbs  = thumbCacheRef.current?.key === thumbCacheKey ? thumbCacheRef.current.thumbs : null
   // 表示用アスペクト比（回転で縦横入れ替わる）
   const thumbVw = videoRef.current?.videoWidth  || 0
@@ -1258,10 +539,7 @@ export default function Player() {
       }}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      onDragEnter={handleDragEnter}
-      onDragLeave={handleDragLeave}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
+      {...dropHandlers}
     >
       <div
         ref={mountRef}
@@ -1282,10 +560,7 @@ export default function Player() {
           overflow: 'hidden',
           zIndex: 0,   // 小窓の zIndex を mount の中に閉じ込め、他のオーバーレイより上に出さない
         }}
-        onClick={handleCanvasClick}
-        onMouseDown={handleCanvasMouseDown}
-        onMouseUp={handleCanvasMouseUp}
-        onMouseLeave={handleCanvasMouseUp}
+        {...pointerSeek.canvasHandlers}
         onContextMenu={e => e.preventDefault()}
       >
         {/* normal モードの回転は mount ごと CSS で回すので、小窓も mount の中に置いて一緒に回す */}
@@ -1303,22 +578,22 @@ export default function Player() {
         )}
       </div>
 
-      {seekFeedback && (
-        <SeekFeedback feedback={seekFeedback} onDone={() => setSeekFeedback(null)} />
+      {pointerSeek.seekFeedback && (
+        <SeekFeedback feedback={pointerSeek.seekFeedback} onDone={pointerSeek.clearSeekFeedback} />
       )}
 
-      {seekOverlay && (
+      {pointerSeek.seekOverlay && (
         <SeekZoneOverlay
-          overlay={seekOverlay}
-          active={seekZoneActive}
+          overlay={pointerSeek.seekOverlay}
+          active={pointerSeek.seekZoneActive}
           activeColor={activeColor}
-          fastSeekSecs={fastSeekSecsRef.current}
-          dragSeekSecs={dragSeekSecsRef.current}
+          fastSeekSecs={controlSettingsRef.current.fastSeekSecs}
+          dragSeekSecs={controlSettingsRef.current.dragSeekSecs}
         />
       )}
 
-      {clickFeedback && (
-        <ClickFeedback feedback={clickFeedback} onDone={() => setClickFeedback(null)} />
+      {pointerSeek.clickFeedback && (
+        <ClickFeedback feedback={pointerSeek.clickFeedback} onDone={pointerSeek.clearClickFeedback} />
       )}
 
       {videoError && (
@@ -1336,14 +611,14 @@ export default function Player() {
       <video ref={thumbVideoRef} muted preload="metadata" crossOrigin="anonymous" style={{ display: 'none' }} />
       <canvas ref={thumbCanvasRef} style={{ display: 'none' }} />
 
-      {startOpen && (
+      {vr.overlayOpen && (
         <VrViewpointOverlay
-          onClose={() => setStartOpen(false)}
+          onClose={vr.closeVrOverlay}
           vrStart={vrStart}
-          onVrStartChange={setVrStart}
-          vrView={vrView}
-          onChange={applyVrView}
-          onCommit={persistVRView}
+          onVrStartChange={vr.setVrStart}
+          vrView={vr.vrView}
+          onChange={vr.applyVrView}
+          onCommit={vr.persistVRView}
         />
       )}
 
@@ -1359,7 +634,7 @@ export default function Player() {
         activeColor={activeColor}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenFile={handleOpenFile}
-        onOpenVrOverlay={openVrOverlay}
+        onOpenVrOverlay={vr.openVrOverlay}
         vrDisabled={isImage || isAnim}
       />
 
@@ -1387,6 +662,8 @@ export default function Player() {
         onFullscreenToggle={handleFullscreenToggle}
         loop={loop}
         onLoopToggle={handleLoopToggle}
+        playbackRate={playbackRate}
+        onPlaybackRateChange={handlePlaybackRateChange}
         rangeLoop={rangeLoop}
         onRangeLoopToggle={handleRangeLoopToggle}
         activeColor={activeColor}
@@ -1394,7 +671,7 @@ export default function Player() {
         thumbCanvasRef={thumbCanvasRef}
         thumbEnabledRef={thumbHoverRef}
         modeRef={modeRef}
-        vrStartRef={vrStartRef}
+        vrStartRef={vr.vrStartRef}
         rangeRef={rangeRef}
       />
 
@@ -1500,7 +777,7 @@ export default function Player() {
           src={videoRef.current?.src}
           duration={duration}
           rotation={rotation}
-          gridSize={thumbGridSizeRef.current}
+          gridSize={controlSettingsRef.current.thumbnailGridSize}
           aspect={thumbAspect}
           activeColor={activeColor}
           initialThumbs={cachedThumbs}
@@ -1529,12 +806,13 @@ export default function Player() {
         onLanguageChange={handleLanguageChange}
         activeColor={activeColor}
         onActiveColorChange={handleActiveColorChange}
-        acceptInactiveClick={acceptInactiveRef.current}
-        onAcceptInactiveClickChange={(next) => { acceptInactiveRef.current = next }}
+        acceptInactiveClick={appSettingsRef.current.acceptInactiveClick}
+        onAcceptInactiveClickChange={(next) => { appSettingsRef.current = { ...appSettingsRef.current, acceptInactiveClick: next } }}
         miniProgressBar={miniProgress}
         onMiniProgressBarChange={(next) => setMiniProgress(next)}
         onZoomInsetChange={setZoomLook}
         onControlsChange={applyControlSettings}
+        onVrInputChange={applyVrInputSettings}
         thumbEnabled={thumbEnabled}
         onThumbEnabledChange={(next) => {
           setThumbEnabled(next)

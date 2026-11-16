@@ -5,22 +5,21 @@ import { createVrQuad } from './vrShader'
 
 // Three.js シーンの生成・破棄と描画ループを担うフック。
 // マウント時に一度だけ初期化し、生成物は ref 経由で Player に公開する。
-// モード切替や VR 視点操作などの「状態→シーン」反映は Player 側の
-// effect が返却された ref を使って行う。
+// モード切替や VR 視点操作などの「状態→シーン」反映は Player とほかのフック
+// （useVrView・useMediaLoader など）が返却された ref を使って行う。
 //
 // onDuration / onVideoEl / onVideoError には安定参照（setState 関数など）を渡すこと。
 // マウント時に受け取った関数を使い続ける。
 export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoError }) {
   const mountRef       = useRef(null)
-  const videoRef       = useRef(null)     // 再生中のメディア（video 要素か AnimPlayer。Player が差し替える）
+  const videoRef       = useRef(null)     // 再生中のメディア（video 要素か AnimPlayer。useMediaLoader が差し替える）
   const videoElRef     = useRef(null)     // 本物の video 要素（差し替えても変わらない）
   const cameraRef      = useRef(null)
   const controlsRef    = useRef(null)
   const planeRef       = useRef(null)
-  const textureRef     = useRef(null)
   const fitCameraRef   = useRef(null)
   const rendererRef    = useRef(null)
-  const vrUniformsRef  = useRef(null)     // VRシェーダの uniform（Player が視点を書き込む）
+  const vrUniformsRef  = useRef(null)     // VRシェーダの uniform（useVrView が視点を書き込む）
   const syncVrSizeRef  = useRef(null)     // 画面・切り出しのアスペクトを uniform へ反映
   const requestRenderRef = useRef(null)   // 単発レンダーを要求（操作・状態変化時）
   const captureRef     = useRef(null)     // 表示中の描画結果を2Dキャンバスへ取り出す
@@ -82,7 +81,6 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
 
     const texture = new THREE.VideoTexture(video)
     texture.colorSpace = THREE.SRGBColorSpace
-    textureRef.current = texture
 
     // VR: フルスクリーンquad へシェーダで直接投影する（vrShader.js 参照）。
     // 平面モードとはシーンもカメラも別で、renderOnce が描画先を切り替える。
@@ -301,7 +299,9 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
       texture.needsUpdate = true
       frameCountRef.current++
       renderOnce()
-      if (metadata && prevMediaTime >= 0 && metadata.mediaTime > prevMediaTime) {
+      // fps は等速のときだけ測る。倍速では表示が追いつかずフレームが間引かれ、
+      // 間隔が広がって低く出る（コマ送りの幅がずれる）
+      if (metadata && video.playbackRate === 1 && prevMediaTime >= 0 && metadata.mediaTime > prevMediaTime) {
         const delta = metadata.mediaTime - prevMediaTime
         if (delta > 0.001 && delta < 0.2) {
           detectedFpsRef.current = 1 / delta
@@ -425,7 +425,7 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
 
   return {
     mountRef, videoRef, cameraRef, controlsRef, planeRef,
-    textureRef, fitCameraRef, rendererRef,
+    fitCameraRef, rendererRef,
     vrUniformsRef, syncVrSizeRef,
     requestRenderRef, captureRef, detectedFpsRef,
     frameCountRef, renderCountRef, renderPathRef,

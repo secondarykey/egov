@@ -75,6 +75,7 @@
     "loopOff": "Loop: Off",
     "rangeLoopOn": "Range Loop: On",
     "rangeLoopOff": "Range Loop: Off",
+    "playbackRate": "Playback speed",
     "extract": "Extract selected range (no re-encode)",
     "extractUnsupported": "This container does not support lossless extraction",
     "extractNeedsRange": "Turn on Range Loop and select a range first",

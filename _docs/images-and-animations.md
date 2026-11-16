@@ -6,7 +6,7 @@
 **画像は normal / free だけで、VR は無効**（タイトルバーの VR ボタンを disabled にし、
 VR 中に開いたら normal へ落とす）。
 
-- 読み込みは `Player.openMedia()` に一本化してある。画像のときは **video 要素の src を外す**
+- 読み込みは `player/useMediaLoader.js` の `openMedia()` に一本化してある。画像のときは **video 要素の src を外す**
   （`removeAttribute('src')` + `load()`。`src = ''` は error を発火させる）。
   再生・シーク・コマ送り・サムネイル・長押しシークはすべて `video.src` の有無で
   早期 return するので、個別の分岐は不要
@@ -63,9 +63,9 @@ WebView は `<img>` ならアニメーション画像を再生できるが、Web
 - `API.OpenAnimation(path)` が展開して `AnimStore` に1本だけ保持し、フレームはローカルファイル
   サーバの `/animframe?token=&id=&i=` で生の RGBA として配る（バインディングで []byte を返すと
   base64 の JSON になり毎フレームには重い）。`id` は開き直すたびに増え、古い id の要求は 410
-- Player は **`videoRef.current` を AnimPlayer に差し替える**。シークバー・時間表示・範囲ループ・
+- `useMediaLoader`（`openMedia()`）が **`videoRef.current` を AnimPlayer に差し替える**。シークバー・時間表示・範囲ループ・
   ダブルクリック／長押しシークは video 要素と同じプロパティとイベントで動く。
-  本物の video 要素は `videoElRef`（診断オーバーレイ・コマ送りのラッチ・ループ初期値）
+  本物の video 要素は `videoElRef`（診断オーバーレイ・コマ送りのラッチ・ループと再生速度の初期値）
 - 画像と同じく VR は無効。サムネイル（ホバー／一覧）と音量も出さない。
   ホバーサムネイルの可否は設定値そのものではなく `thumbHoverRef` を SeekBarArea へ渡している
 - 描画は canvas を `imageTexture` に貼り、フレームを描き換えるたびに `refreshCanvasRef` で

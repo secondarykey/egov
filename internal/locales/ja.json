@@ -75,6 +75,7 @@
     "loopOff": "リピート: オフ",
     "rangeLoopOn": "範囲ループ: オン",
     "rangeLoopOff": "範囲ループ: オフ",
+    "playbackRate": "再生速度",
     "extract": "選択範囲を切り出す（再エンコードなし）",
     "extractUnsupported": "このコンテナは無劣化切り出しに対応していません",
     "extractNeedsRange": "範囲ループをオンにして範囲を選択してください",

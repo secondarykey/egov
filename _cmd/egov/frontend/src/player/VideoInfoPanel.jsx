@@ -56,8 +56,11 @@ function useMeasuredFps(video, active) {
       const base = baseRef.current
       const dt = base ? meta.mediaTime - base.time : 0
       const df = base ? meta.presentedFrames - base.frames : 0
+      // 等速以外では測らない。倍速では間引かれた分だけ低く出る
+      if (video.playbackRate !== 1) {
+        baseRef.current = null
       // シークや逆再生で mediaTime が戻ったら基準を取り直す
-      if (!base || dt < 0) {
+      } else if (!base || dt < 0) {
         baseRef.current = { time: meta.mediaTime, frames: meta.presentedFrames }
       } else if (dt >= 0.5 && df > 0) {
         setFps(df / dt)

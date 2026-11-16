@@ -19,8 +19,9 @@ task run             # Run the built binary
 task windows:build   # / darwin:build / linux:build
 ```
 
-Go のテスト（ルートで実行）: `go test ./...`。PR では `.github/workflows/test.yml` が
-`go test -race` と `wails3 build` を走らせる（Windows の手元では `-race` が起動しないことがある）。
+Go のテスト（ルートで実行）: `go test ./...`。テストと動作確認は手元で済ませてからリリースする。
+**CI にテスト用のワークフローは置かない**（wails3 のビルドが重いわりに、走る回数が重複し、
+一部の OS しか確かめられず、リリースを止める関門にもならないため）。
 
 Frontend commands (from `_cmd/egov/frontend/`): `npm run dev` / `npm run build` / `npm run build:dev`
 
@@ -29,6 +30,24 @@ Regenerate Go→JavaScript bindings (`frontend/bindings/`, Git 管理外) after 
 ```bash
 wails3 generate bindings -f '' -clean=true
 ```
+
+### ローカルデプロイ（`local:deploy` / `local:install`）
+
+`_cmd/egov/Taskfile.local.yml`（Git 管理外。`Taskfile.yml` から `optional: true` で include）を
+置くと、ビルドして常用の場所へコピーするタスクが増える。雛形と各段の理由は
+[`_docs/local-deploy.md`](_docs/local-deploy.md)。
+
+```bash
+wails3 task local:deploy    # 版上げ（必要なら）→ ビルド情報の反映 → ビルド → そのコミット → コピー
+wails3 task local:install   # ビルドしてコピーするだけ（版上げ・コミットはしない）
+```
+
+- 版は `go run _cmd/version.go -auto` が上げる（`v`+今の版のタグがあるときだけ patch +1）。
+  タグは CI（`versionup.yml`）だけが打つので、`TAG_VERSION` の既定は `false`。
+  `git fetch --tags` しないと、リリース後も次の版に上がらない
+- `wails3` CLI は `.github/variables` の `WAILS_VERSION` に揃える。ずれると
+  `update build-assets` が CI と違う中身を生成し、ビルド情報のコミットが CI と打ち消し合う
+- `Taskfile.yml` のタスクから `local:` を呼ばない（ファイルが無い環境で落ちる）
 
 ## Architecture
 
@@ -40,8 +59,10 @@ wails3 generate bindings -f '' -clean=true
 - **Events**: Go は `app.Event.Emit(name, payload)`、フロントは `@wailsio/runtime` の `Events.On`
 - **Embedding**: Vite の出力 `frontend/dist/` を `//go:embed` している。本番バイナリに
   フロントの変更を入れるにはビルドし直す
-- **Frontend**: `src/Player.jsx` が状態・ref・入力処理を持ち、描画は `src/player/` の各コンポーネントに
-  委ねる。高頻度で更新する部分（シークバー・時間表示）は `memo` で切り離してある
+- **Frontend**: `src/Player.jsx` は状態・設定・入力処理をつなぐ役。処理の塊は `src/player/` の
+  カスタムフック（`useMediaLoader`・`useVrView`・`usePointerSeek`・`useKeyboardShortcuts`・
+  `useDropWatchdog`・`useThreeScene`）に、描画は同じ場所のコンポーネントに置く。
+  高頻度で更新する部分（シークバー・時間表示）は `memo` で切り離してある
 - Three.js（`r0.184`）＋ MUI。表示モードは `normal` / `free` / `vr`（設定の旧名 `fit` は
   `Settings.normalize()` が `normal` へ移す）
 - マウス割り当ては free と vr で揃えてある: **右ドラッグ＝平行移動、ホイール＝寄る/引く、
@@ -64,7 +85,8 @@ wails3 generate bindings -f '' -clean=true
 | [`_docs/vr-projection.md`](_docs/vr-projection.md) | VR投影シェーダ、素材形式の推定、色空間、視点の保存とリセット |
 | [`_docs/images-and-animations.md`](_docs/images-and-animations.md) | 静止画、アニメーション画像（WebP/GIF/APNG）の展開と再生、アニメーション AVIF |
 | [`_docs/range-extract.md`](_docs/range-extract.md) | MP4 の無劣化切り出し（`internal/mp4cut`）と UI |
-| [`_docs/player-split.md`](_docs/player-split.md) | `Player.jsx` の分割計画（作業の引き継ぎ用。`Player.jsx` を大きく触る前に読む） |
+| [`_docs/local-deploy.md`](_docs/local-deploy.md) | `Taskfile.local.yml` の雛形（`local:deploy` / `local:install`）と CI との分担 |
+| [`_docs/player-structure.md`](_docs/player-structure.md) | `Player.jsx` とフックの分担、一度だけ登録するリスナーと ref の決まり、触ったあとの確認項目（Player やフックを触る前に読む） |
 
 ## 守ること
 
@@ -121,8 +143,11 @@ wails3 generate bindings -f '' -clean=true
   New-Item -ItemType Junction -Path "_cmd\egov\frontend\node_modules" -Target "D:\Go\Projects\egov\_cmd\egov\frontend\node_modules"
   New-Item -ItemType Directory -Path "_cmd\egov\frontend\dist" -Force   # go:embed 用
   ```
-- `build/Taskfile.yml` の `install:frontend:deps` は `status: test -d node_modules` に変えてある。
-  `wails3 update build-assets` で上書きされるので、実行したら直し直す
+- `build/Taskfile.yml` は2か所を手で直してある。`wails3 update build-assets` で上書きされるので、
+  実行したら直し直す（versionup.yml は実行後に `git checkout -- build/Taskfile.yml` で戻している）
+  - `install:frontend:deps` は `status: test -d node_modules`
+  - `generate:icons` は `appicon.png` からだけ作る（`-iconcomposerinput appicon.icon` を渡さない）。
+    `build/appicon.icon` はテンプレートの Wails ロゴのままで、macOS 26 以上ではそれが Mac 版のアイコンになる
 
 ## Key Configuration Files
 
