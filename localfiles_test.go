@@ -19,7 +19,7 @@ func TestOpenLocalFile(t *testing.T) {
 		}
 	}
 	files := NewLocalFiles(1234, "tok")
-	a := NewApi("", files, nil, "", NewAnimStore())
+	a := NewApi("", files, NewSettingsStore(nil), "", NewAnimStore())
 
 	u, err := a.OpenLocalFile(video)
 	if err != nil {

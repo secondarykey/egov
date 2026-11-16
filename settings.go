@@ -96,13 +96,50 @@ type Settings struct {
 	Window    WindowSettings    `json:"window"`
 }
 
-// settingsMu serializes writes to settings.json. Wails のバインディング呼び出しは
-// それぞれ別 goroutine で実行されるため、並行保存によるファイル破損を防ぐ。
-var settingsMu sync.Mutex
+// SettingsStore は起動中の設定の唯一の持ち主。API（バインディング）と main
+// （終了時のウィンドウ位置）の両方がここを通して読み書きする。
+// Wails のバインディング呼び出しはそれぞれ別 goroutine で実行されるため、
+// 変更・正規化・保存を1つのロックの中で行い、データ競合と並行保存による
+// ファイル破損を防ぐ。
+type SettingsStore struct {
+	mu sync.Mutex
+	s  *Settings
+}
 
-func SaveSettings(s *Settings) error {
-	settingsMu.Lock()
-	defer settingsMu.Unlock()
+// NewSettingsStore は LoadSettings の結果を受け取って保持する。
+func NewSettingsStore(s *Settings) *SettingsStore {
+	if s == nil {
+		s = defaultSettings()
+	}
+	return &SettingsStore{s: s}
+}
+
+// Get は現在の設定のコピーを返す。
+func (st *SettingsStore) Get() Settings {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return *st.s
+}
+
+// update は fn で設定を書き換え、正規化してからディスクへ保存する。
+// 正規化をここで必ず通すので、どの経路の更新でも範囲外の値が
+// メモリ上やディスクに残らない（次回起動時の LoadSettings を待たない）。
+func (st *SettingsStore) update(fn func(s *Settings)) error {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	fn(st.s)
+	st.s.normalize()
+	return saveSettings(st.s)
+}
+
+// SetWindow は通常表示のときのウィンドウ位置・サイズを保存する。
+func (st *SettingsStore) SetWindow(ws WindowSettings) error {
+	return st.update(func(s *Settings) { s.Window = ws })
+}
+
+// saveSettings は settings.json を書き出す。呼び出し側（SettingsStore）で
+// ロックを持っていること。
+func saveSettings(s *Settings) error {
 	dir, err := settingsDir()
 	if err != nil {
 		return err
@@ -166,10 +203,6 @@ func defaultSettings() *Settings {
 	}
 }
 
-// normalize replaces zero/invalid values with defaults. 手編集や破損した
-// settings.json に不正な値（0 の FOV、空のモード名等）が含まれていても、
-// 呼び出し側（フロントエンド含む）がガードなしで使えるようにする。
-// 既定値の定義は defaultSettings() に一元化されている。
 // vrShiftLimit は VR の平行移動の上限（ウィンドウの半分を 1.0 とする）。
 // 透視投影は視線角が90°に漸近するだけなので 180°素材では画が尽きないが、
 // Panini/ステレオ投影は fov75 で 300% を過ぎると画が残らない。
@@ -216,6 +249,10 @@ func clampShift(v float64) float64 {
 	return v
 }
 
+// normalize replaces zero/invalid values with defaults. 手編集や破損した
+// settings.json に不正な値（0 の FOV、空のモード名等）が含まれていても、
+// 呼び出し側（フロントエンド含む）がガードなしで使えるようにする。
+// 既定値の定義は defaultSettings() に一元化されている。
 func (s *Settings) normalize() {
 	d := defaultSettings()
 	if s.VR.FOV < vrFovMin || s.VR.FOV > vrFovMax {

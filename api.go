@@ -48,11 +48,12 @@ func IsMediaFile(path string) bool {
 }
 
 type API struct {
-	// mu guards settings/initialFile. バインディング呼び出しは並行に実行されうる。
+	// mu guards initialFile. バインディング呼び出しは並行に実行されうる。
+	// 設定は SettingsStore が自前のロックで守る。
 	mu          sync.Mutex
 	initialFile string
 	files       *LocalFiles
-	settings    *Settings
+	settings    *SettingsStore
 	version     string
 	anims       *AnimStore
 }
@@ -63,7 +64,7 @@ type API struct {
 // about any func-typed declaration in this package.
 var QuitRequested = make(chan struct{}, 1)
 
-func NewApi(initialFile string, files *LocalFiles, settings *Settings, version string, anims *AnimStore) *API {
+func NewApi(initialFile string, files *LocalFiles, settings *SettingsStore, version string, anims *AnimStore) *API {
 	return &API{initialFile: initialFile, files: files, settings: settings, version: version, anims: anims}
 }
 
@@ -79,9 +80,7 @@ func (a *API) GetServerURL() string {
 
 // GetSettings returns the current settings.
 func (a *API) GetSettings() Settings {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return *a.settings
+	return a.settings.Get()
 }
 
 // GetDefaultSettings returns the built-in default settings.
@@ -90,81 +89,57 @@ func (a *API) GetDefaultSettings() Settings {
 	return *defaultSettings()
 }
 
-// save persists settings to disk. 保存失敗は致命的ではない
+// update applies fn to the settings and persists them. 保存失敗は致命的ではない
 // （次回起動時にデフォルト値になるだけ）ため、警告ログのみ残して続行する。
-// 呼び出し側で a.mu を保持していること。
-func (a *API) save() {
-	if err := SaveSettings(a.settings); err != nil {
+func (a *API) update(fn func(s *Settings)) {
+	if err := a.settings.update(fn); err != nil {
 		slog.Warn("settings save error", "err", err)
 	}
 }
 
 // UpdatePlaybackSettings saves volume, mute, thumbnail state and language to disk.
 func (a *API) UpdatePlaybackSettings(volume float64, muted bool, thumbnailEnabled bool, language string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.settings.Playback.Volume = volume
-	a.settings.Playback.Muted = muted
-	a.settings.Playback.ThumbnailEnabled = thumbnailEnabled
-	a.settings.Playback.Language = language
-	a.save()
+	a.update(func(s *Settings) {
+		s.Playback.Volume = volume
+		s.Playback.Muted = muted
+		s.Playback.ThumbnailEnabled = thumbnailEnabled
+		s.Playback.Language = language
+	})
 }
 
 // UpdateVRSettings replaces the VR configuration and saves to disk.
 func (a *API) UpdateVRSettings(vr VRSettings) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.settings.VR = vr
-	a.save()
+	a.update(func(s *Settings) { s.VR = vr })
 }
 
 // UpdateControlSettings replaces the control configuration and saves to disk.
 func (a *API) UpdateControlSettings(controls ControlSettings) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.settings.Controls = controls
-	a.save()
+	a.update(func(s *Settings) { s.Controls = controls })
 }
 
 // UpdateDefaultMode saves the default playback mode to disk.
 func (a *API) UpdateDefaultMode(mode string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.settings.Playback.DefaultMode = mode
-	a.save()
+	a.update(func(s *Settings) { s.Playback.DefaultMode = mode })
 }
 
 // UpdateAlwaysOnTop saves the always-on-top state to disk.
 func (a *API) UpdateAlwaysOnTop(enabled bool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.settings.App.AlwaysOnTop = enabled
-	a.save()
+	a.update(func(s *Settings) { s.App.AlwaysOnTop = enabled })
 }
 
 // UpdateAppSettings replaces the application configuration and saves to disk.
 func (a *API) UpdateAppSettings(app AppSettings) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.settings.App = app
-	a.save()
+	a.update(func(s *Settings) { s.App = app })
 }
 
 // UpdateZoomInsetSettings replaces the zoom inset appearance and saves to disk.
 func (a *API) UpdateZoomInsetSettings(z ZoomInsetSettings) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.settings.ZoomInset = z
-	a.settings.normalize()
-	a.save()
+	a.update(func(s *Settings) { s.ZoomInset = z })
 }
 
 // UpdateActiveColor saves the UI active color to disk.
 func (a *API) UpdateActiveColor(color string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.settings.Playback.ActiveColor = color
-	a.save()
+	a.update(func(s *Settings) { s.Playback.ActiveColor = color })
 }
 
 // Quit signals QuitRequested so main can save the window state and exit.
@@ -175,9 +150,6 @@ func (a *API) Quit() {
 	}
 }
 
-// extractableExts は無劣化切り出し（ExtractRange）に対応する拡張子。
-// いずれも ISOBMFF なのでサンプルのバイトコピーだけで切り出せる。
-// mkv/webm/ts などはコンテナ構造が異なるため対象外。
 // VRFormat は動画ファイルから推定した VR 素材の形式。空文字列／0 の項目は
 // 推定できなかったもので、フロントエンドは保存済みの既定値を使う。
 type VRFormat struct {
@@ -199,6 +171,9 @@ func (a *API) DetectVRFormat(path string) VRFormat {
 	return VRFormat{Start: f.Start, Projection: f.Projection, FOV: f.FOV, Source: f.Source}
 }
 
+// extractableExts は無劣化切り出し（ExtractRange）に対応する拡張子。
+// いずれも ISOBMFF なのでサンプルのバイトコピーだけで切り出せる。
+// mkv/webm/ts などはコンテナ構造が異なるため対象外。
 var extractableExts = map[string]struct{}{
 	".mp4": {}, ".m4v": {}, ".mov": {},
 }

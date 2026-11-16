@@ -155,7 +155,9 @@ func main() {
 		version += "+DEV"
 	}
 
-	api := egov.NewApi(initialFile, files, settings, version, anims)
+	// 設定はここから先 store を通してだけ読み書きする（API と終了処理で共有するため）
+	store := egov.NewSettingsStore(settings)
+	api := egov.NewApi(initialFile, files, store, version, anims)
 
 	// Webview のユーザーデータは固定パスに置く。
 	// 起動ごとの一時ディレクトリだと %TEMP% に溜まり続け、キャッシュも効かない。
@@ -297,15 +299,15 @@ func main() {
 	// ウィンドウ破棄前に Position()/Size() を取得して保存する。
 	// 最大化・フルスクリーン・最小化中はその座標を保存すると復元時に
 	// 異常なサイズになるため、前回保存済みの通常時の値を維持する。
+	// それ以外の設定は変更のたびに API が保存済みなので、ここでは書かない。
 	go func() {
 		<-egov.QuitRequested
 		if !win.IsMaximised() && !win.IsFullscreen() && !win.IsMinimised() {
 			x, y := win.Position()
 			w, h := win.Size()
-			settings.Window = egov.WindowSettings{X: x, Y: y, Width: w, Height: h}
-		}
-		if err := egov.SaveSettings(settings); err != nil {
-			slog.Error("settings save error", "err", err)
+			if err := store.SetWindow(egov.WindowSettings{X: x, Y: y, Width: w, Height: h}); err != nil {
+				slog.Error("settings save error", "err", err)
+			}
 		}
 		app.Quit()
 	}()
