@@ -24,7 +24,7 @@ var videoExts = map[string]struct{}{
 }
 
 // imageExts は静止画として開く拡張子。WebView がデコードできる形式に限る。
-// フロントエンドの utils.IMAGE_EXTS と揃えること。
+// フロントエンドの utils.IMAGE_EXTS と揃えること（frontend_consts_test.go が照合する）。
 var imageExts = map[string]struct{}{
 	".jpg": {}, ".jpeg": {}, ".png": {}, ".gif": {}, ".webp": {},
 	".bmp": {}, ".avif": {}, ".apng": {},
@@ -112,34 +112,34 @@ func (a *API) UpdateVRSettings(vr VRSettings) {
 	a.update(func(s *Settings) { s.VR = vr })
 }
 
-// UpdateControlSettings replaces the control configuration and saves to disk.
-func (a *API) UpdateControlSettings(controls ControlSettings) {
-	a.update(func(s *Settings) { s.Controls = controls })
-}
-
-// UpdateDefaultMode saves the default playback mode to disk.
-func (a *API) UpdateDefaultMode(mode string) {
-	a.update(func(s *Settings) { s.Playback.DefaultMode = mode })
-}
-
 // UpdateAlwaysOnTop saves the always-on-top state to disk.
 func (a *API) UpdateAlwaysOnTop(enabled bool) {
 	a.update(func(s *Settings) { s.App.AlwaysOnTop = enabled })
 }
 
-// UpdateAppSettings replaces the application configuration and saves to disk.
-func (a *API) UpdateAppSettings(app AppSettings) {
-	a.update(func(s *Settings) { s.App = app })
+// DialogSettings は設定ダイアログが「保存」で一度に書く項目。
+// 音量・言語・ウィンドウ位置など、ダイアログの外で変わる項目は含めない
+// （ダイアログを開いた時点の古い値で上書きしないため）。
+type DialogSettings struct {
+	DefaultMode string            `json:"defaultMode"`
+	ActiveColor string            `json:"activeColor"`
+	VR          VRSettings        `json:"vr"`
+	Controls    ControlSettings   `json:"controls"`
+	App         AppSettings       `json:"app"`
+	ZoomInset   ZoomInsetSettings `json:"zoomInset"`
 }
 
-// UpdateZoomInsetSettings replaces the zoom inset appearance and saves to disk.
-func (a *API) UpdateZoomInsetSettings(z ZoomInsetSettings) {
-	a.update(func(s *Settings) { s.ZoomInset = z })
-}
-
-// UpdateActiveColor saves the UI active color to disk.
-func (a *API) UpdateActiveColor(color string) {
-	a.update(func(s *Settings) { s.Playback.ActiveColor = color })
+// UpdateDialogSettings saves everything edited in the settings dialog at once.
+// 項目ごとに呼ぶと保存（settings.json の書き出し）がその数だけ走るため、1回にまとめる。
+func (a *API) UpdateDialogSettings(d DialogSettings) {
+	a.update(func(s *Settings) {
+		s.Playback.DefaultMode = d.DefaultMode
+		s.Playback.ActiveColor = d.ActiveColor
+		s.VR = d.VR
+		s.Controls = d.Controls
+		s.App = d.App
+		s.ZoomInset = d.ZoomInset
+	})
 }
 
 // Quit signals QuitRequested so main can save the window state and exit.

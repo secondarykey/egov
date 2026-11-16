@@ -69,7 +69,8 @@ func TestSettingsStoreUpdateNormalizes(t *testing.T) {
 	vr.FOV = 0
 	vr.ShiftX = 99
 	a.UpdateVRSettings(vr)
-	a.UpdateControlSettings(ControlSettings{})
+	// ダイアログからの保存も同じく正規化される（ゼロ値の操作設定・空のモード名）
+	a.UpdateDialogSettings(DialogSettings{VR: a.GetSettings().VR})
 
 	got := a.GetSettings()
 	if got.VR.FOV != defaultSettings().VR.FOV {
@@ -80,6 +81,12 @@ func TestSettingsStoreUpdateNormalizes(t *testing.T) {
 	}
 	if got.Controls.ClickTimeoutMs != defaultSettings().Controls.ClickTimeoutMs {
 		t.Errorf("ClickTimeoutMs = %v, want default", got.Controls.ClickTimeoutMs)
+	}
+	if got.Playback.DefaultMode != defaultSettings().Playback.DefaultMode {
+		t.Errorf("DefaultMode = %q, want default", got.Playback.DefaultMode)
+	}
+	if got.Playback.Volume != defaultSettings().Playback.Volume {
+		t.Errorf("Volume = %v: ダイアログの保存がダイアログ外の項目を書き換えた", got.Playback.Volume)
 	}
 
 	// ディスクにも正規化後の値が書かれている

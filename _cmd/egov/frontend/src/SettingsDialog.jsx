@@ -6,8 +6,9 @@ import {
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import Draggable from 'react-draggable'
-import { GetDefaultSettings, GetSettings, GetVersion, UpdateActiveColor, UpdateAppSettings, UpdateControlSettings, UpdateDefaultMode, UpdateVRSettings, UpdateZoomInsetSettings } from '../bindings/egov/api'
+import { GetDefaultSettings, GetSettings, GetVersion, UpdateDialogSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
+import { ZOOM_FEATHER_MAX } from './player/utils'
 
 function DraggablePaper(props) {
   const nodeRef = useRef(null)
@@ -94,14 +95,14 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
   }, [open])
 
   const handleSave = async () => {
-    await Promise.all([
-      UpdateDefaultMode(playback.defaultMode),
-      UpdateActiveColor(playback.activeColor),
-      UpdateVRSettings(vr),
-      UpdateControlSettings(controls),
-      UpdateAppSettings(appSettings),
-      UpdateZoomInsetSettings(zoomInset),
-    ])
+    await UpdateDialogSettings({
+      defaultMode: playback.defaultMode,
+      activeColor: playback.activeColor,
+      vr,
+      controls,
+      app: appSettings,
+      zoomInset,
+    })
     onZoomInsetChange?.(zoomInset)
     onControlsChange?.(controls)
     if (playback.language !== origLanguage) {
@@ -206,10 +207,10 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
               label=""
             />
           </Row>
-          {/* 枠線を出すときは縁を透かさない。上限は Go 側 zoomFeatherMax と一致させる */}
+          {/* 枠線を出すときは縁を透かさない */}
           <SliderRow label={t('settings.playback.zoomInsetFeather')}
             value={zoomInset.feather} onChange={v => setZoomInset(z => ({ ...z, feather: v }))}
-            min={0} max={0.4} step={0.01}
+            min={0} max={ZOOM_FEATHER_MAX} step={0.01}
             format={v => `${Math.round(v * 100)}%`}
             disabled={zoomInset.border}
           />
