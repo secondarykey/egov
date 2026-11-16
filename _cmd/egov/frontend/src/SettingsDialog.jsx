@@ -51,7 +51,7 @@ function SliderRow({ label, value, onChange, min, max, step, format, disabled })
   )
 }
 
-export default function SettingsDialog({ open, onClose, availableLangs, onLanguageChange, activeColor: activeColorProp, onActiveColorChange, acceptInactiveClick: acceptInactiveProp, onAcceptInactiveClickChange, miniProgressBar: miniProgressProp, onMiniProgressBarChange, onZoomInsetChange, thumbEnabled: thumbEnabledProp, onThumbEnabledChange, onControlsChange }) {
+export default function SettingsDialog({ open, onClose, availableLangs, onLanguageChange, activeColor: activeColorProp, onActiveColorChange, acceptInactiveClick: acceptInactiveProp, onAcceptInactiveClickChange, miniProgressBar: miniProgressProp, onMiniProgressBarChange, onZoomInsetChange, thumbEnabled: thumbEnabledProp, onThumbEnabledChange, onControlsChange, onVrInputChange }) {
   const { t } = useTranslation()
   const [tab, setTab] = useState(0)
   const [version, setVersion] = useState('')
@@ -105,6 +105,7 @@ export default function SettingsDialog({ open, onClose, availableLangs, onLangua
     })
     onZoomInsetChange?.(zoomInset)
     onControlsChange?.(controls)
+    onVrInputChange?.({ dragSensitivity: vr.dragSensitivity, scrollSpeed: vr.scrollSpeed })
     if (playback.language !== origLanguage) {
       onLanguageChange?.(playback.language)
     }

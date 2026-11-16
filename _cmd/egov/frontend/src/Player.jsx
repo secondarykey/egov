@@ -204,6 +204,10 @@ export default function Player() {
 
   // 操作系設定を ref に反映する。起動時と設定ダイアログ保存時の両方から呼ばれる。
   const applyControlSettings = (c) => { controlSettingsRef.current = c }
+  // VR のドラッグ感度とホイール速度も同じく両方から呼ばれる
+  const applyVrInputSettings = (v) => {
+    vrInputRef.current = { dragSensitivity: v.dragSensitivity, scrollSpeed: v.scrollSpeed }
+  }
 
   useEffect(() => {
     // 設定値は Go 側で正規化済み（LoadSettings が不正値をデフォルトへ補正して
@@ -220,7 +224,7 @@ export default function Player() {
       appSettingsRef.current = s.app
       applyControlSettings(s.controls)
       // VR設定と起動時モードを反映
-      vrInputRef.current = { dragSensitivity: s.vr.dragSensitivity, scrollSpeed: s.vr.scrollSpeed }
+      applyVrInputSettings(s.vr)
       vr.loadSavedVrView(s.vr)
       setMode(p.defaultMode)
       setMiniProgress(s.app.miniProgressBar)
@@ -793,6 +797,7 @@ export default function Player() {
         onMiniProgressBarChange={(next) => setMiniProgress(next)}
         onZoomInsetChange={setZoomLook}
         onControlsChange={applyControlSettings}
+        onVrInputChange={applyVrInputSettings}
         thumbEnabled={thumbEnabled}
         onThumbEnabledChange={(next) => {
           setThumbEnabled(next)
