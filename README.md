@@ -17,7 +17,7 @@
 
 ## 構成
 
-[Wails3](https://v3.wails.io/)（Go バックエンド + React/TypeScript フロントエンド）製のデスクトップアプリです。
+[Wails3](https://v3.wails.io/)（Go バックエンド + React（JavaScript）フロントエンド）製のデスクトップアプリです。
 
 | パス | 内容 |
 |------|------|
