@@ -35,6 +35,15 @@ const RECOVER_WINDOW_MS = 60_000
 // 同じ位置で続けて落ちたときに読み飛ばす秒数（回数ごとに増やす）
 const RECOVER_SKIP_SECS = 2
 
+// 設定を読み込むまでの暫定値（Go の defaultSettings() と同じ値）。
+// 読み込み後は Go 側で正規化済みの値で丸ごと置き換わる
+const INITIAL_CONTROLS = {
+  clickTimeoutMs: 300, doubleClickSeekSecs: 10, dragSeekSecs: 10,
+  fastSeekSecs: 60, arrowSeekSecs: 5, thumbnailGridSize: 4,
+  uiHideDelayMs: 1500, uiHideOnLeaveDelayMs: 800,
+}
+const INITIAL_VR_INPUT = { dragSensitivity: 0.004, scrollSpeed: 0.05 }
+
 // プレイヤー本体。状態・設定・入力処理のオーケストレーターとして働き、
 // 描画は useThreeScene（Three.jsシーン）と player/ 以下の各コンポーネントに委譲する。
 export default function Player() {
@@ -60,6 +69,11 @@ export default function Player() {
   const vrSavedRef      = useRef(null)
   const vrDefaultsRef   = useRef(null)
   const loadSeqRef      = useRef(0)     // 形式推定の応答が前のファイルのものでないかの判定用
+  // 設定の写し。一度だけ登録するリスナーからも最新の値を読めるよう ref に持つ。
+  // 項目ごとに分けず、設定の形のまま丸ごと差し替える（applyControlSettings など）
+  const controlSettingsRef = useRef(INITIAL_CONTROLS)    // settings.controls
+  const vrInputRef         = useRef(INITIAL_VR_INPUT)    // settings.vr の dragSensitivity / scrollSpeed
+  const appSettingsRef     = useRef({ acceptInactiveClick: false })   // settings.app
   const feedbackKeyRef      = useRef(0)
   const clickTimerRef           = useRef(null)
   const holdTimerRef            = useRef(null)
@@ -70,24 +84,13 @@ export default function Player() {
   const seekZoneTimerRef        = useRef(null)
   const seekZoneRef             = useRef(null)
   const seekOverlayRef          = useRef(null)
-  const fastSeekSecsRef         = useRef(60)
   const seekFeedbackKeyRef  = useRef(0)
-  const clickTimeoutMsRef   = useRef(300)
-  const doubleClickSeekRef  = useRef(10)
-  const dragSeekSecsRef     = useRef(10)
-  const arrowSeekSecsRef    = useRef(5)
-  const thumbGridSizeRef    = useRef(4)
   const justFocusedRef      = useRef(false)
   const focusTimerRef       = useRef(null)
-  const acceptInactiveRef   = useRef(false)
   const vrFovRef            = useRef(75)          // 表示側の垂直画角（度）
   const vrSrcFovRef         = useRef(180)         // 素材の画角（度）
   const vrSrcProjRef        = useRef('equirect')  // 素材の投影方式
   const vrDispProjRef       = useRef('rectilinear')
-  const vrSensitivityRef    = useRef(0.004)
-  const vrScrollSpeedRef    = useRef(0.05)
-  const uiHideDelayRef      = useRef(1500)
-  const uiHideLeaveDelayRef = useRef(800)
   const lastPlayErrorRef    = useRef(null)   // 直近の play() 拒否理由（診断用）
   const filePathRef         = useRef('')     // 再生中ファイルのローカルパス（切り出し元）
   const rangeRef            = useRef(null)   // SeekBarArea が公開する { start, end }
@@ -322,7 +325,7 @@ export default function Player() {
           y: clamp(cur.y - (2 * dy) / height, -VR_SHIFT_LIMIT, VR_SHIFT_LIMIT),
         }
       } else {
-        const sensitivity = vrSensitivityRef.current
+        const sensitivity = vrInputRef.current.dragSensitivity
         // 向きは ref に保持し、モード切替やスライダー調整と整合させる
         vrYawRef.current   -= dx * sensitivity
         vrPitchRef.current  = clamp(vrPitchRef.current - dy * sensitivity, -Math.PI / 2, Math.PI / 2)
@@ -336,7 +339,7 @@ export default function Player() {
 
     const onWheel = (e) => {
       e.preventDefault()
-      vrFovRef.current = clamp(vrFovRef.current + e.deltaY * vrScrollSpeedRef.current, VR_FOV_MIN, VR_FOV_MAX)
+      vrFovRef.current = clamp(vrFovRef.current + e.deltaY * vrInputRef.current.scrollSpeed, VR_FOV_MIN, VR_FOV_MAX)
       syncVrView()
     }
 
@@ -629,16 +632,7 @@ export default function Player() {
   }
 
   // 操作系設定を ref に反映する。起動時と設定ダイアログ保存時の両方から呼ばれる。
-  const applyControlSettings = (c) => {
-    clickTimeoutMsRef.current   = c.clickTimeoutMs
-    doubleClickSeekRef.current  = c.doubleClickSeekSecs
-    dragSeekSecsRef.current     = c.dragSeekSecs
-    fastSeekSecsRef.current     = c.fastSeekSecs
-    arrowSeekSecsRef.current    = c.arrowSeekSecs
-    thumbGridSizeRef.current    = c.thumbnailGridSize
-    uiHideDelayRef.current      = c.uiHideDelayMs
-    uiHideLeaveDelayRef.current = c.uiHideOnLeaveDelayMs
-  }
+  const applyControlSettings = (c) => { controlSettingsRef.current = c }
 
   useEffect(() => {
     // 設定値は Go 側で正規化済み（LoadSettings が不正値をデフォルトへ補正して
@@ -652,11 +646,10 @@ export default function Player() {
       setLanguage(p.language)
       setActiveColor(p.activeColor)
       setAlwaysOnTop(s.app.alwaysOnTop)
-      acceptInactiveRef.current  = s.app.acceptInactiveClick
+      appSettingsRef.current = s.app
       applyControlSettings(s.controls)
       // VR設定と起動時モードを反映
-      vrSensitivityRef.current = s.vr.dragSensitivity
-      vrScrollSpeedRef.current = s.vr.scrollSpeed
+      vrInputRef.current = { dragSensitivity: s.vr.dragSensitivity, scrollSpeed: s.vr.scrollSpeed }
       const saved = {
         start:    s.vr.defaultStart,
         pitch:    deg2rad(s.vr.initialPitch),
@@ -777,7 +770,7 @@ export default function Player() {
         video.currentTime = target
       } else {
         if (e.repeat) return
-        doZoneSeek(arrowSeekSecsRef.current, forward)
+        doZoneSeek(controlSettingsRef.current.arrowSeekSecs, forward)
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -881,7 +874,7 @@ export default function Player() {
       setShowUI(true)
     } else if (showUI) {
       clearTimeout(hideTimer.current)
-      hideTimer.current = setTimeout(() => setShowUI(false), uiHideDelayRef.current)
+      hideTimer.current = setTimeout(() => setShowUI(false), controlSettingsRef.current.uiHideDelayMs)
     }
     // シークオーバーレイのゾーン検出（seekOverlay state が設定された後＝800ms経過後のみ）
     if (seekOverlay && isMouseHeldRef.current) {
@@ -890,13 +883,13 @@ export default function Player() {
       if (dy > 55) {
         stopZoneSeek()
       } else if (dx > 75) {
-        startZoneSeek(fastSeekSecsRef.current, true)
+        startZoneSeek(controlSettingsRef.current.fastSeekSecs, true)
       } else if (dx > 20) {
-        startZoneSeek(dragSeekSecsRef.current, true)
+        startZoneSeek(controlSettingsRef.current.dragSeekSecs, true)
       } else if (dx < -75) {
-        startZoneSeek(fastSeekSecsRef.current, false)
+        startZoneSeek(controlSettingsRef.current.fastSeekSecs, false)
       } else if (dx < -20) {
-        startZoneSeek(dragSeekSecsRef.current, false)
+        startZoneSeek(controlSettingsRef.current.dragSeekSecs, false)
       } else {
         stopZoneSeek()
       }
@@ -905,7 +898,7 @@ export default function Player() {
 
   const handleMouseLeave = () => {
     clearTimeout(hideTimer.current)
-    hideTimer.current = setTimeout(() => setShowUI(false), uiHideLeaveDelayRef.current)
+    hideTimer.current = setTimeout(() => setShowUI(false), controlSettingsRef.current.uiHideOnLeaveDelayMs)
     if (seekOverlayRef.current) hideSeekOverlay()
     setResizeCursor(null)
   }
@@ -1029,7 +1022,7 @@ export default function Player() {
     wasHoldRef.current = false
     const pos = { x: e.clientX, y: e.clientY }
     const now = Date.now()
-    const isDouble = e.detail >= 2 || (now - lastPointerDownTimeRef.current) <= clickTimeoutMsRef.current
+    const isDouble = e.detail >= 2 || (now - lastPointerDownTimeRef.current) <= controlSettingsRef.current.clickTimeoutMs
     lastPointerDownTimeRef.current = isDouble ? 0 : now
 
     // 画面中央（x > cx で前方向）を境にダブルクリックシークの方向を決める
@@ -1038,7 +1031,7 @@ export default function Player() {
     if (isDouble) {
       clearTimeout(clickTimerRef.current)
       clickTimerRef.current = null
-      doZoneSeek(doubleClickSeekRef.current, pos.x > cx)
+      doZoneSeek(controlSettingsRef.current.doubleClickSeekSecs, pos.x > cx)
     }
 
     clearTimeout(holdTimerRef.current)
@@ -1067,7 +1060,7 @@ export default function Player() {
       wasHoldRef.current = false
       return
     }
-    if (justFocusedRef.current && !acceptInactiveRef.current) {
+    if (justFocusedRef.current && !appSettingsRef.current.acceptInactiveClick) {
       justFocusedRef.current = false
       clearTimeout(focusTimerRef.current)
       return
@@ -1087,7 +1080,7 @@ export default function Player() {
       handlePlayPause()
       feedbackKeyRef.current++
       setClickFeedback({ type: willPlay ? 'play' : 'pause', key: feedbackKeyRef.current })
-    }, clickTimeoutMsRef.current)
+    }, controlSettingsRef.current.clickTimeoutMs)
   }
 
   // VRは投影し直した「見えている画」を、平面モードは動画フレームそのものを保存する。
@@ -1240,7 +1233,7 @@ export default function Player() {
   }
 
   // サムネイル一覧キャッシュのキー（動画src・分割数・回転が一致すれば再利用）
-  const thumbCacheKey = `${videoRef.current?.src ?? ''}|${thumbGridSizeRef.current}|${rotation}`
+  const thumbCacheKey = `${videoRef.current?.src ?? ''}|${controlSettingsRef.current.thumbnailGridSize}|${rotation}`
   const cachedThumbs  = thumbCacheRef.current?.key === thumbCacheKey ? thumbCacheRef.current.thumbs : null
   // 表示用アスペクト比（回転で縦横入れ替わる）
   const thumbVw = videoRef.current?.videoWidth  || 0
@@ -1312,8 +1305,8 @@ export default function Player() {
           overlay={seekOverlay}
           active={seekZoneActive}
           activeColor={activeColor}
-          fastSeekSecs={fastSeekSecsRef.current}
-          dragSeekSecs={dragSeekSecsRef.current}
+          fastSeekSecs={controlSettingsRef.current.fastSeekSecs}
+          dragSeekSecs={controlSettingsRef.current.dragSeekSecs}
         />
       )}
 
@@ -1500,7 +1493,7 @@ export default function Player() {
           src={videoRef.current?.src}
           duration={duration}
           rotation={rotation}
-          gridSize={thumbGridSizeRef.current}
+          gridSize={controlSettingsRef.current.thumbnailGridSize}
           aspect={thumbAspect}
           activeColor={activeColor}
           initialThumbs={cachedThumbs}
@@ -1529,8 +1522,8 @@ export default function Player() {
         onLanguageChange={handleLanguageChange}
         activeColor={activeColor}
         onActiveColorChange={handleActiveColorChange}
-        acceptInactiveClick={acceptInactiveRef.current}
-        onAcceptInactiveClickChange={(next) => { acceptInactiveRef.current = next }}
+        acceptInactiveClick={appSettingsRef.current.acceptInactiveClick}
+        onAcceptInactiveClickChange={(next) => { appSettingsRef.current = { ...appSettingsRef.current, acceptInactiveClick: next } }}
         miniProgressBar={miniProgress}
         onMiniProgressBarChange={(next) => setMiniProgress(next)}
         onZoomInsetChange={setZoomLook}
