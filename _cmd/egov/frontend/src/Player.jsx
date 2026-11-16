@@ -14,6 +14,7 @@ import SettingsDialog from './SettingsDialog'
 import useThreeScene from './player/useThreeScene'
 import useDropWatchdog from './player/useDropWatchdog'
 import usePointerSeek from './player/usePointerSeek'
+import useKeyboardShortcuts from './player/useKeyboardShortcuts'
 import AnimPlayer from './player/AnimPlayer'
 import TitleBar from './player/TitleBar'
 import ControlBar from './player/ControlBar'
@@ -163,6 +164,8 @@ export default function Player() {
     onPlayPause: () => handlePlayPause(),
   })
   const { doZoneSeek } = pointerSeek
+
+  useKeyboardShortcuts({ videoRef, videoElRef, detectedFpsRef, controlSettingsRef, doZoneSeek, setDiagOpen })
 
   // VR視点の ref をすべてシェーダの uniform へ反映する。
   // VRの状態は Player 側の ref を単一の真実とし、変更点はすべてここを通す。
@@ -683,75 +686,6 @@ export default function Player() {
     const onLoadedData = () => { recoveryRef.current.loaded = true }
     video.addEventListener('loadeddata', onLoadedData)
     return () => video.removeEventListener('loadeddata', onLoadedData)
-  }, [])
-
-  // 診断オーバーレイの開閉。Three.js の初期化が失敗していても使えるよう、
-  // video 要素に依存しない独立した effect にしている。
-  useEffect(() => {
-    const onKeyDown = (e) => {
-      if (e.ctrlKey && e.shiftKey && (e.key === 'D' || e.key === 'd')) {
-        e.preventDefault()
-        setDiagOpen(o => !o)
-      } else if (e.key === 'Escape') {
-        setDiagOpen(false)
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
-
-  useEffect(() => {
-    let frameSeeking = false
-    let frameSeekTimer = 0
-    // seeked を待つラッチ。解除されないままだと以後のコマ送り/戻しが
-    // すべて無視されるため、読み込み直しやエラーでも必ず解除する。
-    const clearFrameSeek = () => {
-      frameSeeking = false
-      clearTimeout(frameSeekTimer)
-    }
-    // コマ送りのラッチは本物の video 要素の seeked で解除する（AnimPlayer は stepFrame で別処理）
-    const video = videoElRef.current
-    video?.addEventListener('seeked', clearFrameSeek)
-    video?.addEventListener('emptied', clearFrameSeek)
-    video?.addEventListener('error', clearFrameSeek)
-
-    const onKeyDown = (e) => {
-      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
-      const media = videoRef.current
-      if (!media?.src) return
-      e.preventDefault()
-      const forward = e.key === 'ArrowRight'
-      if (media.paused && media.stepFrame) {
-        // アニメーション画像 はフレームの境界が分かっているのでそれを使う
-        media.stepFrame(forward ? 1 : -1)
-      } else if (media.paused) {
-        if (frameSeeking) return
-        // メタデータ未取得だと duration が NaN。代入しても seeked は来ない
-        if (!Number.isFinite(video.duration)) return
-        const fps = detectedFpsRef.current > 1 ? detectedFpsRef.current : 30
-        const step = 1 / fps
-        const target = Math.max(0, Math.min(video.duration, video.currentTime + (forward ? step : -step)))
-        // 先頭/終端でクランプされると currentTime が変化せず seeked が飛ばない。
-        // ここでラッチすると復帰不能になるので、シーク自体を行わない。
-        if (Math.abs(target - video.currentTime) < 1e-6) return
-        frameSeeking = true
-        // seeked が届かない状況への保険。ラッチが永久に残るのを防ぐ
-        frameSeekTimer = setTimeout(() => { frameSeeking = false }, 1000)
-        // シークで timeupdate が発火し、SeekBarArea 等が追従する
-        video.currentTime = target
-      } else {
-        if (e.repeat) return
-        doZoneSeek(controlSettingsRef.current.arrowSeekSecs, forward)
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => {
-      window.removeEventListener('keydown', onKeyDown)
-      clearTimeout(frameSeekTimer)
-      video?.removeEventListener('seeked', clearFrameSeek)
-      video?.removeEventListener('emptied', clearFrameSeek)
-      video?.removeEventListener('error', clearFrameSeek)
-    }
   }, [])
 
   // Wails3ランタイム（drag.js）のリサイズ判定と同じ境界でカーソル種別を計算する。
