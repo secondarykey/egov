@@ -63,7 +63,7 @@ WebView は `<img>` ならアニメーション画像を再生できるが、Web
 - `API.OpenAnimation(path)` が展開して `AnimStore` に1本だけ保持し、フレームはローカルファイル
   サーバの `/animframe?token=&id=&i=` で生の RGBA として配る（バインディングで []byte を返すと
   base64 の JSON になり毎フレームには重い）。`id` は開き直すたびに増え、古い id の要求は 410
-- Player は **`videoRef.current` を AnimPlayer に差し替える**。シークバー・時間表示・範囲ループ・
+- `useMediaLoader`（`openMedia()`）が **`videoRef.current` を AnimPlayer に差し替える**。シークバー・時間表示・範囲ループ・
   ダブルクリック／長押しシークは video 要素と同じプロパティとイベントで動く。
   本物の video 要素は `videoElRef`（診断オーバーレイ・コマ送りのラッチ・ループ初期値）
 - 画像と同じく VR は無効。サムネイル（ホバー／一覧）と音量も出さない。

@@ -23,7 +23,10 @@ UI の表示/非表示、再生系のボタン（音量・ループ・全画面�
 
 - **設定値**は Player が設定の形のまま ref に持ち（`controlSettingsRef`＝`settings.controls`、
   `vrInputRef`＝VR の感度とホイール速度、`appSettingsRef`＝`settings.app`）、フックへは ref を渡す。
-  項目ごとの ref に分けない。設定値は Go 側で正規化済みなので、フロントでのフォールバックは要らない
+  項目ごとの ref に分けない。起動時と設定ダイアログの保存時の両方で差し替える
+  （`applyControlSettings`・`applyVrInputSettings` など）。設定ダイアログに設定を足したら、
+  保存時にも Player へ渡すこと（渡し忘れると再起動するまで効かない）。
+  設定値は Go 側で正規化済みなので、フロントでのフォールバックは要らない
   （初期値の `INITIAL_CONTROLS` などは読み込みが終わるまでの暫定値）
 - **メディアを開いたときの片付け**（サムネイル・範囲ループ・VR からの退避）は Player の
   `handleMediaChange` が受ける。`useMediaLoader` は `onMediaChange({ kind, url })` を呼ぶだけ

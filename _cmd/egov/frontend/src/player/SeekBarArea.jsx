@@ -143,7 +143,7 @@ const SeekBarArea = memo(function SeekBarArea({
   }
 
   // ピック（クリック）で選択状態＝フォーカスにし、←/→ で1秒ずつ微調整する。
-  // stopPropagation で Player 側のコマ送り/シークのキー操作を抑止する。
+  // stopPropagation で Player 側のコマ送り/シークのキー操作（useKeyboardShortcuts）を抑止する。
   const handleMarkerKeyDown = (setPoint, point, otherPoint, e) => {
     if (e.key === 'Escape') { e.currentTarget.blur(); return }
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return

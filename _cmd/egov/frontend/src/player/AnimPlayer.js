@@ -1,7 +1,7 @@
 // アニメーション画像（WebP / GIF / APNG）を HTMLVideoElement と同じ顔で再生するプレーヤー。
 //
 // フレームは Go 側（API.OpenAnimation）で合成済みの RGBA として保持されており、
-// /animframe から1枚ずつ取り寄せて自前の canvas へ描く。Player は videoRef.current を
+// /animframe から1枚ずつ取り寄せて自前の canvas へ描く。useMediaLoader が videoRef.current を
 // これに差し替えるだけで、シークバー・時間表示・範囲ループ・ダブルクリックシークなど
 // video 要素前提の処理をそのまま使える。対応しているのはそれらが触る範囲
 // （currentTime / duration / paused / loop / play() / pause() と
@@ -66,7 +66,7 @@ export default class AnimPlayer extends EventTarget {
     this._request(this._frameAt(this._time))
   }
 
-  // Player のコマ送り（←/→）用。一時停止中に1フレームずつ動かす
+  // コマ送り（←/→、useKeyboardShortcuts）用。一時停止中に1フレームずつ動かす
   stepFrame(dir) {
     const i = Math.max(0, Math.min(this.frameCount - 1, this._frameAt(this._time) + dir))
     this.currentTime = this._starts[i]
