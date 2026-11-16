@@ -64,6 +64,7 @@ wails3 generate bindings -f '' -clean=true
 | [`_docs/vr-projection.md`](_docs/vr-projection.md) | VR投影シェーダ、素材形式の推定、色空間、視点の保存とリセット |
 | [`_docs/images-and-animations.md`](_docs/images-and-animations.md) | 静止画、アニメーション画像（WebP/GIF/APNG）の展開と再生、アニメーション AVIF |
 | [`_docs/range-extract.md`](_docs/range-extract.md) | MP4 の無劣化切り出し（`internal/mp4cut`）と UI |
+| [`_docs/player-split.md`](_docs/player-split.md) | `Player.jsx` の分割計画（作業の引き継ぎ用。`Player.jsx` を大きく触る前に読む） |
 
 ## 守ること
 
