@@ -7,7 +7,7 @@ import GridViewIcon from '@mui/icons-material/GridView'
 import FitScreenIcon from '@mui/icons-material/FitScreen'
 import ZoomInIcon from '@mui/icons-material/ZoomIn'
 import { Dialogs, Events, Window } from '@wailsio/runtime'
-import { CanExtract, CloseAnimation, DetectVRFormat, MediaFilePattern, OpenAnimation, OpenLocalFile, ExtractRange, SuggestExtractTarget, GetInitialFile, GetServerURL, GetSettings, UpdateAlwaysOnTop, UpdatePlaybackSettings } from '../bindings/egov/api'
+import { ExtractRange, SuggestExtractTarget, GetInitialFile, GetServerURL, GetSettings, UpdateAlwaysOnTop, UpdatePlaybackSettings } from '../bindings/egov/api'
 import { useTranslation } from 'react-i18next'
 import { loadLanguages } from './languages'
 import SettingsDialog from './SettingsDialog'
@@ -16,7 +16,7 @@ import useDropWatchdog from './player/useDropWatchdog'
 import usePointerSeek from './player/usePointerSeek'
 import useKeyboardShortcuts from './player/useKeyboardShortcuts'
 import useVrView from './player/useVrView'
-import AnimPlayer from './player/AnimPlayer'
+import useMediaLoader from './player/useMediaLoader'
 import TitleBar from './player/TitleBar'
 import ControlBar from './player/ControlBar'
 import MiniProgressBar from './player/MiniProgressBar'
@@ -25,14 +25,7 @@ import VrViewpointOverlay from './player/VrViewpointOverlay'
 import DiagnosticsOverlay from './player/DiagnosticsOverlay'
 import ZoomInset from './player/ZoomInset'
 import { ClickFeedback, DropHint, EmptyState, SeekFeedback, SeekZoneOverlay, VideoErrorOverlay } from './player/Overlays'
-import { barStyle, clamp, fmt, isImagePath, mayBeAnimatedPath } from './player/utils'
-
-// 再生中のデコードエラーからの自動復旧。この時間内に RECOVER_MAX 回を超えて
-// 落ちるならファイル側の問題とみなし、エラー表示（手動の読み込み直し）に任せる
-const RECOVER_MAX       = 3
-const RECOVER_WINDOW_MS = 60_000
-// 同じ位置で続けて落ちたときに読み飛ばす秒数（回数ごとに増やす）
-const RECOVER_SKIP_SECS = 2
+import { barStyle, clamp, fmt } from './player/utils'
 
 // 設定を読み込むまでの暫定値（Go の defaultSettings() と同じ値）。
 // 読み込み後は Go 側で正規化済みの値で丸ごと置き換わる
@@ -53,28 +46,15 @@ export default function Player() {
   const thumbCanvasRef  = useRef(null)
   const thumbEnabledRef = useRef(true)
   const thumbCacheRef   = useRef(null)   // { key, thumbs } 同一動画・分割数・回転のサムネイル一覧キャッシュ
-  const loadSeqRef      = useRef(0)     // 形式推定の応答が前のファイルのものでないかの判定用
   // 設定の写し。一度だけ登録するリスナーからも最新の値を読めるよう ref に持つ。
   // 項目ごとに分けず、設定の形のまま丸ごと差し替える（applyControlSettings など）
   const controlSettingsRef = useRef(INITIAL_CONTROLS)    // settings.controls
   const vrInputRef         = useRef(INITIAL_VR_INPUT)    // settings.vr の dragSensitivity / scrollSpeed
   const appSettingsRef     = useRef({ acceptInactiveClick: false })   // settings.app
-  const lastPlayErrorRef    = useRef(null)   // 直近の play() 拒否理由（診断用）
-  const filePathRef         = useRef('')     // 再生中ファイルのローカルパス（切り出し元）
   const rangeRef            = useRef(null)   // SeekBarArea が公開する { start, end }
-  const mediaKindRef        = useRef('video')   // 'video' | 'image' | 'anim'（アニメーション画像）
-  const animRef             = useRef(null)   // 再生中の AnimPlayer
   const thumbHoverRef       = useRef(true)   // シークバーのホバーサムネイルを出すか（設定 ON かつ本物の動画）
   const zoomInsetStateRef   = useRef(null)   // 小窓ズームの位置と切り抜く範囲（VR を挟んでも保つ）
-  // デコードエラーからの復旧状態（reloadMedia）。ファイルを開くたびに作り直す
-  //   loaded   … このファイルで一度でもフレームが出たか（出ていなければ復旧しない）
-  //   attempts / at … 直近の自動復旧の回数と時刻
-  //   failPos  … 前回落ちた再生位置（同じ所で落ち続けるなら読み飛ばす）
-  //   resumeAt … 読み込み直し中の再開位置。読み込み直しの途中で再び落ちたときに使う
-  //   onMeta   … 読み込み直し後に位置を戻す loadedmetadata のリスナー
-  const newRecovery = () => ({ loaded: false, attempts: 0, at: 0, failPos: -1, resumeAt: null, onMeta: null })
-  const recoveryRef         = useRef(newRecovery())
-  const reloadMediaRef      = useRef(null)
+  const reloadMediaRef      = useRef(null)   // 最新の reloadMedia（useMediaLoader が描画ごとに入れる）
   const [miniProgress, setMiniProgress] = useState(false)
 
   const [paused,      setPaused]      = useState(true)
@@ -82,7 +62,6 @@ export default function Player() {
   const [videoEl,     setVideoEl]     = useState(null)   // 子コンポーネントが timeupdate を購読するため
   const [volume,      setVolume]      = useState(0.5)
   const [muted,       setMuted]       = useState(false)
-  const [fileName,    setFileName]    = useState('')
   const [showUI,      setShowUI]      = useState(false)
   const [resizeCursor, setResizeCursor] = useState(null)   // Wails3リサイズ判定領域内で明示すべきカーソル種別
   const [mode,        setMode]        = useState('normal')   // normal=ウィンドウフィット / free=自由パン・ズーム / vr
@@ -100,11 +79,8 @@ export default function Player() {
   const [rotation,       setRotation]       = useState(0)
   const [thumbGridOpen,  setThumbGridOpen]  = useState(false)
   const [diagOpen,       setDiagOpen]       = useState(false)   // Ctrl+Shift+D の診断オーバーレイ
-  const [canExtract,     setCanExtract]     = useState(false)   // 無劣化切り出しが可能なコンテナか
   const [extracting,     setExtracting]     = useState(false)
   const [notice,         setNotice]         = useState(null)    // Snackbar 通知 { severity, text, busy? }
-  const [isImage,        setIsImage]        = useState(false)   // 静止画を表示中か（VR・再生系UIを無効にする）
-  const [isAnim,         setIsAnim]         = useState(false)   // アニメーション画像を再生中か（VR・サムネイル系を無効にする）
   const [zoomInset,      setZoomInset]      = useState(false)   // 小窓ズーム（normal / free のみ）
   const [zoomLook,       setZoomLook]       = useState({ border: false, feather: 0.12 })   // 小窓ズームの見た目（settings.zoomInset）
 
@@ -195,226 +171,36 @@ export default function Player() {
   // 範囲の解除・初期化は SeekBarArea 側の effect が行う
   const resetRangeLoop = () => setRangeLoop(false)
 
-  // play() は自動再生ポリシー等で拒否されることがある。
-  // 拒否時は楽観的に false にした paused 状態を停止へ戻す。
-  //
-  // 特に Linux の WebKitGTK はミュートしていないメディアの自動再生に
-  // ユーザー操作を要求するため、ファイルを開いた直後の play() は
-  // NotAllowedError で必ず拒否される（Wails v3 alpha2.114 時点で
-  // EnableAutoplayWithoutUserAction は darwin/iOS 専用でLinuxには無い）。
-  // この場合クリック等の操作で再生できるので、停止状態に戻すだけでよい。
-  const safePlay = (video) => {
-    video.play().catch((err) => {
-      lastPlayErrorRef.current = `${err?.name || 'Error'}: ${err?.message || err}`
-      console.warn('video.play() rejected:', err)
-      setPaused(true)
-    })
-  }
-
-  // 再生途中のデコードエラーから復旧する。返り値 true = 読み込み直した（エラーは出さない）。
-  //
-  // 負荷が高いときなどに途中でデコーダが落ちると（MEDIA_ERR_DECODE）、video 要素は
-  // エラー状態のまま固まり、以後の play() もシークも一切効かなくなる。
-  // 同じ src で load() し直し、落ちた位置から再開する。
-  // manual=true はエラー表示のボタンや再生操作から。回数制限を外して必ず読み直す。
-  const reloadMedia = (manual) => {
-    const video = videoElRef.current
-    const r = recoveryRef.current
-    if (!video || mediaKindRef.current !== 'video' || !video.getAttribute('src')) return false
-
-    // 読み込み直しの途中で落ちた場合は currentTime が 0 に戻っているので、目指していた位置を使う
-    let pos = r.resumeAt ?? video.currentTime
-    if (!Number.isFinite(pos)) pos = 0
-
-    if (manual) {
-      r.attempts = 0
-    } else {
-      const code = video.error?.code
-      if (code !== MediaError.MEDIA_ERR_DECODE && code !== MediaError.MEDIA_ERR_NETWORK) return false
-      // 一度も映せていないファイルは中身が壊れているか未対応なので、読み直しても同じ
-      if (!r.loaded) return false
-      const now = Date.now()
-      if (now - r.at > RECOVER_WINDOW_MS) r.attempts = 0
-      if (r.attempts >= RECOVER_MAX) return false
-      r.attempts++
-      r.at = now
-      // 前回落ちた所から先へ進めていないならデータ自体が壊れている。少しずつ先へ読み飛ばす
-      if (r.attempts > 1 && Math.abs(pos - r.failPos) < RECOVER_SKIP_SECS * r.attempts) {
-        pos = r.failPos + RECOVER_SKIP_SECS * (r.attempts - 1)
-      } else {
-        r.failPos = pos
-      }
-    }
-    if (Number.isFinite(video.duration)) pos = Math.min(pos, Math.max(0, video.duration - 0.5))
-
-    // 手動のときは再生を望んでいるとみなす。自動のときは落ちる前の状態に戻す
-    const resumePlay = manual || !video.paused
-    const seq = loadSeqRef.current
-    if (r.onMeta) video.removeEventListener('loadedmetadata', r.onMeta)
-    r.resumeAt = pos
-    r.onMeta = () => {
-      r.onMeta = null
-      if (seq !== loadSeqRef.current) return   // 待っている間に別のファイルが開かれた
-      r.resumeAt = null
-      video.currentTime = pos
-      if (resumePlay) { safePlay(video); setPaused(false) }
-      else            setPaused(true)
-    }
-    video.addEventListener('loadedmetadata', r.onMeta, { once: true })
-    video.load()
-    setVideoError(null)
-    if (!manual) setNotice({ severity: 'info', text: t('error.recovered') })
-    return true
-  }
-  reloadMediaRef.current = reloadMedia
-
-  // ファイルから素材の形式（始点・投影方式・画角）を推定し、VR の既定へ重ねる（useVrView.applySourceFormat）
-  const applyDetectedFormat = async (pathOrName, seq) => {
-    let f = {}
-    try {
-      f = await DetectVRFormat(pathOrName) ?? {}
-    } catch (err) {
-      console.warn('DetectVRFormat failed:', err)
-    }
-    if (seq !== loadSeqRef.current) return
-    vr.applySourceFormat(f)
-  }
-
-  // 動画・画像の読み込みの共通部分。
-  // 画像のときは video 要素を空にする。以後の再生・シーク・コマ送り・サムネイルは
-  // すべて video.src の有無で早期 return するので、個別に分岐しなくて済む。
-  //
-  // アニメーション画像（WebP / GIF / APNG）は Go 側で全フレームを展開し、AnimPlayer（video 要素と同じ
-  // インターフェース）を videoRef.current に差し替えて動画として扱う。
-  const openMedia = async ({ url, name, path, image }) => {
-    const video = videoElRef.current
-    // Three.js の初期化に失敗している場合は video 要素が存在しない。
-    // ここで例外にせず、初期化失敗のエラー表示をそのまま残す。
-    if (!video) return
-    const seq = ++loadSeqRef.current
-
-    let anim = null
-    if (image && path && mayBeAnimatedPath(path)) {
-      try {
-        const info = await OpenAnimation(path)
-        if (info?.animated) anim = info
-        // アニメーション AVIF は中身が MP4 と同じ構造で、video 要素がそのまま再生できる
-        if (info?.asVideo) image = false
-      } catch (err) {
-        console.warn('OpenAnimation failed:', err)
-        setNotice({ severity: 'warning', text: t('anim.fallback', { msg: err?.message ?? String(err) }) })
-      }
-      if (seq !== loadSeqRef.current) return
-    } else if (mediaKindRef.current === 'anim') {
-      CloseAnimation()   // 展開済みフレームを解放する
-    }
-    const kind = anim ? 'anim' : image ? 'image' : 'video'
-
-    animRef.current?.dispose()
-    animRef.current = null
-    if (recoveryRef.current.onMeta) video.removeEventListener('loadedmetadata', recoveryRef.current.onMeta)
-    recoveryRef.current = newRecovery()
-    mediaKindRef.current = kind
+  // メディアを開いたときにプレイヤー側で片付けるもの（useMediaLoader から呼ばれる）。
+  // 一度だけ登録するリスナー経由で初回の関数のまま呼ばれるので、ref と setter だけを使う
+  const handleMediaChange = ({ kind, url }) => {
     thumbHoverRef.current = thumbEnabledRef.current && kind === 'video'
-    setVideoError(null)
     thumbCacheRef.current = null
-    setFileName(name)
-    filePathRef.current = path
-    setCanExtract(false)
-    setIsImage(kind === 'image')
-    setIsAnim(kind === 'anim')
     resetRangeLoop()
-
-    if (kind !== 'video') {
-      video.pause()
-      video.removeAttribute('src')
-      video.load()
-      const thumb = thumbVideoRef.current
-      if (thumb?.getAttribute('src')) {
-        thumb.removeAttribute('src')
-        thumb.load()
-      }
-      setThumbGridOpen(false)
-      // 画像・アニメーションは VR に対応しない（VRシェーダは VideoTexture 前提）
-      setMode(m => (m === 'vr' ? 'normal' : m))
-    }
-
-    if (kind === 'anim') {
-      const u = new URL(url)
-      const token = u.searchParams.get('token')
-      const player = new AnimPlayer({
-        info: anim,
-        src: url,
-        loop: video.loop,   // ループ設定は video 要素側にも揃えて持っている（handleLoopToggle）
-        frameUrl: (i) => `${u.origin}/animframe?token=${encodeURIComponent(token)}&id=${anim.id}&i=${i}`,
-        onFrame: () => refreshCanvasRef.current?.(),
-        onError: setVideoError,
-      })
-      animRef.current  = player
-      videoRef.current = player
-      setVideoEl(player)
-      showCanvasRef.current?.(player.canvas)
-      setDuration(player.duration)
-      safePlay(player)
-      setPaused(false)
+    const thumb = thumbVideoRef.current
+    if (kind === 'video') {
+      if (thumbEnabledRef.current && thumb) thumb.src = url
       return
     }
-
-    videoRef.current = video
-    setVideoEl(video)
-
-    if (kind === 'image') {
-      setPaused(true)
-      setDuration(0)
-      const img = new Image()
-      img.crossOrigin = 'anonymous'
-      img.src = url
-      img.decode().then(
-        () => { if (seq === loadSeqRef.current) showImageRef.current?.(img) },
-        () => { if (seq === loadSeqRef.current) setVideoError('IMAGE_DECODE_FAILED') },
-      )
-      return
+    if (thumb?.getAttribute('src')) {
+      thumb.removeAttribute('src')
+      thumb.load()
     }
-
-    showVideoRef.current?.()
-    video.src = url
-    if (thumbEnabledRef.current && thumbVideoRef.current) thumbVideoRef.current.src = url
-    safePlay(video)
-    setPaused(false)
-    if (path) CanExtract(path).then(setCanExtract)
-    applyDetectedFormat(path || name, seq)
+    setThumbGridOpen(false)
+    // 画像・アニメーションは VR に対応しない（VRシェーダは VideoTexture 前提）
+    setMode(m => (m === 'vr' ? 'normal' : m))
   }
 
-  // ファイル選択ダイアログ。<input type="file"> はブラウザの制約でパスが取れず
-  // （中身の Blob しか渡らない）、アニメーション画像の展開・無劣化切り出し・
-  // VR形式の推定といった Go 側の処理ができないため、Wails のダイアログでパスを受け取る。
-  // 見た目はどちらも OS 標準のダイアログ。
-  const handleOpenFile = async () => {
-    try {
-      const path = await Dialogs.OpenFile({
-        Title: t('menu.openFile'),
-        Filters: [{ DisplayName: t('menu.mediaFiles'), Pattern: await MediaFilePattern() }],
-        CanChooseFiles: true,
-      })
-      if (!path) return   // キャンセル
-      loadFilePath(await OpenLocalFile(path))
-    } catch (err) {
-      console.error('open file failed:', err)
-      setNotice({ severity: 'error', text: t('menu.openFailed', { msg: err?.message ?? String(err) }) })
-    }
-  }
-
-  const loadFilePath = (fileUrl) => {
-    if (!fileUrl) return
-    if (!videoRef.current) return
-    const filePath = new URL(fileUrl).searchParams.get('path') ?? ''
-    openMedia({
-      url: fileUrl,
-      name: filePath.split(/[\\/]/).pop(),
-      path: filePath,
-      image: isImagePath(filePath),
-    })
-  }
+  // メディア（動画・静止画・アニメーション画像）を開く・読み込み直す
+  const {
+    fileName, canExtract, isImage, isAnim,
+    filePathRef, mediaKindRef, lastPlayErrorRef,
+    loadFilePath, handleOpenFile, reloadMedia, safePlay,
+  } = useMediaLoader({
+    videoRef, videoElRef, showImageRef, showVideoRef, showCanvasRef, refreshCanvasRef,
+    setPaused, setDuration, setVideoEl, setVideoError, setNotice,
+    reloadMediaRef, applySourceFormat: vr.applySourceFormat, onMediaChange: handleMediaChange,
+  })
 
   // 操作系設定を ref に反映する。起動時と設定ダイアログ保存時の両方から呼ばれる。
   const applyControlSettings = (c) => { controlSettingsRef.current = c }
@@ -457,15 +243,6 @@ export default function Player() {
       settingsReady.then(() => loadFilePath(event.data))
     })
     return unsub
-  }, [])
-
-  // 一度でもフレームが出たファイルだけをデコードエラーからの自動復旧の対象にする（reloadMedia）
-  useEffect(() => {
-    const video = videoElRef.current
-    if (!video) return
-    const onLoadedData = () => { recoveryRef.current.loaded = true }
-    video.addEventListener('loadeddata', onLoadedData)
-    return () => video.removeEventListener('loadeddata', onLoadedData)
   }, [])
 
   // Wails3ランタイム（drag.js）のリサイズ判定と同じ境界でカーソル種別を計算する。
