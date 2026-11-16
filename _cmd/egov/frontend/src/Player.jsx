@@ -94,7 +94,7 @@ export default function Player() {
   // Three.js シーン（生成・破棄・描画ループはフック側が担う）
   const {
     mountRef, videoRef, cameraRef, controlsRef, planeRef,
-    textureRef, fitCameraRef, rendererRef,
+    fitCameraRef, rendererRef,
     vrUniformsRef, syncVrSizeRef,
     requestRenderRef, captureRef, detectedFpsRef,
     frameCountRef, renderCountRef, renderPathRef,

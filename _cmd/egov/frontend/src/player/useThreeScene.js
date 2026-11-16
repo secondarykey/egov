@@ -17,7 +17,6 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
   const cameraRef      = useRef(null)
   const controlsRef    = useRef(null)
   const planeRef       = useRef(null)
-  const textureRef     = useRef(null)
   const fitCameraRef   = useRef(null)
   const rendererRef    = useRef(null)
   const vrUniformsRef  = useRef(null)     // VRシェーダの uniform（Player が視点を書き込む）
@@ -82,7 +81,6 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
 
     const texture = new THREE.VideoTexture(video)
     texture.colorSpace = THREE.SRGBColorSpace
-    textureRef.current = texture
 
     // VR: フルスクリーンquad へシェーダで直接投影する（vrShader.js 参照）。
     // 平面モードとはシーンもカメラも別で、renderOnce が描画先を切り替える。
@@ -425,7 +423,7 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
 
   return {
     mountRef, videoRef, cameraRef, controlsRef, planeRef,
-    textureRef, fitCameraRef, rendererRef,
+    fitCameraRef, rendererRef,
     vrUniformsRef, syncVrSizeRef,
     requestRenderRef, captureRef, detectedFpsRef,
     frameCountRef, renderCountRef, renderPathRef,
