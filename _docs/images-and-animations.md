@@ -65,7 +65,7 @@ WebView は `<img>` ならアニメーション画像を再生できるが、Web
   base64 の JSON になり毎フレームには重い）。`id` は開き直すたびに増え、古い id の要求は 410
 - `useMediaLoader`（`openMedia()`）が **`videoRef.current` を AnimPlayer に差し替える**。シークバー・時間表示・範囲ループ・
   ダブルクリック／長押しシークは video 要素と同じプロパティとイベントで動く。
-  本物の video 要素は `videoElRef`（診断オーバーレイ・コマ送りのラッチ・ループ初期値）
+  本物の video 要素は `videoElRef`（診断オーバーレイ・コマ送りのラッチ・ループと再生速度の初期値）
 - 画像と同じく VR は無効。サムネイル（ホバー／一覧）と音量も出さない。
   ホバーサムネイルの可否は設定値そのものではなく `thumbHoverRef` を SeekBarArea へ渡している
 - 描画は canvas を `imageTexture` に貼り、フレームを描き換えるたびに `refreshCanvasRef` で

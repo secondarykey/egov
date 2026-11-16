@@ -197,6 +197,7 @@ export default function useMediaLoader({
         info: anim,
         src: url,
         loop: video.loop,   // ループ設定は video 要素側にも揃えて持っている（handleLoopToggle）
+        playbackRate: video.defaultPlaybackRate,   // 再生速度も同じ（handlePlaybackRateChange）
         frameUrl: (i) => `${u.origin}/animframe?token=${encodeURIComponent(token)}&id=${anim.id}&i=${i}`,
         onFrame: () => refreshCanvasRef.current?.(),
         onError: setVideoError,

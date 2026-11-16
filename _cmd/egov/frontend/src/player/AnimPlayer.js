@@ -4,7 +4,7 @@
 // /animframe から1枚ずつ取り寄せて自前の canvas へ描く。useMediaLoader が videoRef.current を
 // これに差し替えるだけで、シークバー・時間表示・範囲ループ・ダブルクリックシークなど
 // video 要素前提の処理をそのまま使える。対応しているのはそれらが触る範囲
-// （currentTime / duration / paused / loop / play() / pause() と
+// （currentTime / duration / paused / loop / playbackRate / play() / pause() と
 // play・pause・seeked・timeupdate・ended・loadeddata イベント）だけ。
 // 音声は無いので volume / muted は値を保持するだけ。
 
@@ -14,7 +14,7 @@ const TIMEUPDATE_MS  = 250   // video 要素と同程度の頻度で timeupdate 
 export default class AnimPlayer extends EventTarget {
   // info: API.OpenAnimation の戻り値 / frameUrl(i): フレーム取得URL
   // onFrame(): canvas を描き換えた直後に呼ぶ（テクスチャ更新用）
-  constructor({ info, src, frameUrl, loop, onFrame, onError }) {
+  constructor({ info, src, frameUrl, loop, playbackRate = 1, onFrame, onError }) {
     super()
     this.src         = src
     this.videoWidth  = info.width
@@ -47,7 +47,8 @@ export default class AnimPlayer extends EventTarget {
     this._loading  = -1       // 取り寄せ中のフレーム
     this._cache    = new Map()   // i -> ImageData（挿入順を LRU に使う）
     this._seekPending = false
-    this._clockBase   = 0     // 再生中: performance.now() - currentTime*1000
+    this._rate        = playbackRate > 0 ? playbackRate : 1
+    this._clockBase   = 0     // 再生中: performance.now() - currentTime*1000/_rate
     this._raf         = null
     this._lastTimeupdate = 0
     this._disposed    = false
@@ -56,11 +57,25 @@ export default class AnimPlayer extends EventTarget {
   }
 
   get currentTime() { return this._time }
+
+  get playbackRate() { return this._rate }
+  set playbackRate(r) {
+    r = Number(r)
+    if (!(r > 0)) return
+    this._rate = r
+    // 再生中は今の位置を基準に時計を取り直す（取り直さないと位置が跳ぶ）
+    if (!this.paused) this._syncClock(performance.now())
+  }
+
+  // 再生中の時計（_clockBase）を今の位置と速度に合わせる
+  _syncClock(now) {
+    this._clockBase = now - this._time * 1000 / this._rate
+  }
   set currentTime(t) {
     if (this._disposed) return
     this._time  = Math.max(0, Math.min(this.duration, Number(t) || 0))
     this.ended  = false
-    if (!this.paused) this._clockBase = performance.now() - this._time * 1000
+    if (!this.paused) this._syncClock(performance.now())
     // video 要素は同じフレームへのシークでも seeked を出すので揃える
     this._seekPending = true
     this._request(this._frameAt(this._time))
@@ -78,7 +93,7 @@ export default class AnimPlayer extends EventTarget {
     this.ended  = false
     if (this.paused) {
       this.paused = false
-      this._clockBase = performance.now() - this._time * 1000
+      this._syncClock(performance.now())
       this._emit('play')
       this._emit('playing')
       this._raf = requestAnimationFrame(this._tick)
@@ -102,11 +117,12 @@ export default class AnimPlayer extends EventTarget {
 
   _tick = (now) => {
     if (this.paused || this._disposed) return
-    let t = (now - this._clockBase) / 1000
+    let t = (now - this._clockBase) * this._rate / 1000
     if (t >= this.duration) {
       if (this.loop) {
         t %= this.duration
-        this._clockBase = now - t * 1000
+        this._time = t
+        this._syncClock(now)
       } else {
         this._time = this.duration
         this.paused = true

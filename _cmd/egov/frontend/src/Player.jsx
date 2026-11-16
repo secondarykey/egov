@@ -74,6 +74,7 @@ export default function Player() {
   const [alwaysOnTop,    setAlwaysOnTop]    = useState(false)
   const [fullscreen,     setFullscreen]     = useState(false)
   const [loop,           setLoop]           = useState(true)
+  const [playbackRate,   setPlaybackRate]   = useState(1)       // 起動中だけ持つ（設定へは書かない）
   const [videoError,     setVideoError]     = useState(null)
   const [rangeLoop,      setRangeLoop]      = useState(false)
   const [rotation,       setRotation]       = useState(0)
@@ -457,6 +458,18 @@ export default function Player() {
     if (videoElRef.current) videoElRef.current.loop = next
   }
 
+  // 再生速度。ファイルを替えても引き継ぐので、video 要素の defaultPlaybackRate にも持たせる
+  // （load() で playbackRate は defaultPlaybackRate へ戻る。AnimPlayer はここから初期値を取る）
+  const handlePlaybackRateChange = (rate) => {
+    setPlaybackRate(rate)
+    if (videoRef.current) videoRef.current.playbackRate = rate
+    const el = videoElRef.current
+    if (el) {
+      el.defaultPlaybackRate = rate
+      el.playbackRate = rate
+    }
+  }
+
   const handleRangeLoopToggle = () => setRangeLoop(r => !r)
 
   const handleFullscreenToggle = () => {
@@ -649,6 +662,8 @@ export default function Player() {
         onFullscreenToggle={handleFullscreenToggle}
         loop={loop}
         onLoopToggle={handleLoopToggle}
+        playbackRate={playbackRate}
+        onPlaybackRateChange={handlePlaybackRateChange}
         rangeLoop={rangeLoop}
         onRangeLoopToggle={handleRangeLoopToggle}
         activeColor={activeColor}

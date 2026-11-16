@@ -1,4 +1,6 @@
-import { Box, Collapse, IconButton, Slider, Stack, Tooltip, Typography } from '@mui/material'
+import { useState } from 'react'
+import { Box, Collapse, IconButton, Menu, MenuItem, Slider, Stack, Tooltip, Typography } from '@mui/material'
+import CheckIcon          from '@mui/icons-material/Check'
 import PlayArrowIcon      from '@mui/icons-material/PlayArrow'
 import PauseIcon          from '@mui/icons-material/Pause'
 import VolumeUpIcon       from '@mui/icons-material/VolumeUp'
@@ -13,12 +15,14 @@ import VideoInfoPanel from './VideoInfoPanel'
 import TimeDisplay from './TimeDisplay'
 import { barStyle } from './utils'
 
+const PLAYBACK_RATES = [0.5, 1, 1.5, 2]
+
 // 下部コントロールバー（シークバー・再生操作・音量・ファイル名・全画面）。
 export default function ControlBar({
   showUI, image, silent, video, duration, paused, onPlayPause,
   muted, onMuteToggle, volume, onVolumeChange, onVolumeCommitted,
   fileName, filePath, fullscreen, onFullscreenToggle,
-  loop, onLoopToggle, rangeLoop, onRangeLoopToggle, activeColor,
+  loop, onLoopToggle, playbackRate, onPlaybackRateChange, rangeLoop, onRangeLoopToggle, activeColor,
   thumbVideoRef, thumbCanvasRef, thumbEnabledRef, modeRef, vrStartRef,
   rangeRef,
 }) {
@@ -90,6 +94,7 @@ export default function ControlBar({
         </Typography>
         {!image && (<>
         <VideoInfoPanel video={video} duration={duration} fileName={fileName} filePath={filePath} />
+        <PlaybackRateButton rate={playbackRate} onChange={onPlaybackRateChange} activeColor={activeColor} />
         <Tooltip title={loop ? t('controls.loopOn') : t('controls.loopOff')} placement="top">
           <IconButton onClick={onLoopToggle} sx={{ color: loop ? activeColor : 'rgba(255,255,255,0.3)', width: 28, height: 28 }}>
             <RepeatIcon fontSize="small" />
@@ -111,5 +116,57 @@ export default function ControlBar({
         </Tooltip>
       </Stack>
     </Box>
+  )
+}
+
+// 再生速度のボタン。押すと上に速度の一覧が開く。等速以外のときは強調色で出す
+function PlaybackRateButton({ rate, onChange, activeColor }) {
+  const { t } = useTranslation()
+  const [anchorEl, setAnchorEl] = useState(null)
+  const open = Boolean(anchorEl)
+
+  return (
+    <>
+      <Tooltip title={t('controls.playbackRate')} placement="top">
+        <IconButton
+          onClick={e => setAnchorEl(open ? null : e.currentTarget)}
+          sx={{
+            color: rate !== 1 ? activeColor : open ? 'white' : 'rgba(255,255,255,0.3)',
+            height: 28, minWidth: 40, px: 0.5, borderRadius: 1,
+          }}
+        >
+          <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, lineHeight: 1 }}>{rate}×</Typography>
+        </IconButton>
+      </Tooltip>
+      <Menu
+        open={open}
+        anchorEl={anchorEl}
+        onClose={() => setAnchorEl(null)}
+        anchorOrigin={{ vertical: 'top',    horizontal: 'center' }}
+        transformOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        slotProps={{
+          paper: {
+            sx: {
+              ...barStyle,
+              backgroundImage: 'none',
+              border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: 2,
+            },
+          },
+        }}
+      >
+        {PLAYBACK_RATES.map(r => (
+          <MenuItem
+            key={r}
+            selected={r === rate}
+            onClick={() => { setAnchorEl(null); onChange(r) }}
+            sx={{ fontSize: '0.9rem', minWidth: 72, justifyContent: 'space-between', gap: 1.5 }}
+          >
+            {r}×
+            <CheckIcon fontSize="small" sx={{ visibility: r === rate ? 'visible' : 'hidden' }} />
+          </MenuItem>
+        ))}
+      </Menu>
+    </>
   )
 }

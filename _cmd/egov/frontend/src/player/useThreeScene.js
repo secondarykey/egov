@@ -299,7 +299,9 @@ export default function useThreeScene({ modeRef, onDuration, onVideoEl, onVideoE
       texture.needsUpdate = true
       frameCountRef.current++
       renderOnce()
-      if (metadata && prevMediaTime >= 0 && metadata.mediaTime > prevMediaTime) {
+      // fps は等速のときだけ測る。倍速では表示が追いつかずフレームが間引かれ、
+      // 間隔が広がって低く出る（コマ送りの幅がずれる）
+      if (metadata && video.playbackRate === 1 && prevMediaTime >= 0 && metadata.mediaTime > prevMediaTime) {
         const delta = metadata.mediaTime - prevMediaTime
         if (delta > 0.001 && delta < 0.2) {
           detectedFpsRef.current = 1 / delta

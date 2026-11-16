@@ -16,7 +16,7 @@
 | `useMediaLoader` | メディアを開く（`openMedia`・`loadFilePath`・`handleOpenFile`）、デコードエラーからの復旧（`reloadMedia`）、`safePlay`。メディアの種類・ファイル名・切り出し可否 |
 
 Player に残っているもの: カメラの切り替え（モード・回転）、設定の読み込みと `open-file` の受け取り、
-UI の表示/非表示、再生系のボタン（音量・ループ・全画面など）、切り出し・スナップショット・サムネイル一覧、
+UI の表示/非表示、再生系のボタン（音量・ループ・再生速度・全画面など）、切り出し・スナップショット・サムネイル一覧、
 各コンポーネントへの受け渡し。
 
 ### フックどうしのつなぎ方
@@ -35,6 +35,11 @@ UI の表示/非表示、再生系のボタン（音量・ループ・全画面�
   （`useMediaLoader` が描画ごとに入れる）
 - **素材形式の推定**は、呼び出しと応答の新旧判定（`loadSeqRef`）を `useMediaLoader` が、
   結果の反映を `useVrView.applySourceFormat` が持つ
+- **ループと再生速度**は、開いているメディア（`videoRef`）と本物の video 要素（`videoElRef`）の両方に
+  持たせる。次に開く AnimPlayer は video 要素の `loop` / `defaultPlaybackRate` から初期値を取る。
+  速度は `playbackRate` だけでなく `defaultPlaybackRate` にも入れる（`load()` や `src` の差し替えで
+  `playbackRate` は `defaultPlaybackRate` へ戻るため、入れないとファイルを替えたときに等速に戻る）。
+  速度は起動中だけ持ち、設定へは書かない
 - `handlePlayPause` は `usePointerSeek` の呼び出しより後で定義しているので、`onPlayPause` には
   `() => handlePlayPause()` と包んで渡している（`const` の TDZ を避けるため）
 
@@ -84,6 +89,7 @@ VR 視点の ref（`vrYawRef` など）は設定値の ref とは別に `useVrVi
 - VR 視点オーバーレイ: スライダーの即時反映、「既定として保存」、Reset Camera で保存値（＋推定した素材形式）へ戻る
 - 小窓ズーム（normal / free）: 表示・移動・リサイズ・小窓上の右ドラッグとホイール
 - 範囲ループと無劣化切り出し、スナップショット、サムネイル一覧
+- 再生速度: 一覧から選んだ速度が動画・アニメーション画像の両方に効く。別のファイルを開いても残る。2倍速でも音程が変わらない
 - 設定ダイアログ: 保存後に操作系の設定（クリック判定時間・シーク秒数・UI を隠すまでの時間）と VR のドラッグ感度・ホイール速度が即反映される
 - デコードエラーからの自動復旧と、エラー表示の「再読み込み」ボタン
 - ウィンドウの縁でのリサイズ（映像の上でもクリック扱いにならない）
