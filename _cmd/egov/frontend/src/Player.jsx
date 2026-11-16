@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next'
 import { loadLanguages } from './languages'
 import SettingsDialog from './SettingsDialog'
 import useThreeScene from './player/useThreeScene'
+import useDropWatchdog from './player/useDropWatchdog'
 import AnimPlayer from './player/AnimPlayer'
 import TitleBar from './player/TitleBar'
 import ControlBar from './player/ControlBar'
@@ -49,8 +50,6 @@ const INITIAL_VR_INPUT = { dragSensitivity: 0.004, scrollSpeed: 0.05 }
 export default function Player() {
   const { t } = useTranslation()
   const modeRef      = useRef('normal')
-  const dragCounter  = useRef(0)
-  const dragTimer    = useRef(null)
   const hideTimer    = useRef(null)
   const thumbVideoRef   = useRef(null)
   const thumbCanvasRef  = useRef(null)
@@ -115,7 +114,6 @@ export default function Player() {
   const [volume,      setVolume]      = useState(0.5)
   const [muted,       setMuted]       = useState(false)
   const [fileName,    setFileName]    = useState('')
-  const [dragging,    setDragging]    = useState(false)
   const [showUI,      setShowUI]      = useState(false)
   const [resizeCursor, setResizeCursor] = useState(null)   // Wails3リサイズ判定領域内で明示すべきカーソル種別
   const [mode,        setMode]        = useState('normal')   // normal=ウィンドウフィット / free=自由パン・ズーム / vr
@@ -175,6 +173,8 @@ export default function Player() {
     onVideoEl: setVideoEl,
     onVideoError: handleSceneError,
   })
+
+  const { dragging, endDrag, dropHandlers } = useDropWatchdog()
 
   // VR視点の ref をすべてシェーダの uniform へ反映する。
   // VRの状態は Player 側の ref を単一の真実とし、変更点はすべてここを通す。
@@ -682,16 +682,10 @@ export default function Player() {
     const unsub = Events.On('open-file', (event) => {
       // ドロップ経由の場合、Linux では DOM の drop/dragleave が来ず
       // ドロップ表示が消えないため、ここで確実に解除する
-      clearTimeout(dragTimer.current)
-      dragTimer.current = null
-      dragCounter.current = 0
-      setDragging(false)
+      endDrag()
       settingsReady.then(() => loadFilePath(event.data))
     })
-    return () => {
-      unsub()
-      clearTimeout(dragTimer.current)
-    }
+    return unsub
   }, [])
 
   useEffect(() => {
@@ -782,56 +776,6 @@ export default function Player() {
       video?.removeEventListener('error', clearFrameSeek)
     }
   }, [])
-
-  // ドラッグ表示の解除は dragleave だけに頼れない。
-  // Linux(WebKitGTK)/macOS では relatedTarget=null の dragleave が即座に飛んでくるので
-  // 数えるとカウンタが狂い、Windows ではウィンドウ外へ抜けたときの dragleave も
-  // relatedTarget=null なので無視すると表示が残り続ける。
-  // dragover はドラッグ中ずっと（静止していても）発火し続けるため、
-  // 一定時間 dragover が来なくなったら「通り過ぎた」とみなして解除する。
-  const clearDragWatchdog = () => {
-    clearTimeout(dragTimer.current)
-    dragTimer.current = null
-  }
-  const endDrag = () => {
-    clearDragWatchdog()
-    dragCounter.current = 0
-    setDragging(false)
-  }
-  const armDragWatchdog = () => {
-    clearTimeout(dragTimer.current)
-    dragTimer.current = setTimeout(endDrag, 700)
-  }
-  const handleDragEnter = (e) => {
-    e.preventDefault()
-    dragCounter.current++
-    setDragging(true)
-    armDragWatchdog()
-  }
-  const handleDragLeave = (e) => {
-    e.preventDefault()
-    if (e.relatedTarget === null) {
-      // ウィンドウ外かネイティブ横取りかを区別できないので、
-      // ウォッチドッグに判定を委ねる（dragover が続けば表示は維持される）
-      armDragWatchdog()
-      return
-    }
-    dragCounter.current = Math.max(0, dragCounter.current - 1)
-    if (dragCounter.current === 0) endDrag()
-  }
-  const handleDragOver = (e) => {
-    e.preventDefault()
-    if (dragging) armDragWatchdog()
-  }
-
-  // ファイルの読み込みは行わない。Wails がネイティブ側でドロップを横取りし、
-  // Go の WindowFilesDropped → open-file イベントとして配送される。
-  // Linux/macOS ではそもそも drop イベントが来ず、Windows でも
-  // ランタイムが Go へ転送するため、ここで dataTransfer を読むと二重読み込みになる。
-  const handleDrop = (e) => {
-    e.preventDefault()
-    endDrag()
-  }
 
   // Wails3ランタイム（drag.js）のリサイズ判定と同じ境界でカーソル種別を計算する。
   // 自前オーバーレイ（タイトルバー/ドロップ領域）が独自の cursor を指定していると
@@ -1251,10 +1195,7 @@ export default function Player() {
       }}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      onDragEnter={handleDragEnter}
-      onDragLeave={handleDragLeave}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
+      {...dropHandlers}
     >
       <div
         ref={mountRef}
