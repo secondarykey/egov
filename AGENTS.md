@@ -19,8 +19,9 @@ task run             # Run the built binary
 task windows:build   # / darwin:build / linux:build
 ```
 
-Go のテスト（ルートで実行）: `go test ./...`。PR では `.github/workflows/test.yml` が
-`go test -race` と `wails3 build` を走らせる（Windows の手元では `-race` が起動しないことがある）。
+Go のテスト（ルートで実行）: `go test ./...`。テストと動作確認は手元で済ませてからリリースする。
+**CI にテスト用のワークフローは置かない**（wails3 のビルドが重いわりに、走る回数が重複し、
+一部の OS しか確かめられず、リリースを止める関門にもならないため）。
 
 Frontend commands (from `_cmd/egov/frontend/`): `npm run dev` / `npm run build` / `npm run build:dev`
 

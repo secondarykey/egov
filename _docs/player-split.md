@@ -9,7 +9,7 @@ AGENTS.md の Architecture へ要点を移して消す。
 ## 前提
 
 - 0.7.2 の次のリリースを出してから着手する。そのリリースには構造見直しの Go 側の修正
-  （`SettingsStore`、`UpdateDialogSettings`、`NewFileHandler`、定数照合テスト、PR 用 CI）が入っている。
+  （`SettingsStore`、`UpdateDialogSettings`、`NewFileHandler`、定数照合テスト）が入っている。
   作業ブランチはそれを含む main から切る
 - 作業前に AGENTS.md の「守ること」と `_docs/rendering.md`・`_docs/vr-projection.md` を読む
 - 画面操作での確認はエージェントからはできない。ビルドを渡し、下の確認項目を人に見てもらう
@@ -88,7 +88,7 @@ AGENTS.md の「守ること」がすべて前提。そのうち分割で崩し�
 
 ## 完了の条件
 
-- `_cmd/egov/frontend` で `npm run build`、`_cmd/egov` で `go build` が通る（PR では CI も通る）
+- `_cmd/egov/frontend` で `npm run build`、`_cmd/egov` で `go build` が通り、`go test ./...` も通る
 - 挙動が変わっていない（下の確認項目を人に見てもらう）
 - 区切りごとにコミットしてある（Conventional Commits、末尾に「Glory to mankind.」）
 
