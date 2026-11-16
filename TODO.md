@@ -17,9 +17,6 @@
 
 ## 構造の見直し（残り）
 
-0.7.2 の次のリリースを出してから着手する。
-
-- **`Player.jsx` の分割** — 計画・守ること・確認項目は [`_docs/player-split.md`](_docs/player-split.md)
 - **パスを受け取る binding に許可リストの確認を足す** — `OpenAnimation`・`DetectVRFormat`・`CanExtract`・
   `ExtractRange` はフロントから来たパスをそのまま使う。HTTP 配信は `LocalFiles` の許可リストで
   守っているが、binding は通っていない。各メソッドの先頭で `a.files.IsAllowed(path)` を確かめ、

@@ -81,7 +81,7 @@ normal / free モードで、映像の一部を切り抜いて拡大した小窓
 - スナップショットのために `preserveDrawingBuffer` を使わない。`renderOnce()` の直後に
   同期で `drawImage` すれば描画バッファの内容は残っている
 
-## デコードエラーからの復旧（`Player.jsx` の `reloadMedia`）
+## デコードエラーからの復旧（`player/useMediaLoader.js` の `reloadMedia`）
 
 - 再生途中に `MEDIA_ERR_DECODE`（負荷が高いときなどにデコーダが落ちる）が出ると、
   `<video>` はエラー状態のまま固まり、以後の `play()` もシークも効かない。
@@ -91,4 +91,4 @@ normal / free モードで、映像の一部を切り抜いて拡大した小窓
   同じ位置で落ち続けるならデータ自体が壊れているとみなし、2 秒ずつ先へ読み飛ばす
 - エラー表示の「読み込み直す」ボタンと再生操作（画面クリック・再生ボタン）は回数制限なしで読み直す
 - `useThreeScene` はマウント時の `onVideoError` を使い続けるので、Player は安定参照の
-  関数を渡し、最新の `reloadMedia` へは ref 経由で届ける
+  関数を渡し、最新の `reloadMedia` へは ref（`reloadMediaRef`）経由で届ける

@@ -6,7 +6,7 @@
 **画像は normal / free だけで、VR は無効**（タイトルバーの VR ボタンを disabled にし、
 VR 中に開いたら normal へ落とす）。
 
-- 読み込みは `Player.openMedia()` に一本化してある。画像のときは **video 要素の src を外す**
+- 読み込みは `player/useMediaLoader.js` の `openMedia()` に一本化してある。画像のときは **video 要素の src を外す**
   （`removeAttribute('src')` + `load()`。`src = ''` は error を発火させる）。
   再生・シーク・コマ送り・サムネイル・長押しシークはすべて `video.src` の有無で
   早期 return するので、個別の分岐は不要

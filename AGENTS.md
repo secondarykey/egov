@@ -59,8 +59,10 @@ wails3 task local:install   # ビルドしてコピーするだけ（版上げ�
 - **Events**: Go は `app.Event.Emit(name, payload)`、フロントは `@wailsio/runtime` の `Events.On`
 - **Embedding**: Vite の出力 `frontend/dist/` を `//go:embed` している。本番バイナリに
   フロントの変更を入れるにはビルドし直す
-- **Frontend**: `src/Player.jsx` が状態・ref・入力処理を持ち、描画は `src/player/` の各コンポーネントに
-  委ねる。高頻度で更新する部分（シークバー・時間表示）は `memo` で切り離してある
+- **Frontend**: `src/Player.jsx` は状態・設定・入力処理をつなぐ役。処理の塊は `src/player/` の
+  カスタムフック（`useMediaLoader`・`useVrView`・`usePointerSeek`・`useKeyboardShortcuts`・
+  `useDropWatchdog`・`useThreeScene`）に、描画は同じ場所のコンポーネントに置く。
+  高頻度で更新する部分（シークバー・時間表示）は `memo` で切り離してある
 - Three.js（`r0.184`）＋ MUI。表示モードは `normal` / `free` / `vr`（設定の旧名 `fit` は
   `Settings.normalize()` が `normal` へ移す）
 - マウス割り当ては free と vr で揃えてある: **右ドラッグ＝平行移動、ホイール＝寄る/引く、
@@ -84,7 +86,7 @@ wails3 task local:install   # ビルドしてコピーするだけ（版上げ�
 | [`_docs/images-and-animations.md`](_docs/images-and-animations.md) | 静止画、アニメーション画像（WebP/GIF/APNG）の展開と再生、アニメーション AVIF |
 | [`_docs/range-extract.md`](_docs/range-extract.md) | MP4 の無劣化切り出し（`internal/mp4cut`）と UI |
 | [`_docs/local-deploy.md`](_docs/local-deploy.md) | `Taskfile.local.yml` の雛形（`local:deploy` / `local:install`）と CI との分担 |
-| [`_docs/player-split.md`](_docs/player-split.md) | `Player.jsx` の分割計画（作業の引き継ぎ用。`Player.jsx` を大きく触る前に読む） |
+| [`_docs/player-structure.md`](_docs/player-structure.md) | `Player.jsx` とフックの分担、一度だけ登録するリスナーと ref の決まり、触ったあとの確認項目（Player やフックを触る前に読む） |
 
 ## 守ること
 
