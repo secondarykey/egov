@@ -30,6 +30,24 @@ Regenerate Go→JavaScript bindings (`frontend/bindings/`, Git 管理外) after 
 wails3 generate bindings -f '' -clean=true
 ```
 
+### ローカルデプロイ（`local:deploy` / `local:install`）
+
+`_cmd/egov/Taskfile.local.yml`（Git 管理外。`Taskfile.yml` から `optional: true` で include）を
+置くと、ビルドして常用の場所へコピーするタスクが増える。雛形と各段の理由は
+[`_docs/local-deploy.md`](_docs/local-deploy.md)。
+
+```bash
+wails3 task local:deploy    # 版上げ（必要なら）→ ビルド情報の反映 → ビルド → そのコミット → コピー
+wails3 task local:install   # ビルドしてコピーするだけ（版上げ・コミットはしない）
+```
+
+- 版は `go run _cmd/version.go -auto` が上げる（`v`+今の版のタグがあるときだけ patch +1）。
+  タグは CI（`versionup.yml`）だけが打つので、`TAG_VERSION` の既定は `false`。
+  `git fetch --tags` しないと、リリース後も次の版に上がらない
+- `wails3` CLI は `.github/variables` の `WAILS_VERSION` に揃える。ずれると
+  `update build-assets` が CI と違う中身を生成し、ビルド情報のコミットが CI と打ち消し合う
+- `Taskfile.yml` のタスクから `local:` を呼ばない（ファイルが無い環境で落ちる）
+
 ## Architecture
 
 - **Two Go modules**: root `egov`（`API` struct と共有ライブラリ、`internal/` 配下に
@@ -64,6 +82,7 @@ wails3 generate bindings -f '' -clean=true
 | [`_docs/vr-projection.md`](_docs/vr-projection.md) | VR投影シェーダ、素材形式の推定、色空間、視点の保存とリセット |
 | [`_docs/images-and-animations.md`](_docs/images-and-animations.md) | 静止画、アニメーション画像（WebP/GIF/APNG）の展開と再生、アニメーション AVIF |
 | [`_docs/range-extract.md`](_docs/range-extract.md) | MP4 の無劣化切り出し（`internal/mp4cut`）と UI |
+| [`_docs/local-deploy.md`](_docs/local-deploy.md) | `Taskfile.local.yml` の雛形（`local:deploy` / `local:install`）と CI との分担 |
 | [`_docs/player-split.md`](_docs/player-split.md) | `Player.jsx` の分割計画（作業の引き継ぎ用。`Player.jsx` を大きく触る前に読む） |
 
 ## 守ること

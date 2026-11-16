@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -102,11 +103,15 @@ func (v *ver) isError() bool {
 	return false
 }
 
-var bump bool
+var (
+	bump bool
+	auto bool
+)
 
 func main() {
 
 	flag.BoolVar(&bump, "bump", false, "対話的にバージョンを選択して更新")
+	flag.BoolVar(&auto, "auto", false, "現在のバージョンのタグがあれば patch を上げる（local:deploy 用）")
 	flag.Parse()
 
 	args := flag.Args()
@@ -127,15 +132,23 @@ func run(args []string) error {
 		return err
 	}
 
-	// 引数なし・フラグなし: version ファイルのバージョンで他ファイルを同期
-	if len(args) == 0 && !bump {
-		fmt.Println("Version:", now)
-		return write(now)
-	}
-
 	var rtn *ver
 
-	if bump {
+	if auto {
+		// -auto: タグがある = その版はリリース済みなのに version が上がっていない
+		rtn, err = autoVersion(now)
+		if err != nil {
+			return err
+		}
+		if rtn == nil {
+			fmt.Println("Version:", now)
+			return write(now)
+		}
+	} else if len(args) == 0 && !bump {
+		// 引数なし・フラグなし: version ファイルのバージョンで他ファイルを同期
+		fmt.Println("Version:", now)
+		return write(now)
+	} else if bump {
 		// -bump: 対話的にバージョンを選択
 		rtn = inquryVersion(now)
 	} else {
@@ -181,6 +194,37 @@ func inquryVersion(now *ver) *ver {
 		rtn = major
 	}
 	return rtn
+}
+
+// autoVersion は現在のバージョンのタグ（v+バージョン）があれば patch を上げたバージョンを返す。
+// タグが無ければ nil（そのまま使う）。
+// 上げた先のタグもすでにあるときは version とタグがずれているので止める
+// （進めると古いコミットを指すタグが残り、新しいビルドの版がリリース済みの版と重なる）。
+func autoVersion(now *ver) (*ver, error) {
+	exists, err := tagExists(now)
+	if err != nil || !exists {
+		return nil, err
+	}
+	next := now.addPatch()
+	fmt.Printf("Tag v%s exists: bump to %s\n", now, next)
+
+	exists, err = tagExists(next)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		return nil, fmt.Errorf("tag v%s already exists: fix %s by hand", next, versionFile)
+	}
+	return next, nil
+}
+
+func tagExists(v *ver) (bool, error) {
+	tag := "v" + v.String()
+	out, err := exec.Command("git", "tag", "--list", tag).Output()
+	if err != nil {
+		return false, fmt.Errorf("git tag --list %s: %w", tag, err)
+	}
+	return strings.TrimSpace(string(out)) == tag, nil
 }
 
 func parseVersion() (*ver, error) {

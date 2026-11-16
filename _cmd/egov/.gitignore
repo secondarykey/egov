@@ -8,4 +8,5 @@ build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
 build/ios/**
 build/android/
 build/docker/
+Taskfile.local.yml
 

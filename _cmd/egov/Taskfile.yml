@@ -5,6 +5,10 @@ includes:
   windows: ./build/windows/Taskfile.yml
   darwin: ./build/darwin/Taskfile.yml
   linux: ./build/linux/Taskfile.yml
+  # 個人用のローカルデプロイ（Git 管理外。作り方は AGENTS.md）。無い環境でも落ちないよう optional
+  local:
+    taskfile: Taskfile.local.yml
+    optional: true
 
 vars:
   APP_NAME: "egov"
